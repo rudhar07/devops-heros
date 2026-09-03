@@ -1,0 +1,44 @@
+Enter your name: Rudhar
+Enter a directory name to store the report: system_info
+==================== SYSTEM INFORMATION ====================
+Report for : Rudhar
+Date       : Thu Sep  3 20:36:14 IST 2026
+Hostname   : Rudhars-MacBook-Pro.local
+Username   : rudhar
+
+==================== DISK USAGE (df -h) ====================
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   926Gi    16Gi   461Gi     4%    459k  4.3G    0%   /
+devfs            209Ki   209Ki     0Bi   100%     722     0  100%   /dev
+/dev/disk3s6     926Gi    31Gi   461Gi     7%      31  4.8G    0%   /System/Volumes/VM
+/dev/disk3s2     926Gi    17Gi   461Gi     4%    2.1k  4.8G    0%   /System/Volumes/Preboot
+/dev/disk3s4     926Gi   870Mi   461Gi     1%     538  4.8G    0%   /System/Volumes/Update
+/dev/disk1s2     550Mi   6.0Mi   531Mi     2%       1  5.4M    0%   /System/Volumes/xarts
+/dev/disk1s1     550Mi   5.9Mi   531Mi     2%      43  5.4M    0%   /System/Volumes/iSCPreboot
+/dev/disk1s3     550Mi   2.4Mi   531Mi     1%     110  5.4M    0%   /System/Volumes/Hardware
+/dev/disk3s5     926Gi   397Gi   461Gi    47%    2.0M  4.8G    0%   /System/Volumes/Data
+map auto_home      0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
+/dev/disk5s1     450Mi   352Mi    96Mi    79%     238  980k    0%   /Volumes/OpenMTP 3.3.0-arm64
+/dev/disk2s1     5.0Gi   1.3Gi   3.7Gi    26%      50   39M    0%   /System/Volumes/Update/SFR/mnt1
+/dev/disk3s1     926Gi    16Gi   461Gi     4%    459k  4.3G    0%   /System/Volumes/Update/mnt1
+
+==================== RUNNING PROCESSES (ps) ================
+(first 15 processes shown on screen, the full list goes to the file)
+  PID  PPID USER              %CPU %MEM STAT STARTED      TIME COMM
+    1     0 root               0.2  0.0 Ss   17Aug26  92:21.74 /sbin/launchd
+  326     1 root               0.3  0.1 Ss   17Aug26  42:20.41 /usr/libexec/logd
+  328     1 root               0.0  0.0 Ss   17Aug26   3:55.72 /usr/libexec/UserEventAgent
+  330     1 root               0.1  0.0 Ss   17Aug26  56:13.13 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+  331     1 root               0.0  0.0 Ss   17Aug26   2:53.16 /System/Library/PrivateFrameworks/MediaRemote.framework/Support/mediaremoted
+  334     1 root               0.0  0.0 Ss   17Aug26   1:25.13 /usr/sbin/systemstats
+  338     1 root               0.0  0.0 Ss   17Aug26  16:34.76 /usr/libexec/configd
+  340     1 root               0.0  0.0 Ss   17Aug26   8:28.91 /System/Library/CoreServices/powerd.bundle/powerd
+  341     1 root               0.0  0.0 Ss   17Aug26   0:00.04 /usr/libexec/IOMFB_bics_daemon
+  345     1 root               0.0  0.0 Ss   17Aug26   0:08.79 /usr/libexec/remoted
+  349     1 _corespeechd       0.0  0.0 Ss   17Aug26  31:29.38 /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd_system
+  351     1 root               0.0  0.0 Ss   17Aug26   0:31.43 /usr/libexec/watchdogd
+  355     1 root               0.1  0.1 Ss   17Aug26  37:21.15 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+  357     1 root               0.0  0.0 Ss   17Aug26   0:01.37 /usr/libexec/kernelmanagerd
+
+Saved      725 lines of process information to: system_info/processes.txt
+Done.
