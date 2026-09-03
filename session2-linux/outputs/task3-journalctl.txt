@@ -1,0 +1,144 @@
+### Generate some fresh ssh log lines first (restart the service, one failed login attempt)
+
+$ systemctl restart ssh && sleep 1
+
+$ ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=3 baduser@localhost true; echo "exit code: $?"
+Warning: Permanently added 'localhost' (ED25519) to the list of known hosts.
+baduser@localhost: Permission denied (publickey,password).
+exit code: 255
+
+$ sleep 1
+
+### What journalctl is: the query tool for systemd-journald
+
+$ systemctl status systemd-journald --no-pager | head -5
+● systemd-journald.service - Journal Service
+     Loaded: loaded (/usr/lib/systemd/system/systemd-journald.service; static)
+    Drop-In: /usr/lib/systemd/system/systemd-journald.service.d
+             └─nice.conf
+     Active: active (running) since Thu 2026-09-03 15:03:13 UTC; 1min 40s ago
+
+$ journalctl --disk-usage
+Archived and active journals take up 8.0M in the file system.
+
+$ journalctl --list-boots
+IDX BOOT ID                          FIRST ENTRY                 LAST ENTRY
+  0 91ba79757a54480b855d9606ce19d16a Thu 2026-09-03 15:03:13 UTC Thu 2026-09-03 15:04:54 UTC
+
+### Whole-system log (newest 15 lines)
+
+$ journalctl --no-pager -n 15
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on 0.0.0.0 port 22.
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on :: port 22.
+Sep 03 15:04:52 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Invalid user baduser from ::1 port 44012
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Connection closed by invalid user baduser ::1 port 44012 [preauth]
+Sep 03 15:04:53 ubuntu-lab kernel: docker0: port 3(vetha6fdb54) entered disabled state
+Sep 03 15:04:53 ubuntu-lab kernel: vethc0f25c1: renamed from eth0
+Sep 03 15:04:53 ubuntu-lab kernel: docker0: port 3(vetha6fdb54) entered disabled state
+Sep 03 15:04:53 ubuntu-lab kernel: vetha6fdb54 (unregistering): left allmulticast mode
+Sep 03 15:04:53 ubuntu-lab kernel: vetha6fdb54 (unregistering): left promiscuous mode
+Sep 03 15:04:53 ubuntu-lab kernel: docker0: port 3(vetha6fdb54) entered disabled state
+Sep 03 15:04:54 ubuntu-lab kernel: docker0: port 3(veth0f3cb36) entered blocking state
+Sep 03 15:04:54 ubuntu-lab kernel: docker0: port 3(veth0f3cb36) entered disabled state
+Sep 03 15:04:54 ubuntu-lab kernel: veth0f3cb36: entered allmulticast mode
+Sep 03 15:04:54 ubuntu-lab kernel: veth0f3cb36: entered promiscuous mode
+
+### Logs for a specific service: -u ssh
+
+$ journalctl --no-pager -u ssh
+Sep 03 15:03:13 ubuntu-lab systemd[1]: Starting ssh.service - OpenBSD Secure Shell server...
+Sep 03 15:03:13 ubuntu-lab sshd[85]: Server listening on 0.0.0.0 port 22.
+Sep 03 15:03:13 ubuntu-lab sshd[85]: Server listening on :: port 22.
+Sep 03 15:03:13 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:51 ubuntu-lab systemd[1]: Stopping ssh.service - OpenBSD Secure Shell server...
+Sep 03 15:04:51 ubuntu-lab sshd[85]: Received signal 15; terminating.
+Sep 03 15:04:51 ubuntu-lab systemd[1]: ssh.service: Deactivated successfully.
+Sep 03 15:04:51 ubuntu-lab systemd[1]: Stopped ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:51 ubuntu-lab systemd[1]: Starting ssh.service - OpenBSD Secure Shell server...
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on 0.0.0.0 port 22.
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on :: port 22.
+Sep 03 15:04:52 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Invalid user baduser from ::1 port 44012
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Connection closed by invalid user baduser ::1 port 44012 [preauth]
+
+$ journalctl --no-pager -u ssh -n 5
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on 0.0.0.0 port 22.
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on :: port 22.
+Sep 03 15:04:52 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Invalid user baduser from ::1 port 44012
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Connection closed by invalid user baduser ::1 port 44012 [preauth]
+
+$ journalctl --no-pager -u ssh --since '5 min ago' | tail -6
+Sep 03 15:04:51 ubuntu-lab systemd[1]: Starting ssh.service - OpenBSD Secure Shell server...
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on 0.0.0.0 port 22.
+Sep 03 15:04:52 ubuntu-lab sshd[291]: Server listening on :: port 22.
+Sep 03 15:04:52 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Invalid user baduser from ::1 port 44012
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Connection closed by invalid user baduser ::1 port 44012 [preauth]
+
+$ systemctl status ssh --no-pager | head -12
+● ssh.service - OpenBSD Secure Shell server
+     Loaded: loaded (/usr/lib/systemd/system/ssh.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-09-03 15:04:52 UTC; 2s ago
+TriggeredBy: ● ssh.socket
+       Docs: man:sshd(8)
+             man:sshd_config(5)
+    Process: 290 ExecStartPre=/usr/sbin/sshd -t (code=exited, status=0/SUCCESS)
+   Main PID: 291 (sshd)
+      Tasks: 1 (limit: 9519)
+     Memory: 1.7M (peak: 3.3M)
+        CPU: 33ms
+     CGroup: /docker/e15a3eafe1af97cfbfc2f37ab809253d86d7e4737912813fd5a875c63dffb4cf/system.slice/ssh.service
+
+### Filtering: by priority, by boot, by PID, by kernel, reverse, follow
+
+$ journalctl --no-pager -p warning -b | tail -8
+Sep 03 15:03:13 ubuntu-lab kernel: pci-host-generic 40000000.pci: Memory resource size exceeds max for 32 bits
+Sep 03 15:03:13 ubuntu-lab kernel: netlink: 'initd': attribute type 4 has an invalid length.
+Sep 03 15:03:13 ubuntu-lab kernel: fakeowner: loading out-of-tree module taints kernel.
+Sep 03 15:03:13 ubuntu-lab kernel: hrtimer: interrupt took 3713042 ns
+Sep 03 15:03:13 ubuntu-lab systemd-sysctl[37]: Couldn't write '1' to 'kernel/yama/ptrace_scope', ignoring: No such file or directory
+
+$ journalctl --no-pager -b | head -5
+Sep 03 15:03:13 ubuntu-lab kernel: Booting Linux on physical CPU 0x0000000000 [0x610f0000]
+Sep 03 15:03:13 ubuntu-lab kernel: Linux version 6.12.76-linuxkit (root@buildkitsandbox) (gcc (Alpine 15.2.0) 15.2.0, GNU ld (GNU Binutils) 2.45.1) #1 SMP Thu Jun 25 13:45:40 UTC 2026
+Sep 03 15:03:13 ubuntu-lab kernel: OF: reserved mem: Reserved memory: No reserved-memory node in the DT
+Sep 03 15:03:13 ubuntu-lab kernel: Zone ranges:
+Sep 03 15:03:13 ubuntu-lab kernel:   DMA      [mem 0x0000000070000000-0x00000000ffffffff]
+
+$ journalctl --no-pager _PID=1 -n 5
+Sep 03 15:04:51 ubuntu-lab systemd[1]: Stopping ssh.service - OpenBSD Secure Shell server...
+Sep 03 15:04:51 ubuntu-lab systemd[1]: ssh.service: Deactivated successfully.
+Sep 03 15:04:51 ubuntu-lab systemd[1]: Stopped ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:51 ubuntu-lab systemd[1]: Starting ssh.service - OpenBSD Secure Shell server...
+Sep 03 15:04:52 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+
+$ journalctl --no-pager -k | head -5
+Sep 03 15:03:13 ubuntu-lab kernel: Booting Linux on physical CPU 0x0000000000 [0x610f0000]
+Sep 03 15:03:13 ubuntu-lab kernel: Linux version 6.12.76-linuxkit (root@buildkitsandbox) (gcc (Alpine 15.2.0) 15.2.0, GNU ld (GNU Binutils) 2.45.1) #1 SMP Thu Jun 25 13:45:40 UTC 2026
+Sep 03 15:03:13 ubuntu-lab kernel: OF: reserved mem: Reserved memory: No reserved-memory node in the DT
+Sep 03 15:03:13 ubuntu-lab kernel: Zone ranges:
+Sep 03 15:03:13 ubuntu-lab kernel:   DMA      [mem 0x0000000070000000-0x00000000ffffffff]
+
+$ journalctl --no-pager -u ssh -r -n 3
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Connection closed by invalid user baduser ::1 port 44012 [preauth]
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Invalid user baduser from ::1 port 44012
+Sep 03 15:04:52 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+
+$ timeout 3 journalctl -f --no-pager -n 3 -u ssh; echo "(journalctl -f keeps following; stopped after 3s with timeout)"
+Sep 03 15:04:52 ubuntu-lab systemd[1]: Started ssh.service - OpenBSD Secure Shell server.
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Invalid user baduser from ::1 port 44012
+Sep 03 15:04:53 ubuntu-lab sshd[295]: Connection closed by invalid user baduser ::1 port 44012 [preauth]
+(journalctl -f keeps following; stopped after 3s with timeout)
+
+### Structured output of one entry
+
+$ journalctl --no-pager -u ssh -o json-pretty -n 1 | grep -E "\"(MESSAGE|_PID|_COMM|_SYSTEMD_UNIT|PRIORITY|SYSLOG_IDENTIFIER|_HOSTNAME)\""
+	"_SYSTEMD_UNIT" : "ssh.service",
+	"_HOSTNAME" : "ubuntu-lab",
+	"PRIORITY" : "6",
+	"_COMM" : "sshd",
+	"MESSAGE" : "Connection closed by invalid user baduser ::1 port 44012 [preauth]",
+	"SYSLOG_IDENTIFIER" : "sshd",
+	"_PID" : "295",

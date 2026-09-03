@@ -1,0 +1,99 @@
+### Environment
+
+$ cat /etc/os-release | head -2; uname -r; whoami; pwd
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+NAME="Ubuntu"
+6.12.76-linuxkit
+root
+/root/linklab
+
+### Create a file, a hard link and a soft link
+
+$ echo "Hello from the original file" > original.txt
+
+$ ln original.txt hardlink.txt
+
+$ ln -s original.txt softlink.txt
+
+$ ls -li
+total 8
+892995 -rw-r--r-- 2 root root 29 Sep  3 15:04 hardlink.txt
+892995 -rw-r--r-- 2 root root 29 Sep  3 15:04 original.txt
+892996 lrwxrwxrwx 1 root root 12 Sep  3 15:04 softlink.txt -> original.txt
+
+$ stat -c '%n  inode=%i  links=%h  type=%F' original.txt hardlink.txt softlink.txt
+original.txt  inode=892995  links=2  type=regular file
+hardlink.txt  inode=892995  links=2  type=regular file
+softlink.txt  inode=892996  links=1  type=symbolic link
+
+$ readlink softlink.txt
+original.txt
+
+### Both links show the same content, and follow changes to the original
+
+$ cat hardlink.txt
+Hello from the original file
+
+$ cat softlink.txt
+Hello from the original file
+
+$ echo "Second line, appended through the original" >> original.txt
+
+$ cat hardlink.txt; echo "---"; cat softlink.txt
+Hello from the original file
+Second line, appended through the original
+---
+Hello from the original file
+Second line, appended through the original
+
+### Delete the original: hard link survives, soft link dangles
+
+$ rm original.txt
+
+$ ls -li
+total 4
+892995 -rw-r--r-- 1 root root 72 Sep  3 15:04 hardlink.txt
+892996 lrwxrwxrwx 1 root root 12 Sep  3 15:04 softlink.txt -> original.txt
+
+$ cat hardlink.txt
+Hello from the original file
+Second line, appended through the original
+
+$ cat softlink.txt
+cat: softlink.txt: No such file or directory
+
+$ stat -c '%n  links=%h' hardlink.txt
+hardlink.txt  links=1
+
+### Directories: soft link allowed, hard link refused
+
+$ ln -s /etc etc-softlink && ls -ld etc-softlink
+lrwxrwxrwx 1 root root 4 Sep  3 15:04 etc-softlink -> /etc
+
+$ ln /etc etc-hardlink
+ln: /etc: hard link not allowed for directory
+
+### Across filesystems: soft link allowed, hard link refused
+
+$ df -h /root /dev/shm
+Filesystem      Size  Used Avail Use% Mounted on
+overlay         911G  120G  746G  14% /
+shm              64M     0   64M   0% /dev/shm
+
+$ ln hardlink.txt /dev/shm/cross-fs-hardlink
+ln: failed to create hard link '/dev/shm/cross-fs-hardlink' => 'hardlink.txt': Invalid cross-device link
+
+$ ln -s /root/linklab/hardlink.txt /dev/shm/cross-fs-softlink && ls -l /dev/shm/
+total 0
+lrwxrwxrwx 1 root root 26 Sep  3 15:04 cross-fs-softlink -> /root/linklab/hardlink.txt
+
+### Delete the links (deleting a link never touches the data of other links)
+
+$ rm softlink.txt etc-softlink /dev/shm/cross-fs-softlink
+
+$ rm hardlink.txt
+
+$ ls -la
+total 8
+drwxr-xr-x 2 root root 4096 Sep  3 15:04 .
+drwx------ 1 root root 4096 Sep  3 15:04 ..

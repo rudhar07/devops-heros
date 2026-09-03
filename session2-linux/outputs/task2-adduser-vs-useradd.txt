@@ -1,0 +1,95 @@
+### Which commands exist and what they are
+
+$ which adduser useradd
+/usr/sbin/adduser
+/usr/sbin/useradd
+
+$ adduser --version | head -1
+adduser version 3.137ubuntu1
+
+$ head -1 /usr/sbin/adduser
+#! /usr/bin/perl
+
+$ file /usr/sbin/useradd 2>/dev/null || head -c 4 /usr/sbin/useradd | od -c | head -1
+0000000 177   E   L   F
+
+$ dpkg -S /usr/sbin/adduser /usr/sbin/useradd
+adduser: /usr/sbin/adduser
+passwd: /usr/sbin/useradd
+
+### useradd (low level): no home directory unless -m, default shell /bin/sh
+
+$ useradd testuser1
+
+$ id testuser1
+uid=1001(testuser1) gid=1001(testuser1) groups=1001(testuser1)
+
+$ grep testuser1 /etc/passwd
+testuser1:x:1001:1001::/home/testuser1:/bin/sh
+
+$ ls -ld /home/testuser1
+ls: cannot access '/home/testuser1': No such file or directory
+
+$ useradd -m -s /bin/bash -c "Test User Two" testuser2
+
+$ grep testuser2 /etc/passwd
+testuser2:x:1002:1002:Test User Two:/home/testuser2:/bin/bash
+
+$ ls -la /home/testuser2
+total 20
+drwxr-x--- 2 testuser2 testuser2 4096 Sep  3 15:04 .
+drwxr-xr-x 1 root      root      4096 Sep  3 15:04 ..
+-rw-r--r-- 1 testuser2 testuser2  220 Mar 31  2024 .bash_logout
+-rw-r--r-- 1 testuser2 testuser2 3771 Mar 31  2024 .bashrc
+-rw-r--r-- 1 testuser2 testuser2  807 Mar 31  2024 .profile
+
+### adduser (high level, recommended on Ubuntu): creates group, home, copies /etc/skel, sets permissions
+
+$ adduser --gecos "Test User Three" --disabled-password testuser3
+info: Adding user `testuser3' ...
+info: Selecting UID/GID from range 1000 to 59999 ...
+info: Adding new group `testuser3' (1003) ...
+info: Adding new user `testuser3' (1003) with group `testuser3 (1003)' ...
+info: Creating home directory `/home/testuser3' ...
+info: Copying files from `/etc/skel' ...
+info: Adding new user `testuser3' to supplemental / extra groups `users' ...
+info: Adding user `testuser3' to group `users' ...
+
+$ id testuser3
+uid=1003(testuser3) gid=1003(testuser3) groups=1003(testuser3),100(users)
+
+$ grep testuser3 /etc/passwd /etc/group
+/etc/passwd:testuser3:x:1003:1003:Test User Three,,,:/home/testuser3:/bin/bash
+/etc/group:users:x:100:testuser3
+/etc/group:testuser3:x:1003:
+
+$ ls -la /home/testuser3
+total 20
+drwxr-x--- 2 testuser3 testuser3 4096 Sep  3 15:04 .
+drwxr-xr-x 1 root      root      4096 Sep  3 15:04 ..
+-rw-r--r-- 1 testuser3 testuser3  220 Sep  3 15:04 .bash_logout
+-rw-r--r-- 1 testuser3 testuser3 3771 Sep  3 15:04 .bashrc
+-rw-r--r-- 1 testuser3 testuser3  807 Sep  3 15:04 .profile
+
+$ echo 'testuser3:Passw0rd!' | chpasswd && passwd -S testuser3
+testuser3 P 2026-09-03 0 99999 7 -1
+
+### Defaults each tool reads
+
+$ grep -E '^(DHOME|DSHELL|SKEL|FIRST_UID|LAST_UID|USERGROUPS)=' /etc/adduser.conf
+
+$ grep -E '^(HOME|SHELL|SKEL|CREATE_MAIL_SPOOL)=' /etc/default/useradd
+SHELL=/bin/sh
+
+$ getent passwd testuser1 testuser2 testuser3
+testuser1:x:1001:1001::/home/testuser1:/bin/sh
+testuser2:x:1002:1002:Test User Two:/home/testuser2:/bin/bash
+testuser3:x:1003:1003:Test User Three,,,:/home/testuser3:/bin/bash
+
+### Cleanup of the two useradd test users (testuser3 is kept)
+
+$ userdel testuser1 && userdel -r testuser2 && ls /home && getent passwd testuser1 testuser2 || echo "testuser1 and testuser2 removed"
+userdel: testuser2 mail spool (/var/mail/testuser2) not found
+testuser3
+ubuntu
+testuser1 and testuser2 removed
