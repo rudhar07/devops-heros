@@ -1,0 +1,125 @@
+===== hello-nodejs  ->  $ curl -s -i http://localhost:3000 =====
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: text/html; charset=utf-8
+Content-Length: 233
+ETag: W/"e9-+VRmuv1x2TGshbJa+HgV9f5l0Yo"
+Date: Thu, 03 Sep 2026 15:05:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+<!DOCTYPE html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Hello World - Node.js</title></head>
+  <body>
+    <h1>Hello World</h1>
+    <p>Served by Node.js v20.20.2 + Express inside a Docker container.</p>
+  </body>
+</html>
+
+===== hello-python  ->  $ curl -s -i http://localhost:5001 =====
+HTTP/1.1 200 OK
+Server: Werkzeug/3.1.8 Python/3.11.16
+Date: Thu, 03 Sep 2026 15:05:57 GMT
+Content-Type: text/html; charset=utf-8
+Content-Length: 228
+Connection: close
+
+<!DOCTYPE html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Hello World - Python</title></head>
+  <body>
+    <h1>Hello World</h1>
+    <p>Served by Python 3.11.16 + Flask inside a Docker container.</p>
+  </body>
+</html>
+
+===== hello-java  ->  $ curl -s -i http://localhost:8084 =====
+HTTP/1.1 200 OK
+Date: Thu, 03 Sep 2026 15:05:57 GMT
+Content-type: text/html; charset=utf-8
+Content-length: 242
+
+<!DOCTYPE html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Hello World - Java</title></head>
+  <body>
+    <h1>Hello World</h1>
+    <p>Served by Java 17.0.20 (com.sun.net.httpserver) inside a Docker container.</p>
+  </body>
+</html>
+
+
+===== hello-apache  ->  $ curl -s -i http://localhost:8081 =====
+HTTP/1.1 200 OK
+Date: Thu, 03 Sep 2026 15:05:57 GMT
+Server: Apache/2.4.68 (Unix)
+Last-Modified: Thu, 03 Sep 2026 15:03:12 GMT
+ETag: "f6-65a9573576c00"
+Accept-Ranges: bytes
+Content-Length: 246
+Content-Type: text/html
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hello World - Apache</title>
+  </head>
+  <body>
+    <h1>Hello World</h1>
+    <p>Served by Apache HTTP Server (httpd) inside a Docker container.</p>
+  </body>
+</html>
+
+
+===== hello-react  ->  $ curl -s -i http://localhost:8082 =====
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Date: Thu, 03 Sep 2026 15:05:57 GMT
+Content-Type: text/html
+Content-Length: 406
+Last-Modified: Thu, 03 Sep 2026 15:05:11 GMT
+Connection: keep-alive
+ETag: "6a998ca7-196"
+Accept-Ranges: bytes
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello World - React</title>
+    <script type="module" crossorigin src="/assets/index-C2JW_ARs.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Vite replaces this with the hashed production bundle at build time -->
+  </body>
+</html>
+
+
+===== hello-nginx  ->  $ curl -s -i http://localhost:8083 =====
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Date: Thu, 03 Sep 2026 15:05:57 GMT
+Content-Type: text/html
+Content-Length: 224
+Last-Modified: Thu, 03 Sep 2026 15:03:28 GMT
+Connection: keep-alive
+ETag: "6a998c40-e0"
+Accept-Ranges: bytes
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hello World - Nginx</title>
+  </head>
+  <body>
+    <h1>Hello World</h1>
+    <p>Served by nginx inside a Docker container.</p>
+  </body>
+</html>
+
+

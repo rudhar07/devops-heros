@@ -1,0 +1,8 @@
+$ docker images --filter reference='hello-*'
+IMAGE                 ID             DISK USAGE   CONTENT SIZE   EXTRA
+hello-apache:latest   f67446cd6794        105MB         21.1MB   U    
+hello-java:latest     5875e646d33b        446MB          108MB   U    
+hello-nginx:latest    2cabd0d85e6d       75.9MB         21.8MB   U    
+hello-nodejs:latest   8d1ffd671e3e        210MB         51.6MB   U    
+hello-python:latest   7bca0dff260d        248MB         54.9MB   U    
+hello-react:latest    a333a911df48       76.1MB         21.9MB   U    

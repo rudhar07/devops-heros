@@ -1,0 +1,8 @@
+$ docker ps --filter name=hello- --format 'table {{.Names}}	{{.Image}}	{{.Status}}	{{.Ports}}'
+NAMES          IMAGE          STATUS          PORTS
+hello-nginx    hello-nginx    Up 32 seconds   0.0.0.0:8083->80/tcp, [::]:8083->80/tcp
+hello-react    hello-react    Up 32 seconds   0.0.0.0:8082->80/tcp, [::]:8082->80/tcp
+hello-apache   hello-apache   Up 32 seconds   0.0.0.0:8081->80/tcp, [::]:8081->80/tcp
+hello-java     hello-java     Up 33 seconds   0.0.0.0:8084->8080/tcp, [::]:8084->8080/tcp
+hello-python   hello-python   Up 33 seconds   0.0.0.0:5001->5000/tcp, [::]:5001->5000/tcp
+hello-nodejs   hello-nodejs   Up 33 seconds   0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp

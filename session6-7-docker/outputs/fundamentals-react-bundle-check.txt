@@ -1,0 +1,28 @@
+$ curl -s http://localhost:8082/
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello World - React</title>
+    <script type="module" crossorigin src="/assets/index-C2JW_ARs.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Vite replaces this with the hashed production bundle at build time -->
+  </body>
+</html>
+
+
+$ BUNDLE=$(curl -s http://localhost:8082/ | grep -o "/assets/index-[^\"]*\.js"); echo "$BUNDLE"
+/assets/index-C2JW_ARs.js
+
+$ curl -s -o /dev/null -w 'HTTP %{http_code}  %{size_download} bytes
+' http://localhost:8082/assets/index-C2JW_ARs.js
+HTTP 200  142792 bytes
+
+$ curl -s http://localhost:8082/assets/index-C2JW_ARs.js | grep -o 'Hello World' | head -1
+Hello World
+
+$ curl -s http://localhost:8082/assets/index-C2JW_ARs.js | grep -o '.\{60\}Hello World.\{60\}'
+d(){return Sn.jsxs("main",{children:[Sn.jsx("h1",{children:"Hello World"}),Sn.jsx("p",{children:"Served by React 18 + Vite, built a

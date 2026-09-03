@@ -1,0 +1,135 @@
+# Build logs captured with: docker build --progress=plain -t <image> ./<folder>
+# Each section shows the last lines of the real build output (full logs trimmed for length).
+
+===== $ docker build --progress=plain -t hello-nodejs ./nodejs-app   (last 15 lines) =====
+
+#9 [5/5] COPY . .
+#9 DONE 0.0s
+
+#10 exporting to image
+#10 exporting layers
+#10 exporting layers 0.2s done
+#10 exporting manifest sha256:f237b512ef158c25937711194cfd8a343bff04030f5ec452456ae8e349a7a852 done
+#10 exporting config sha256:874f57e25694629323dba865edecb5164a0809fa5cd41d11d8f88c025b1623e8 done
+#10 exporting attestation manifest sha256:7f51601f5492bcda4ec5a18de718f3d115d673788b3701ddb4cb2212b32f1233 done
+#10 exporting manifest list sha256:8d1ffd671e3e0ec42b091599f87bc04a56ff6485e9a8b2a87ff9dfaad4ece831 done
+#10 naming to docker.io/library/hello-nodejs:latest done
+#10 unpacking to docker.io/library/hello-nodejs:latest
+#10 unpacking to docker.io/library/hello-nodejs:latest 0.2s done
+#10 DONE 0.4s
+
+===== $ docker build --progress=plain -t hello-python ./python-app   (last 15 lines) =====
+#8 DONE 3.1s
+
+#9 [5/5] COPY app.py .
+#9 DONE 0.0s
+
+#10 exporting to image
+#10 exporting layers
+#10 exporting layers 0.4s done
+#10 exporting manifest sha256:570122a46739818803e64cd24a4aa2b214e7a9afe113609545b53a36f1e1d5df done
+#10 exporting config sha256:5a505becbe8ac8a7dccb16abf404f603fff5c1ff6524f275bf395316ab379e57 done
+#10 exporting attestation manifest sha256:f2be340208c49c9fb8388a3dfcd233cf517eab0764b68bed78db9a4350b40e40 done
+#10 exporting manifest list sha256:7bca0dff260d6ff0964e7169f6c67b65c8f2e47a0471a8310761851da03e8475 done
+#10 naming to docker.io/library/hello-python:latest done
+#10 unpacking to docker.io/library/hello-python:latest 0.1s done
+#10 DONE 0.5s
+
+===== $ docker build --progress=plain -t hello-java ./java-app   (last 30 lines) =====
+#13 1.048 [INFO] 
+#13 1.048 [INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ hello-java ---
+#13 1.050 [INFO] No sources to compile
+#13 1.050 [INFO] 
+#13 1.050 [INFO] --- surefire:3.5.4:test (default-test) @ hello-java ---
+#13 1.107 [INFO] No tests to run.
+#13 1.111 [INFO] 
+#13 1.111 [INFO] --- jar:3.4.1:jar (default-jar) @ hello-java ---
+#13 1.189 [INFO] Building jar: /app/target/hello-java.jar
+#13 1.205 [INFO] ------------------------------------------------------------------------
+#13 1.205 [INFO] BUILD SUCCESS
+#13 1.205 [INFO] ------------------------------------------------------------------------
+#13 1.206 [INFO] Total time:  0.588 s
+#13 1.206 [INFO] Finished at: 2026-09-03T15:04:55Z
+#13 1.206 [INFO] ------------------------------------------------------------------------
+#13 DONE 1.2s
+
+#14 [stage-1 3/3] COPY --from=build /app/target/hello-java.jar app.jar
+#14 DONE 0.0s
+
+#15 exporting to image
+#15 exporting layers 0.0s done
+#15 exporting manifest sha256:9106331bd8c43333ca9a09f03c1891c35afec5d21c1b24c904505c2aeb6c6d96 done
+#15 exporting config sha256:99cf353ce68155b1df3514c9c58bf42501d6c0a1caab17698127c1ed735cb873 done
+#15 exporting attestation manifest sha256:abcf47711c70d89cead9bd395609f585f6452b6a13c9de199ee5b6a3c3fa84a4
+#15 exporting attestation manifest sha256:abcf47711c70d89cead9bd395609f585f6452b6a13c9de199ee5b6a3c3fa84a4 0.0s done
+#15 exporting manifest list sha256:5875e646d33bc841dda0fdb24de6bed27fa05b42e3a5aae6a1061c7b724a8603 done
+#15 naming to docker.io/library/hello-java:latest done
+#15 unpacking to docker.io/library/hello-java:latest 0.0s done
+#15 DONE 0.1s
+
+===== $ docker build --progress=plain -t hello-apache ./Apache-app   (last 15 lines) =====
+#5 resolve docker.io/library/httpd:2.4-alpine@sha256:1b766f17b84026429b7cb243317b142921b24432336e798bc881c43f45ed9567 done
+#5 DONE 0.0s
+
+#6 [2/2] COPY index.html /usr/local/apache2/htdocs/index.html
+#6 DONE 0.0s
+
+#7 exporting to image
+#7 exporting layers 0.0s done
+#7 exporting manifest sha256:a0ad6fd170e54321a9e602650c494e335f6e2c6f985d633dde8fe3af51d6b39c done
+#7 exporting config sha256:0ad033745666f66c3858d10057beb1ecafed8b82f1d6fad9f1f4a6b0b37aaf46 done
+#7 exporting attestation manifest sha256:2f686641ae0925d127be6fee0d0cdcdb2fc0c9cc2389c965e4da756beb0546a3 0.0s done
+#7 exporting manifest list sha256:f67446cd679478e8910aec198b260e823f248992d8bf11e34b7b58e542eda48a done
+#7 naming to docker.io/library/hello-apache:latest done
+#7 unpacking to docker.io/library/hello-apache:latest done
+#7 DONE 0.1s
+
+===== $ docker build --progress=plain -t hello-react ./React-app   (last 30 lines) =====
+#11 [build 5/6] COPY . .
+#11 DONE 0.0s
+
+#12 [build 6/6] RUN npm run build
+#12 0.201 
+#12 0.201 > hello-react@1.0.0 build
+#12 0.201 > vite build
+#12 0.201 
+#12 0.309 vite v5.4.21 building for production...
+#12 0.332 transforming...
+#12 0.801 ✓ 30 modules transformed.
+#12 0.864 rendering chunks...
+#12 0.869 computing gzip size...
+#12 0.873 dist/index.html                  0.41 kB │ gzip:  0.29 kB
+#12 0.873 dist/assets/index-C2JW_ARs.js  142.79 kB │ gzip: 45.87 kB
+#12 0.874 ✓ built in 552ms
+#12 DONE 0.9s
+
+#13 [stage-1 2/2] COPY --from=build /app/dist /usr/share/nginx/html
+#13 DONE 0.0s
+
+#14 exporting to image
+#14 exporting layers 0.0s done
+#14 exporting manifest sha256:dfb2c93ab2d3db0c796c00608a1b7b19e189f7c763e249ee4e61f4de0fb9e021 done
+#14 exporting config sha256:498cdf20685c097fb71b2e5a431c4e64586c0fac2106ebc746fc47a6077677d2 done
+#14 exporting attestation manifest sha256:88bac31eb890095a24afaa1994685b21eeabd25659889d30faca192b1e56b139 done
+#14 exporting manifest list sha256:a333a911df48464d72daa1d473d40478437ac00bb43bdf243e261232067411d3 done
+#14 naming to docker.io/library/hello-react:latest done
+#14 unpacking to docker.io/library/hello-react:latest 0.0s done
+#14 DONE 0.1s
+
+===== $ docker build --progress=plain -t hello-nginx ./nginx-app   (last 15 lines) =====
+#5 resolve docker.io/library/nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 0.0s done
+#5 CACHED
+
+#6 [2/2] COPY index.html /usr/share/nginx/html/index.html
+#6 DONE 0.0s
+
+#7 exporting to image
+#7 exporting layers 0.0s done
+#7 exporting manifest sha256:9d43acff879e3d7142603b49162b4e68a8747ae0df2530d5a3a6a80bbc3412fe done
+#7 exporting config sha256:cc26ea8ac036b26288502990fdab2543c94b57aa0d61bfd76040ee915d7e02f5 done
+#7 exporting attestation manifest sha256:0777be9945f99a381b80b3dd8cd85512a2f7ed937d1cdec3d0beeb3bbb8d9595 done
+#7 exporting manifest list sha256:2cabd0d85e6d84a23d25a7217031a89076cbbb9dd76228c3a8ca4458b19e8934 done
+#7 naming to docker.io/library/hello-nginx:latest done
+#7 unpacking to docker.io/library/hello-nginx:latest 0.0s done
+#7 DONE 0.1s
+
