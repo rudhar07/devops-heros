@@ -1,0 +1,46 @@
+$ docker ps --filter name=^apache- --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}'
+NAMES              IMAGE       STATUS         PORTS                                     NETWORKS
+apache-published   httpd:2.4   Up 2 minutes   0.0.0.0:8095->80/tcp, [::]:8095->80/tcp   bridge
+apache-host        httpd:2.4   Up 2 minutes                                             host
+
+$ docker inspect apache-host --format 'apache-host:      NetworkMode={{.HostConfig.NetworkMode}} PortBindings={{json .HostConfig.PortBindings}} Networks=[{{range $k,$v := .NetworkSettings.Networks}}{{$k}} ip="{{$v.IPAddress}}"{{end}}]'
+apache-host:      NetworkMode=host PortBindings={} Networks=[host ip="invalid IP"]
+
+$ docker inspect apache-published --format 'apache-published: NetworkMode={{.HostConfig.NetworkMode}} PortBindings={{json .HostConfig.PortBindings}} Networks=[{{range $k,$v := .NetworkSettings.Networks}}{{$k}} ip="{{$v.IPAddress}}"{{end}}]'
+apache-published: NetworkMode=bridge PortBindings={"80/tcp":[{"HostIp":"","HostPort":"8095"}]} Networks=[bridge ip="172.17.0.10"]
+
+$ curl -sv http://localhost:80 2>&1 | head -10
+* Host localhost:80 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+*   Trying [::1]:80...
+* connect to ::1 port 80 from ::1 port 51134 failed: Connection refused
+*   Trying 127.0.0.1:80...
+* connect to 127.0.0.1 port 80 from 127.0.0.1 port 51135 failed: Connection refused
+* Failed to connect to localhost port 80 after 0 ms: Couldn't connect to server
+* Closing connection
+
+$ curl -s -o /dev/null -w 'macOS -> http://localhost:80   HTTP %{http_code} (curl exit %{exitcode})\n' http://localhost:80
+macOS -> http://localhost:80   HTTP 000 (curl exit 7)
+[exit code: 7]
+
+$ curl -s -o /dev/null -w 'macOS -> http://localhost:8095 HTTP %{http_code} (curl exit %{exitcode})\n' http://localhost:8095
+macOS -> http://localhost:8095 HTTP 200 (curl exit 0)
+
+$ docker version --format 'Client={{.Client.Version}} Server={{.Server.Version}} ServerOS={{.Server.Os}}/{{.Server.Arch}}'
+Client=29.6.1 Server=29.6.1 ServerOS=linux/arm64
+
+$ docker desktop version 2>&1 | head -5
+Docker Desktop CLI plugin version: v0.4.1
+
+$ ls -la "$HOME/Library/Group Containers/group.com.docker/settings-store.json"
+-rw-r--r--@ 1 rudhar  staff  348 Aug 24 10:10 /Users/rudhar/Library/Group Containers/group.com.docker/settings-store.json
+
+$ jq -c 'to_entries[] | select(.key|test("host|network";"i")) | {(.key): .value}' "$HOME/Library/Group Containers/group.com.docker/settings-store.json"
+
+$ jq -c 'keys' "$HOME/Library/Group Containers/group.com.docker/settings-store.json"
+["AutoStart","DisplayedOnboarding","DockerAppLaunchPath","EnableDockerAI","LastContainerdSnapshotterEnable","LicenseTermsVersion","SettingsVersion","ShowInstallScreen","UseContainerdSnapshotter","UseVirtualizationFrameworkRosetta"]
+
+$ jq -c 'to_entries[] | select(.key|test("host|network";"i"))' "$HOME/Library/Group Containers/group.com.docker/settings-store.json"; echo "(no keys matched: host networking is not enabled / at default)"
+(no keys matched: host networking is not enabled / at default)
+

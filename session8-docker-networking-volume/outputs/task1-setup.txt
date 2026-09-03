@@ -1,0 +1,20 @@
+$ docker network create frontend-net
+d435c52ad29963d788d3f0e7bc29e278cebdc50813714114618fda5332909878
+
+$ docker network create backend-net
+b23ab390af35954258e04cebc1d202803becb6b79c808c7f039d38fa0d3151f7
+
+$ docker network create database-net
+9fe062829511e90da621024387bf47e49267a26776934875c46110101a229505
+
+$ docker run -d --name frontend --network frontend-net -p 8090:80 nginx:alpine
+ad59efa255e83f585312a42dde9c17c46dda7dafe4ebfe8b3683d24d673ec13a
+
+$ docker run -d --name backend --network frontend-net nginx:alpine
+18c3ab2585afd07c0cb99638bd76f6e280f16848136d9f99626e6016b74aad54
+
+$ docker network connect database-net backend
+
+$ docker run -d --name database --network database-net -e MYSQL_ROOT_PASSWORD=root mysql:8.0
+2ca00952a49a16dbcb325a8ae68985950cd7255d75711d7793ffa42e8dd69b08
+

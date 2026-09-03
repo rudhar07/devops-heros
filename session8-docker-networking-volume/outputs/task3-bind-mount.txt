@@ -1,0 +1,55 @@
+$ pwd
+/Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session8-docker-networking-volume
+
+$ mkdir -p bind-mount/html
+
+$ printf '<h1>Hello students</h1>\n' > bind-mount/html/index.html
+
+$ cat bind-mount/html/index.html
+<h1>Hello students</h1>
+
+$ docker run -d --name nginx-bind -p 8091:80 -v "$PWD/bind-mount/html:/usr/share/nginx/html:ro" nginx:alpine
+79746f8121f4d4672aa83eb4d1fca2fd706207c3d90b15f3ec926ec22012af9a
+
+$ docker inspect nginx-bind --format '{{json .Mounts}}' | jq
+[
+  {
+    "Type": "bind",
+    "Source": "/Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session8-docker-networking-volume/bind-mount/html",
+    "Destination": "/usr/share/nginx/html",
+    "Mode": "ro",
+    "RW": false,
+    "Propagation": "rprivate"
+  }
+]
+
+$ curl -s --retry 10 --retry-connrefused --retry-delay 1 http://localhost:8091
+<h1>Hello students</h1>
+
+$ docker inspect nginx-bind --format 'StartedAt={{.State.StartedAt}} RestartCount={{.RestartCount}} Pid={{.State.Pid}}'
+StartedAt=2026-09-03T15:05:41.368920792Z RestartCount=0 Pid=62073
+
+$ printf '<p>Updated on the host without restarting the container</p>\n' >> bind-mount/html/index.html
+
+$ cat bind-mount/html/index.html
+<h1>Hello students</h1>
+<p>Updated on the host without restarting the container</p>
+
+$ curl -s http://localhost:8091
+<h1>Hello students</h1>
+
+$ docker inspect nginx-bind --format 'StartedAt={{.State.StartedAt}} RestartCount={{.RestartCount}} Pid={{.State.Pid}}'
+StartedAt=2026-09-03T15:05:41.368920792Z RestartCount=0 Pid=62073
+
+$ docker exec nginx-bind cat /usr/share/nginx/html/index.html
+<h1>Hello students</h1>
+<p>Updated on the host without restarting the container</p>
+
+$ docker exec nginx-bind sh -c 'echo hacked >> /usr/share/nginx/html/index.html'
+sh: can't create /usr/share/nginx/html/index.html: Read-only file system
+[exit code: 1]
+
+$ docker ps --filter name=nginx-bind --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}'
+NAMES        IMAGE          STATUS                  PORTS                                     NETWORKS
+nginx-bind   nginx:alpine   Up Less than a second   0.0.0.0:8091->80/tcp, [::]:8091->80/tcp   bridge
+

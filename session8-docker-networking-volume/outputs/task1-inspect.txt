@@ -1,0 +1,62 @@
+$ docker logs database 2>&1 | grep -E 'ready for connections|Entrypoint'
+2026-09-03 15:05:23+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 8.0.46-1.el9 started.
+2026-09-03 15:05:23+00:00 [Note] [Entrypoint]: Switching to dedicated user 'mysql'
+2026-09-03 15:05:23+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 8.0.46-1.el9 started.
+2026-09-03 15:05:23+00:00 [Note] [Entrypoint]: Initializing database files
+2026-09-03 15:05:25+00:00 [Note] [Entrypoint]: Database files initialized
+2026-09-03 15:05:25+00:00 [Note] [Entrypoint]: Starting temporary server
+2026-09-03T15:05:26.576127Z 0 [System] [MY-011323] [Server] X Plugin ready for connections. Socket: /var/run/mysqld/mysqlx.sock
+2026-09-03T15:05:26.576180Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.46'  socket: '/var/run/mysqld/mysqld.sock'  port: 0  MySQL Community Server - GPL.
+2026-09-03 15:05:26+00:00 [Note] [Entrypoint]: Temporary server started.
+2026-09-03 15:05:27+00:00 [Note] [Entrypoint]: Stopping temporary server
+2026-09-03 15:05:28+00:00 [Note] [Entrypoint]: Temporary server stopped
+2026-09-03 15:05:28+00:00 [Note] [Entrypoint]: MySQL init process done. Ready for start up.
+2026-09-03T15:05:28.762624Z 0 [System] [MY-011323] [Server] X Plugin ready for connections. Bind-address: '::' port: 33060, socket: /var/run/mysqld/mysqlx.sock
+2026-09-03T15:05:28.762664Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.46'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server - GPL.
+
+$ docker exec database mysqladmin ping -uroot -proot
+mysqladmin: [Warning] Using a password on the command line interface can be insecure.
+mysqld is alive
+
+$ docker network ls
+NETWORK ID     NAME           DRIVER    SCOPE
+b23ab390af35   backend-net    bridge    local
+f97de1351b5c   bridge         bridge    local
+9fe062829511   database-net   bridge    local
+d435c52ad299   frontend-net   bridge    local
+4321bfb79d1e   grr_default    bridge    local
+1e633e39c71a   host           host      local
+91d8a28dc325   none           null      local
+
+$ docker ps --filter name=^frontend$ --filter name=^backend$ --filter name=^database$ --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}'
+NAMES      IMAGE          STATUS         PORTS                                     NETWORKS
+database   mysql:8.0      Up 2 minutes   3306/tcp, 33060/tcp                       database-net
+backend    nginx:alpine   Up 2 minutes   80/tcp                                    database-net,frontend-net
+frontend   nginx:alpine   Up 2 minutes   0.0.0.0:8090->80/tcp, [::]:8090->80/tcp   frontend-net
+
+$ docker inspect backend --format '{{json .NetworkSettings.Networks}}' | jq 'to_entries[] | {network: .key, ip: .value.IPAddress, gateway: .value.Gateway}'
+{
+  "network": "database-net",
+  "ip": "172.21.0.2",
+  "gateway": "172.21.0.1"
+}
+{
+  "network": "frontend-net",
+  "ip": "172.19.0.3",
+  "gateway": "172.19.0.1"
+}
+
+$ docker inspect frontend --format 'frontend: {{range $k,$v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}} {{end}}'
+frontend: frontend-net=172.19.0.2 
+
+$ docker inspect backend --format 'backend:  {{range $k,$v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}} {{end}}'
+backend:  database-net=172.21.0.2 frontend-net=172.19.0.3 
+
+$ docker inspect database --format 'database: {{range $k,$v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}} {{end}}'
+database: database-net=172.21.0.3 
+
+$ docker network inspect frontend-net backend-net database-net --format '{{.Name}}: driver={{.Driver}} subnet={{range .IPAM.Config}}{{.Subnet}}{{end}} containers=[{{range .Containers}}{{.Name}} {{end}}]'
+frontend-net: driver=bridge subnet=172.19.0.0/16 containers=[backend frontend ]
+backend-net: driver=bridge subnet=172.20.0.0/16 containers=[]
+database-net: driver=bridge subnet=172.21.0.0/16 containers=[backend database ]
+

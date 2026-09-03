@@ -1,0 +1,65 @@
+$ docker exec frontend ping -c 3 backend
+PING backend (172.19.0.3): 56 data bytes
+64 bytes from 172.19.0.3: seq=0 ttl=64 time=0.758 ms
+64 bytes from 172.19.0.3: seq=1 ttl=64 time=0.172 ms
+64 bytes from 172.19.0.3: seq=2 ttl=64 time=0.322 ms
+
+--- backend ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 0.172/0.417/0.758 ms
+
+$ docker exec backend ping -c 3 frontend
+PING frontend (172.19.0.2): 56 data bytes
+64 bytes from 172.19.0.2: seq=0 ttl=64 time=0.089 ms
+64 bytes from 172.19.0.2: seq=1 ttl=64 time=0.223 ms
+64 bytes from 172.19.0.2: seq=2 ttl=64 time=0.373 ms
+
+--- frontend ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 0.089/0.228/0.373 ms
+
+$ docker exec backend ping -c 3 database
+PING database (172.21.0.3): 56 data bytes
+64 bytes from 172.21.0.3: seq=0 ttl=64 time=0.196 ms
+64 bytes from 172.21.0.3: seq=1 ttl=64 time=0.162 ms
+64 bytes from 172.21.0.3: seq=2 ttl=64 time=0.182 ms
+
+--- database ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 0.162/0.180/0.196 ms
+
+$ docker exec frontend ping -c 3 database
+ping: bad address 'database'
+[exit code: 1]
+
+$ docker exec database getent hosts backend
+172.21.0.2      backend
+
+$ docker exec database getent hosts frontend
+[exit code: 2]
+
+$ docker exec backend nc -zv database 3306
+database (172.21.0.3:3306) open
+
+$ docker exec backend sh -c 'nc -w 3 database 3306 </dev/null | head -c 64 | tr -cd "[:print:]"; echo'
+:]in
+
+$ docker exec backend wget -qO- http://frontend | head -5
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+
+$ docker exec frontend wget -qO- --timeout=3 http://database:3306
+wget: bad address 'database:3306'
+[exit code: 1]
+
+$ docker exec database mysql -uroot -proot -e 'SELECT VERSION() AS version, @@hostname AS hostname;'
+mysql: [Warning] Using a password on the command line interface can be insecure.
+version	hostname
+8.0.46	2ca00952a49a
+
+$ curl -s -o /dev/null -w 'frontend via published port 8090 -> HTTP %{http_code}\n' http://localhost:8090
+frontend via published port 8090 -> HTTP 200
+

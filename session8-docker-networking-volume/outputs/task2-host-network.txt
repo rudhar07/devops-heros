@@ -1,0 +1,121 @@
+$ docker pull httpd:2.4
+2.4: Pulling from library/httpd
+Digest: sha256:979c38c2228d28c2edfd45c6e27dcee1c7b4a101a5526721ae8ece454e89e99e
+Status: Image is up to date for httpd:2.4
+docker.io/library/httpd:2.4
+
+$ docker run -d --name apache-host --network host httpd:2.4
+088411b738930314393edf9885a06004df523478c4b6ecd785829f39a58dc526
+
+$ docker ps --filter name=apache-host --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}'
+NAMES         IMAGE       STATUS                  PORTS     NETWORKS
+apache-host   httpd:2.4   Up Less than a second             host
+
+$ docker inspect apache-host --format 'NetworkMode={{.HostConfig.NetworkMode}} PortBindings={{json .HostConfig.PortBindings}} ContainerIP="{{.NetworkSettings.IPAddress}}"'
+
+template parsing error: template: :1:118: executing "" at <.NetworkSettings.IPAddress>: map has no entry for key "IPAddress"
+[exit code: 1]
+
+$ docker exec apache-host curl -s -i http://localhost:80 | head -12
+OCI runtime exec failed: exec failed: unable to start container process: exec: "curl": executable file not found in $PATH
+
+$ docker exec apache-host bash -c 'exec 3<>/dev/tcp/127.0.0.1/80; printf "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3; cat <&3'
+HTTP/1.1 200 OK
+Date: Thu, 03 Sep 2026 15:05:37 GMT
+Server: Apache/2.4.68 (Unix)
+Last-Modified: Fri, 07 Nov 2025 08:23:08 GMT
+ETag: "bf-642fce432f300"
+Accept-Ranges: bytes
+Content-Length: 191
+Connection: close
+Content-Type: text/html
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>It works! Apache httpd</title>
+</head>
+<body>
+<p>It works!</p>
+</body>
+</html>
+
+$ docker run --rm --network host alpine wget -S -qO- http://localhost:80
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>It works! Apache httpd</title>
+</head>
+<body>
+<p>It works!</p>
+</body>
+</html>
+  HTTP/1.1 200 OK
+  Date: Thu, 03 Sep 2026 15:05:37 GMT
+  Server: Apache/2.4.68 (Unix)
+  Last-Modified: Fri, 07 Nov 2025 08:23:08 GMT
+  ETag: "bf-642fce432f300"
+  Accept-Ranges: bytes
+  Content-Length: 191
+  Connection: close
+  Content-Type: text/html
+  
+
+$ docker run --rm --network host alpine sh -c 'hostname; ip -4 addr show | grep inet'
+docker-desktop
+    inet 127.0.0.1/8 scope host lo
+    inet 192.168.65.3/24 brd 192.168.65.255 scope global eth0
+    inet 192.168.65.6/32 scope global services1
+    inet 172.18.0.1/16 brd 172.18.255.255 scope global br-4321bfb79d1e
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+    inet 172.19.0.1/16 brd 172.19.255.255 scope global br-d435c52ad299
+    inet 172.20.0.1/16 brd 172.20.255.255 scope global br-b23ab390af35
+    inet 172.21.0.1/16 brd 172.21.255.255 scope global br-9fe062829511
+
+$ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:80
+000
+[exit code: 7]
+
+$ curl -sv http://localhost:80 2>&1 | head -6
+* Host localhost:80 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+*   Trying [::1]:80...
+* connect to ::1 port 80 from ::1 port 51027 failed: Connection refused
+*   Trying 127.0.0.1:80...
+
+$ docker info --format 'OS={{.OperatingSystem}} OSType={{.OSType}} Arch={{.Architecture}} Kernel={{.KernelVersion}}'
+OS=Docker Desktop OSType=linux Arch=aarch64 Kernel=6.12.76-linuxkit
+
+$ grep -iE 'hostnet|networking' "$HOME/Library/Group Containers/group.com.docker/settings-store.json"
+[exit code: 1]
+
+$ docker run -d --name apache-published -p 8095:80 httpd:2.4
+dc325de3c37784caa1cb2475911b3749c334658582d04b96764d70e235229943
+
+$ curl -s --retry 10 --retry-connrefused --retry-delay 1 -i http://localhost:8095
+HTTP/1.1 200 OK
+Date: Thu, 03 Sep 2026 15:05:38 GMT
+Server: Apache/2.4.68 (Unix)
+Last-Modified: Fri, 07 Nov 2025 08:23:08 GMT
+ETag: "bf-642fce432f300"
+Accept-Ranges: bytes
+Content-Length: 191
+Content-Type: text/html
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>It works! Apache httpd</title>
+</head>
+<body>
+<p>It works!</p>
+</body>
+</html>
+
+$ docker ps --filter name=apache --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}'
+NAMES              IMAGE          STATUS                  PORTS                                     NETWORKS
+apache-published   httpd:2.4      Up Less than a second   0.0.0.0:8095->80/tcp, [::]:8095->80/tcp   bridge
+apache-host        httpd:2.4      Up 1 second                                                       host
+hello-apache       hello-apache   Up 3 seconds            0.0.0.0:8081->80/tcp, [::]:8081->80/tcp   bridge
+

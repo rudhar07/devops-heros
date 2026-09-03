@@ -1,0 +1,60 @@
+$ docker rm -f overlay-client
+overlay-client
+
+$ docker service rm web-svc
+web-svc
+
+$ docker network rm app-overlay
+app-overlay
+
+$ docker swarm leave --force
+Node left the swarm.
+
+$ docker info --format 'Swarm: {{.Swarm.LocalNodeState}}'
+Swarm: inactive
+
+$ docker network rm docker_gwbridge
+docker_gwbridge
+
+$ docker rm -f frontend backend database apache-host apache-published nginx-bind
+frontend
+backend
+database
+apache-host
+apache-published
+nginx-bind
+
+$ docker network rm frontend-net backend-net database-net
+frontend-net
+backend-net
+database-net
+
+$ docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Networks}}'
+NAMES                                    IMAGE                                                                                    STATUS                     PORTS                                         NETWORKS
+multi-stage-app                          multi-stage-app                                                                          Up 2 minutes               0.0.0.0:8080->3000/tcp, [::]:8080->3000/tcp   bridge
+hello-nginx                              hello-nginx                                                                              Up 6 minutes               0.0.0.0:8083->80/tcp, [::]:8083->80/tcp       bridge
+hello-react                              hello-react                                                                              Up 6 minutes               0.0.0.0:8082->80/tcp, [::]:8082->80/tcp       bridge
+hello-apache                             hello-apache                                                                             Up 6 minutes               0.0.0.0:8081->80/tcp, [::]:8081->80/tcp       bridge
+hello-java                               hello-java                                                                               Up 6 minutes               0.0.0.0:8084->8080/tcp, [::]:8084->8080/tcp   bridge
+hello-python                             hello-python                                                                             Up 6 minutes               0.0.0.0:5001->5000/tcp, [::]:5001->5000/tcp   bridge
+hello-nodejs                             hello-nodejs                                                                             Up 6 minutes               0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp   bridge
+linux-lab                                linux-lab                                                                                Up 9 minutes                                                             bridge
+[... two exited containers from unrelated work on this machine removed from this listing ...]
+buildx_buildkit_multiplatform-builder0   moby/buildkit:buildx-stable-1                                                            Up 10 days                                                               bridge
+
+$ docker network ls
+NETWORK ID     NAME          DRIVER    SCOPE
+f97de1351b5c   bridge        bridge    local
+4321bfb79d1e   grr_default   bridge    local
+1e633e39c71a   host          host      local
+91d8a28dc325   none          null      local
+
+$ docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}' | grep -E 'REPOSITORY|^nginx |^httpd |^mysql |^alpine '
+REPOSITORY                                                                        TAG                      SIZE
+nginx                                                                             alpine                   102MB
+httpd                                                                             2.4                      207MB
+httpd                                                                             2.4-alpine               107MB
+alpine                                                                            latest                   13.6MB
+mysql                                                                             8.0                      1.09GB
+nginx                                                                             1.27-alpine              76.8MB
+

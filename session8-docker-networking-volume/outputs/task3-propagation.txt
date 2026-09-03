@@ -1,0 +1,38 @@
+$ curl -s http://localhost:8091
+<h1>Hello students</h1>
+<p>Updated on the host without restarting the container</p>
+
+$ # second edit, then poll nginx (no restart) until the new line is served, timing it
+$ start=$(date +%s.%N); printf "<p>Second edit at %s</p>\n" "$(date -u +%H:%M:%SZ)" >> bind-mount/html/index.html
+$ n=0; while [ $n -lt 3000 ]; do n=$((n+1)); body=$(curl -s http://localhost:8091); case "$body" in *"Second edit"*) break;; esac; done
+$ end=$(date +%s.%N); echo "new content served on poll #$n after $(echo "$end - $start" | bc) s"
+new content served on poll #2 after .024837000 s
+
+$ cat bind-mount/html/index.html
+<h1>Hello students</h1>
+<p>Updated on the host without restarting the container</p>
+<p>Second edit at 15:09:17Z</p>
+
+$ curl -si http://localhost:8091
+HTTP/1.1 200 OK
+Server: nginx/1.31.5
+Date: Thu, 03 Sep 2026 15:09:17 GMT
+Content-Type: text/html
+Content-Length: 116
+Last-Modified: Thu, 03 Sep 2026 15:09:17 GMT
+Connection: keep-alive
+ETag: "6a998d9d-74"
+Accept-Ranges: bytes
+
+<h1>Hello students</h1>
+<p>Updated on the host without restarting the container</p>
+<p>Second edit at 15:09:17Z</p>
+
+$ docker inspect nginx-bind --format 'StartedAt={{.State.StartedAt}} RestartCount={{.RestartCount}} Pid={{.State.Pid}}'
+StartedAt=2026-09-03T15:05:41.368920792Z RestartCount=0 Pid=62073
+
+$ docker exec nginx-bind cat /usr/share/nginx/html/index.html
+<h1>Hello students</h1>
+<p>Updated on the host without restarting the container</p>
+<p>Second edit at 15:09:17Z</p>
+

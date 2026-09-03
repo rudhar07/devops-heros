@@ -1,0 +1,29 @@
+$ date -u +%Y-%m-%dT%H:%M:%SZ
+2026-09-03T15:07:48Z
+
+$ curl -si http://localhost:8091
+HTTP/1.1 200 OK
+Server: nginx/1.31.5
+Date: Thu, 03 Sep 2026 15:07:48 GMT
+Content-Type: text/html
+Content-Length: 84
+Last-Modified: Thu, 03 Sep 2026 15:05:41 GMT
+Connection: keep-alive
+ETag: "6a998cc5-54"
+Accept-Ranges: bytes
+
+<h1>Hello students</h1>
+<p>Updated on the host without restarting the container</p>
+
+$ stat -f 'host:      size=%z mtime=%Sm' bind-mount/html/index.html
+host:      size=84 mtime=Sep  3 20:35:41 2026
+
+$ docker exec nginx-bind stat -c 'container: size=%s mtime=%y' /usr/share/nginx/html/index.html
+container: size=84 mtime=2026-09-03 15:05:41.500454580 +0000
+
+$ docker exec nginx-bind grep -nE 'sendfile|open_file_cache' /etc/nginx/nginx.conf
+24:    sendfile        on;
+
+$ docker inspect nginx-bind --format 'StartedAt={{.State.StartedAt}} RestartCount={{.RestartCount}} Pid={{.State.Pid}}'
+StartedAt=2026-09-03T15:05:41.368920792Z RestartCount=0 Pid=62073
+

@@ -1,0 +1,119 @@
+$ docker info --format 'Swarm state before: {{.Swarm.LocalNodeState}}'
+Swarm state before: inactive
+
+$ docker swarm init
+Swarm initialized: current node (lomcr58ja1vdtvzky2epssgfx) is now a manager.
+
+To add a worker to this swarm, run the following command:
+
+    docker swarm join --token SWMTKN-1-5znd8fq2srx4y7wtg2qwpmnhwkxtbqgymlz0wieo9gm8omvljq-4ogjob2vhybys08k28p9ipngp 192.168.65.3:2377
+
+To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+
+$ docker info --format 'Swarm state after: {{.Swarm.LocalNodeState}} (manager={{.Swarm.ControlAvailable}} nodes={{.Swarm.Nodes}})'
+Swarm state after: active (manager=true nodes=1)
+
+$ docker node ls
+ID                            HOSTNAME         STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+lomcr58ja1vdtvzky2epssgfx *   docker-desktop   Ready     Active         Leader           29.6.1
+
+$ docker network create -d overlay --attachable app-overlay
+vj4pyhw09lsv07zwwn4cgxauc
+
+$ docker service create --name web-svc --replicas 3 --network app-overlay nginx:alpine
+hpantyliy5tprcdzrt3t8mi0p
+overall progress: 0 out of 3 tasks
+1/3:  
+2/3:  
+3/3:  
+overall progress: 0 out of 3 tasks
+overall progress: 0 out of 3 tasks
+overall progress: 0 out of 3 tasks
+overall progress: 0 out of 3 tasks
+overall progress: 3 out of 3 tasks
+verify: Waiting 5 seconds to verify that tasks are stable...
+verify: Waiting 5 seconds to verify that tasks are stable...
+verify: Waiting 5 seconds to verify that tasks are stable...
+verify: Waiting 5 seconds to verify that tasks are stable...
+verify: Waiting 5 seconds to verify that tasks are stable...
+verify: Waiting 4 seconds to verify that tasks are stable...
+verify: Waiting 4 seconds to verify that tasks are stable...
+verify: Waiting 4 seconds to verify that tasks are stable...
+verify: Waiting 4 seconds to verify that tasks are stable...
+verify: Waiting 4 seconds to verify that tasks are stable...
+verify: Waiting 3 seconds to verify that tasks are stable...
+verify: Waiting 3 seconds to verify that tasks are stable...
+verify: Waiting 3 seconds to verify that tasks are stable...
+verify: Waiting 3 seconds to verify that tasks are stable...
+verify: Waiting 2 seconds to verify that tasks are stable...
+verify: Waiting 2 seconds to verify that tasks are stable...
+verify: Waiting 2 seconds to verify that tasks are stable...
+verify: Waiting 2 seconds to verify that tasks are stable...
+verify: Waiting 2 seconds to verify that tasks are stable...
+verify: Waiting 1 seconds to verify that tasks are stable...
+verify: Waiting 1 seconds to verify that tasks are stable...
+verify: Waiting 1 seconds to verify that tasks are stable...
+verify: Waiting 1 seconds to verify that tasks are stable...
+verify: Service hpantyliy5tprcdzrt3t8mi0p converged
+
+$ docker service ls
+ID             NAME      MODE         REPLICAS   IMAGE          PORTS
+hpantyliy5tp   web-svc   replicated   3/3        nginx:alpine   
+
+$ docker service ps web-svc --format 'table {{.Name}}\t{{.Node}}\t{{.DesiredState}}\t{{.CurrentState}}'
+NAME        NODE             DESIRED STATE   CURRENT STATE
+web-svc.1   docker-desktop   Running         Running 5 seconds ago
+web-svc.2   docker-desktop   Running         Running 5 seconds ago
+web-svc.3   docker-desktop   Running         Running 5 seconds ago
+
+$ docker run -d --name overlay-client --network app-overlay alpine tail -f /dev/null
+a1ef2cbbaeb7f662b888dc9d7e0cd03cbfdd883a5e8303ff46a86e6e910d2826
+
+$ docker exec overlay-client getent hosts web-svc
+10.0.1.2          web-svc  web-svc
+
+$ docker exec overlay-client getent hosts tasks.web-svc
+10.0.1.5          tasks.web-svc  tasks.web-svc
+
+$ docker service inspect web-svc --format 'VIP={{range .Endpoint.VirtualIPs}}{{.Addr}} {{end}} EndpointMode={{.Spec.EndpointSpec.Mode}}'
+VIP=10.0.1.2/24  EndpointMode=vip
+
+$ docker exec overlay-client wget -qO- http://web-svc | head -5
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+
+$ docker exec overlay-client ip -4 -o addr show | awk '{print $2, $4}'
+lo 127.0.0.1/8
+eth0 10.0.1.7/24
+eth1 172.22.0.6/16
+
+$ docker network inspect app-overlay --format 'Driver={{.Driver}} Scope={{.Scope}} Subnet={{range .IPAM.Config}}{{.Subnet}}{{end}} Attachable={{.Attachable}} VXLAN_ID={{index .Options "com.docker.network.driver.overlay.vxlanid_list"}}'
+Driver=overlay Scope=swarm Subnet=10.0.1.0/24 Attachable=true VXLAN_ID=4097
+
+$ docker network inspect app-overlay --format '{{range $k,$v := .Containers}}{{$v.Name}} {{$v.IPv4Address}}{{println}}{{end}}'
+web-svc.2.7brkvc5i9c8zwivrc8xo9dsq0 10.0.1.4/24
+web-svc.3.rdpzwmmi5b4ap1ygvnk0855za 10.0.1.5/24
+web-svc.1.ddb4t1u19ak6sy7sah3z9n554 10.0.1.3/24
+overlay-client 10.0.1.7/24
+app-overlay-endpoint 10.0.1.6/24
+
+
+$ docker network ls
+NETWORK ID     NAME              DRIVER    SCOPE
+vj4pyhw09lsv   app-overlay       overlay   swarm
+b23ab390af35   backend-net       bridge    local
+f97de1351b5c   bridge            bridge    local
+9fe062829511   database-net      bridge    local
+971c6a1189b9   docker_gwbridge   bridge    local
+d435c52ad299   frontend-net      bridge    local
+4321bfb79d1e   grr_default       bridge    local
+1e633e39c71a   host              host      local
+kdcslalpw03d   ingress           overlay   swarm
+91d8a28dc325   none              null      local
+
+$ docker network inspect ingress --format 'ingress: Driver={{.Driver}} Scope={{.Scope}} Subnet={{range .IPAM.Config}}{{.Subnet}}{{end}}'
+ingress: Driver=overlay Scope=swarm Subnet=10.0.0.0/24
+
