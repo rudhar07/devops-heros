@@ -1,0 +1,20 @@
+$ docker run -d --name multi-stage-app -p 8080:3000 multi-stage-app
+
+$ curl -s -i http://localhost:8080
+HTTP/1.1 200 OK
+X-Powered-By: Express
+Content-Type: text/html; charset=utf-8
+Content-Length: 51
+ETag: W/"33-gCAsBJJtlso/BVPWoV3U/pWC3Ak"
+Date: Thu, 03 Sep 2026 15:09:51 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+<h1>Hello World from Docker Multi-Stage Build!</h1>
+
+$ curl -s http://localhost:8080
+<h1>Hello World from Docker Multi-Stage Build!</h1>
+
+$ curl -s -o /dev/null -w "http_code=%{http_code} time_total=%{time_total}s
+" http://localhost:8080
+http_code=200 time_total=0.001840s

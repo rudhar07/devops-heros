@@ -1,0 +1,18 @@
+$ docker ps --filter name=hello- --filter name=multi-stage-app --format "table {{.Names}}	{{.Image}}	{{.Status}}	{{.Ports}}"
+NAMES             IMAGE             STATUS          PORTS
+multi-stage-app   multi-stage-app   Up 32 seconds   0.0.0.0:8080->3000/tcp, [::]:8080->3000/tcp
+hello-nginx       hello-nginx       Up 4 minutes    0.0.0.0:8083->80/tcp, [::]:8083->80/tcp
+hello-react       hello-react       Up 4 minutes    0.0.0.0:8082->80/tcp, [::]:8082->80/tcp
+hello-apache      hello-apache      Up 4 minutes    0.0.0.0:8081->80/tcp, [::]:8081->80/tcp
+hello-java        hello-java        Up 4 minutes    0.0.0.0:8084->8080/tcp, [::]:8084->8080/tcp
+hello-python      hello-python      Up 4 minutes    0.0.0.0:5001->5000/tcp, [::]:5001->5000/tcp
+hello-nodejs      hello-nodejs      Up 4 minutes    0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+
+$ for p in 3000 5001 8084 8081 8082 8083 8080; do printf "%-5s " $p; curl -s -o /dev/null -w "%{http_code} " http://localhost:$p; curl -s http://localhost:$p | grep -o "Hello World[^<]*" | head -1; done
+3000  200 Hello World - Node.js
+5001  200 Hello World - Python
+8084  200 Hello World - Java
+8081  200 Hello World - Apache
+8082  200 Hello World - React
+8083  200 Hello World - Nginx
+8080  200 Hello World from Docker Multi-Stage Build!

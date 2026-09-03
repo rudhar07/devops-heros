@@ -1,0 +1,32 @@
+$ docker ps --filter name=multi-stage-app
+CONTAINER ID   IMAGE             COMMAND                  STATUS         PORTS                                         NAMES
+261173d4df14   multi-stage-app   "docker-entrypoint.s…"   Up 3 seconds   0.0.0.0:8080->3000/tcp, [::]:8080->3000/tcp   multi-stage-app
+
+$ docker port multi-stage-app
+3000/tcp -> 0.0.0.0:8080
+3000/tcp -> [::]:8080
+
+$ docker logs multi-stage-app
+
+> docker-hello-world@1.0.0 start
+> node server.js
+
+Server running on port 3000
+
+$ docker inspect multi-stage-app --format "{{.State.Status}} started={{.State.StartedAt}} ports={{json .NetworkSettings.Ports}}"
+running started=2026-09-03T15:09:48.782563921Z ports={"3000/tcp":[{"HostIp":"0.0.0.0","HostPort":"8080"},{"HostIp":"::","HostPort":"8080"}]}
+
+$ docker image history multi-stage-app --format "table {{.CreatedBy}}	{{.Size}}" | head -8
+CREATED BY                                      SIZE
+CMD ["npm" "start"]                             0B
+EXPOSE [3000/tcp]                               0B
+COPY /app/server.js ./ # buildkit               12.3kB
+RUN /bin/sh -c npm install --omit=dev # buil…   9.45MB
+COPY /app/package*.json ./ # buildkit           45.1kB
+WORKDIR /app                                    8.19kB
+CMD ["node"]                                    0B
+
+$ docker images multi-stage-app
+IMAGE                          ID             DISK USAGE   CONTENT SIZE   EXTRA
+multi-stage-app:builder-only   ec848f23ff0f        249MB         61.8MB        
+multi-stage-app:latest         60e80dd7228f        243MB         60.9MB   U    

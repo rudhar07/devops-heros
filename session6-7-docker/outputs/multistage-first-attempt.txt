@@ -1,0 +1,17 @@
+
+# Why it was empty: the container was started with -p 8080:8080 but the app listens on 3000 inside.
+$ docker logs multi-stage-app
+
+> docker-hello-world@1.0.0 start
+> node server.js
+
+Server running on port 3000
+
+$ grep -n "PORT" server.js; grep -n EXPOSE Dockerfile
+4:const PORT = 3000;
+10:app.listen(PORT, () => {
+11:  console.log(`Server running on port ${PORT}`);
+18:EXPOSE 3000
+
+$ docker rm -f multi-stage-app
+multi-stage-app
