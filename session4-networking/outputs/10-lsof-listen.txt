@@ -1,0 +1,35 @@
+$ lsof -nP -iTCP -sTCP:LISTEN | head -20
+COMMAND     PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+ControlCe   623 rudhar    9u  IPv4 0xe71ff4efee7534a8      0t0  TCP *:7000 (LISTEN)
+ControlCe   623 rudhar   10u  IPv6 0x1cc4b6d1f686383e      0t0  TCP *:7000 (LISTEN)
+ControlCe   623 rudhar   11u  IPv4 0x99c1f76e433344c0      0t0  TCP *:5000 (LISTEN)
+ControlCe   623 rudhar   12u  IPv6 0xe3a305c9df8ef69f      0t0  TCP *:5000 (LISTEN)
+rapportd    632 rudhar   10u  IPv4 0x74470b0e2d76c35c      0t0  TCP *:65206 (LISTEN)
+rapportd    632 rudhar   11u  IPv6 0xbfcecd1a5ac02343      0t0  TCP *:65206 (LISTEN)
+rapportd    632 rudhar   18u  IPv6 0x3f401309e1ab7ae2      0t0  TCP *:49855 (LISTEN)
+rapportd    632 rudhar   20u  IPv6 0x1913eb71c8dfb5cf      0t0  TCP *:49856 (LISTEN)
+sharingd    728 rudhar   18u  IPv6 0x2c0664986479ab85      0t0  TCP *:8770 (LISTEN)
+Code\x20H  4188 rudhar   37u  IPv4 0x571e7933d98018be      0t0  TCP 127.0.0.1:51893 (LISTEN)
+Code\x20H  4189 rudhar   35u  IPv4 0x7535d80a5db19b21      0t0  TCP 127.0.0.1:37956 (LISTEN)
+Code\x20H  4189 rudhar   45u  IPv4 0x7f05f96722c5ef45      0t0  TCP 127.0.0.1:51902 (LISTEN)
+Code\x20H  4192 rudhar   36u  IPv4  0x2c5c42672d8173a      0t0  TCP 127.0.0.1:51894 (LISTEN)
+Code\x20H  4192 rudhar   66u  IPv4 0x4c4f043e26a4805f      0t0  TCP 127.0.0.1:57344 (LISTEN)
+python3.1  4488 rudhar    3u  IPv4 0x9001e774cc7f3c43      0t0  TCP 127.0.0.1:8100 (LISTEN)
+Code\x20H  6191 rudhar   20u  IPv4 0xe0e04c6600437a4f      0t0  TCP 127.0.0.1:56752 (LISTEN)
+Code\x20H  6713 rudhar   20u  IPv4 0xe6c5c3d725431c74      0t0  TCP 127.0.0.1:60283 (LISTEN)
+Google     6768 rudhar   69u  IPv4 0x9f8cfcd022c2af36      0t0  TCP 127.0.0.1:9222 (LISTEN)
+node      19713 rudhar   13u  IPv6 0x9c6a84326d6c39ce      0t0  TCP *:3001 (LISTEN)
+
+# Supplementary - total listening sockets, and only the Docker Desktop (com.docker.backend) ones:
+$ lsof -nP -iTCP -sTCP:LISTEN | wc -l
+      37
+$ lsof -nP -iTCP -sTCP:LISTEN | grep com.docke
+com.docke 75790 rudhar   73u  IPv6 0x78fa575fc7c65f1b      0t0  TCP *:8095 (LISTEN)
+com.docke 75790 rudhar  117u  IPv6  0x6864d956fe3183a      0t0  TCP *:8090 (LISTEN)
+com.docke 75790 rudhar  135u  IPv6 0xe352b7f1733923dc      0t0  TCP *:3000 (LISTEN)
+com.docke 75790 rudhar  136u  IPv6  0xadd9e961fd5ca6a      0t0  TCP *:5001 (LISTEN)
+com.docke 75790 rudhar  138u  IPv6 0x7362f94fd0ae6628      0t0  TCP *:8084 (LISTEN)
+com.docke 75790 rudhar  142u  IPv6 0xe4e9aaad9f286157      0t0  TCP *:8081 (LISTEN)
+com.docke 75790 rudhar  145u  IPv6 0x23437d03dda72653      0t0  TCP *:8091 (LISTEN)
+com.docke 75790 rudhar  156u  IPv6  0x38f6350cc85ed00      0t0  TCP *:8082 (LISTEN)
+com.docke 75790 rudhar  157u  IPv6 0xc40780acbcc7da01      0t0  TCP *:8083 (LISTEN)

@@ -1,0 +1,7 @@
+$ nc -zv google.com 443
+Connection to google.com port 443 [tcp/https] succeeded!
+exit code: 0
+
+$ nc -zv -G 3 google.com 81
+nc: connectx to google.com port 81 (tcp) failed: Operation timed out
+exit code: 1

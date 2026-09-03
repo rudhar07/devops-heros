@@ -1,0 +1,28 @@
+$ ifconfig en0
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+	options=6460<TSO4,TSO6,CHANNEL_IO,PARTIAL_CSUM,ZEROINVERT_CSUM>
+	ether fc:b2:14:b6:6a:8e
+	inet6 fe80::8b7:51ec:a7fe:76ec%en0 prefixlen 64 secured scopeid 0xf 
+	inet 172.20.2.108 netmask 0xfffff800 broadcast 172.20.7.255
+	nd6 options=201<PERFORMNUD,DAD>
+	media: autoselect
+	status: active
+
+$ ipconfig getifaddr en0
+172.20.2.108
+
+$ ipconfig getoption en0 subnet_mask
+255.255.248.0
+
+$ ipconfig getoption en0 router
+172.20.0.1
+
+$ route get default
+   route to: default
+destination: default
+       mask: default
+    gateway: 172.20.0.1
+  interface: en0
+      flags: <UP,GATEWAY,DONE,STATIC,PRCLONING,GLOBAL>
+ recvpipe  sendpipe  ssthresh  rtt,msec    rttvar  hopcount      mtu     expire
+       0         0         0         0         0         0      1500         0 

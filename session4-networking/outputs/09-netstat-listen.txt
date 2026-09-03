@@ -1,0 +1,56 @@
+$ netstat -an | grep LISTEN
+tcp46      0      0  *.8091                 *.*                    LISTEN     
+tcp46      0      0  *.8095                 *.*                    LISTEN     
+tcp46      0      0  *.8083                 *.*                    LISTEN     
+tcp46      0      0  *.8082                 *.*                    LISTEN     
+tcp46      0      0  *.8081                 *.*                    LISTEN     
+tcp46      0      0  *.8084                 *.*                    LISTEN     
+tcp46      0      0  *.5001                 *.*                    LISTEN     
+tcp46      0      0  *.3000                 *.*                    LISTEN     
+tcp46      0      0  *.8090                 *.*                    LISTEN     
+tcp46      0      0  *.8770                 *.*                    LISTEN     
+tcp6       0      0  fe80::f820:84ff:.65493 *.*                    LISTEN     
+tcp6       0      0  fe80::f820:84ff:.65492 *.*                    LISTEN     
+tcp46      0      0  *.49856                *.*                    LISTEN     
+tcp46      0      0  *.49855                *.*                    LISTEN     
+tcp6       0      0  *.65206                *.*                    LISTEN     
+tcp4       0      0  *.65206                *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.51480        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.18431        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.64714        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.53551        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.61445        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.25451        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.8100         *.*                    LISTEN     
+tcp46      0      0  *.3010                 *.*                    LISTEN     
+tcp46      0      0  *.3001                 *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.60283        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.56752        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.9222         *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.57344        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.51902        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.51894        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.51893        *.*                    LISTEN     
+tcp4       0      0  127.0.0.1.37956        *.*                    LISTEN     
+tcp6       0      0  *.5000                 *.*                    LISTEN     
+tcp4       0      0  *.5000                 *.*                    LISTEN     
+tcp6       0      0  *.7000                 *.*                    LISTEN     
+tcp4       0      0  *.7000                 *.*                    LISTEN     
+
+# Supplementary (read-only) - to see which container owns each published port:
+$ docker ps --format 'table {{.Names}}	{{.Image}}	{{.Ports}}'
+NAMES                                    IMAGE                           PORTS
+nginx-bind                               nginx:alpine                    0.0.0.0:8091->80/tcp, [::]:8091->80/tcp
+apache-published                         httpd:2.4                       0.0.0.0:8095->80/tcp, [::]:8095->80/tcp
+apache-host                              httpd:2.4                       
+hello-nginx                              hello-nginx                     0.0.0.0:8083->80/tcp, [::]:8083->80/tcp
+hello-react                              hello-react                     0.0.0.0:8082->80/tcp, [::]:8082->80/tcp
+hello-apache                             hello-apache                    0.0.0.0:8081->80/tcp, [::]:8081->80/tcp
+hello-java                               hello-java                      0.0.0.0:8084->8080/tcp, [::]:8084->8080/tcp
+hello-python                             hello-python                    0.0.0.0:5001->5000/tcp, [::]:5001->5000/tcp
+hello-nodejs                             hello-nodejs                    0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+database                                 mysql:8.0                       3306/tcp, 33060/tcp
+backend                                  nginx:alpine                    80/tcp
+frontend                                 nginx:alpine                    0.0.0.0:8090->80/tcp, [::]:8090->80/tcp
+linux-lab                                linux-lab                       
+buildx_buildkit_multiplatform-builder0   moby/buildkit:buildx-stable-1   

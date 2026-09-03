@@ -1,0 +1,8 @@
+$ hostname
+Rudhars-MacBook-Pro.local
+
+$ scutil --get LocalHostName
+Rudhars-MacBook-Pro
+
+$ scutil --get ComputerName
+Rudhar’s MacBook Pro

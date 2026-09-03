@@ -1,0 +1,33 @@
+$ dig google.com
+
+; <<>> DiG 9.10.6 <<>> google.com
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 10726
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		266	IN	A	142.250.67.46
+
+;; Query time: 116 msec
+;; SERVER: 1.1.1.1#53(1.1.1.1)
+;; WHEN: Thu Sep 03 20:33:31 IST 2026
+;; MSG SIZE  rcvd: 55
+
+
+$ dig +short google.com
+142.250.206.14
+
+$ dig google.com NS +short
+ns2.google.com.
+ns4.google.com.
+ns3.google.com.
+ns1.google.com.
+
+$ dig -x 8.8.8.8 +short
+dns.google.

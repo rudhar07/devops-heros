@@ -1,0 +1,57 @@
+$ ipconfig getpacket en0
+op = BOOTREPLY
+htype = 1
+flags = 0x0
+hlen = 6
+hops = 0
+xid = 0x7319123d
+secs = 0
+ciaddr = 0.0.0.0
+yiaddr = 172.20.2.108
+siaddr = 0.0.0.0
+giaddr = 0.0.0.0
+chaddr = fc:b2:14:b6:6a:8e
+sname = 
+file = 
+options:
+Options count is 10
+dhcp_message_type (uint8): ACK 0x5
+server_identifier (ip): 172.20.0.1
+lease_time (uint32): 0x93a80
+subnet_mask (ip): 255.255.248.0
+router (ip_mult): {172.20.0.1}
+domain_name_server (ip_mult): {1.1.1.1, 8.8.8.8, 103.8.46.5, 103.8.45.5}
+renewal_t1_time_value (uint32): 0x49d40
+rebinding_t2_time_value (uint32): 0x81330
+option_224 (opaque): 
+[... option_224 hex dump removed: it encodes the DHCP server hardware serial number ...]
+0010  00                                                .               
+
+end (none): 
+
+$ scutil --dns | head -25
+DNS configuration
+
+resolver #1
+  nameserver[0] : 1.1.1.1
+  nameserver[1] : 8.8.8.8
+  nameserver[2] : 103.8.46.5
+  nameserver[3] : 103.8.45.5
+  if_index : 15 (en0)
+  flags    : Request A records
+  reach    : 0x00000002 (Reachable)
+
+resolver #2
+  domain   : local
+  options  : mdns
+  timeout  : 5
+  flags    : Request A records
+  reach    : 0x00000000 (Not Reachable)
+  order    : 300000
+
+resolver #3
+  domain   : 254.169.in-addr.arpa
+  options  : mdns
+  timeout  : 5
+  flags    : Request A records
+  reach    : 0x00000000 (Not Reachable)

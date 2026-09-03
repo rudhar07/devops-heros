@@ -1,0 +1,8 @@
+$ arp -a
+? (169.254.169.254) at (incomplete) on en0 [ethernet]
+rudhars-iphone.local (169.254.249.111) at c6:ac:aa:4b:e6:36 on en9 [ethernet]
+? (172.20.0.1) at d4:b4:c0:a4:ba:e9 on en0 ifscope [ethernet]
+[... 236 entries for other devices on the office network removed for privacy ...]
+? (172.20.2.108) at fc:b2:14:b6:6a:8e on en0 ifscope permanent [ethernet]
+? (172.20.7.255) at ff:ff:ff:ff:ff:ff on en0 ifscope [ethernet]
+mdns.mcast.net (224.0.0.251) at 1:0:5e:0:0:fb on en0 ifscope permanent [ethernet]
