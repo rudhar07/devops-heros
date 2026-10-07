@@ -1,0 +1,243 @@
+# 3. Verify the HPA (metrics now available, idle)
+$ kubectl get hpa hpa-demo
+NAME       REFERENCE             TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+hpa-demo   Deployment/hpa-demo   cpu: 5%/50%   1         5         1          31s
+
+$ kubectl top pods -l app=hpa-demo
+NAME                        CPU(cores)   MEMORY(bytes)   
+hpa-demo-5d6676989b-f9cgn   5m           24Mi            
+
+$ kubectl describe hpa hpa-demo
+Name:                                                  hpa-demo
+Namespace:                                             default
+Labels:                                                <none>
+Annotations:                                           <none>
+CreationTimestamp:                                     Wed, 07 Oct 2026 21:58:09 +0530
+Reference:                                             Deployment/hpa-demo
+Metrics:                                               ( current / target )
+  resource cpu on pods  (as a percentage of request):  5% (5m) / 50%
+Min replicas:                                          1
+Max replicas:                                          5
+Behavior:
+  Scale Up:
+    Stabilization Window: 0 seconds
+    Select Policy: Max
+    Policies:
+      - Type: Pods     Value: 4    Period: 15 seconds
+      - Type: Percent  Value: 100  Period: 15 seconds
+  Scale Down:
+    Stabilization Window: 60 seconds
+    Select Policy: Max
+    Policies:
+      - Type: Percent  Value: 100  Period: 15 seconds
+Deployment pods:       1 current / 1 desired
+Conditions:
+  Type            Status  Reason              Message
+  ----            ------  ------              -------
+  AbleToScale     True    ReadyForNewScale    recommended size matches current size
+  ScalingActive   True    ValidMetricFound    the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  False   DesiredWithinRange  the desired count is within the acceptable range
+Events:
+  Type     Reason                        Age   From                       Message
+  ----     ------                        ----  ----                       -------
+  Warning  FailedGetResourceMetric       31s   horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  31s   horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedGetResourceMetric       16s   horizontal-pod-autoscaler  failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Warning  FailedComputeMetricsReplicas  16s   horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+
+# 4. Deploy the load generator (1 busybox pod in a wget loop) at 21:58:40
+$ kubectl apply -f 02-hpa/load-generator.yaml
+deployment.apps/load-generator created
+
+$ kubectl rollout status deployment/load-generator --timeout=120s
+Waiting for deployment "load-generator" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "load-generator" rollout to finish: 0 of 1 updated replicas are available...
+deployment "load-generator" successfully rolled out
+
+# 6/7. Timeline with 1 load pod
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+21:58:41 5%/50%       1/1       1/1            5m 
+21:58:56 0%/50%       1/1       1/1            0m 
+21:59:11 33%/50%      1/1       1/1            33m 
+21:59:27 48%/50%      1/1       1/1            48m 
+21:59:42 48%/50%      1/1       1/1            48m 
+21:59:57 50%/50%      1/1       1/1            50m 
+22:00:12 51%/50%      1/1       1/1            51m 
+22:00:27 49%/50%      1/1       1/1            49m 
+22:00:43 49%/50%      1/1       1/1            49m 
+22:00:58 50%/50%      1/1       1/1            50m 
+# 5. Increase load: scale the load generator to 3 pods at 22:01:13
+$ kubectl scale deployment load-generator --replicas=3
+deployment.apps/load-generator scaled
+
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+22:01:14 52%/50%      1/1       1/1            52m 
+22:01:29 52%/50%      1/1       1/1            52m 
+22:01:46 132%/50%     1/3       1/3            132m 
+22:02:02 159%/50%     3/3       3/3            159m 
+22:02:24 159%/50%     3/3       3/3            23m 21m 29m 
+22:02:46 159%/50%     3/3       3/3            16m 22m 15m 
+22:03:02 17%/50%      3/3       3/3            18m 19m 15m 
+22:03:17 47%/50%      3/3       3/3            51m 58m 34m 
+22:03:33 57%/50%      3/4       4/4            57m 58m 56m 
+22:03:49 57%/50%      4/4       4/4            56m 58m 58m 
+22:04:04 49%/50%      4/4       4/4            44m 52m 52m 52m 
+# 8. Capture state under load at 22:04:19
+$ kubectl get hpa hpa-demo
+NAME       REFERENCE             TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+hpa-demo   Deployment/hpa-demo   cpu: 45%/50%   1         5         4          6m11s
+
+$ kubectl get pods -o wide
+NAME                              READY   STATUS    RESTARTS   AGE     IP            NODE                 NOMINATED NODE   READINESS GATES
+hpa-demo-5d6676989b-7zsxt         1/1     Running   0          2m38s   10.244.0.27   hw-b-control-plane   <none>           <none>
+hpa-demo-5d6676989b-9mmwh         1/1     Running   0          2m38s   10.244.0.26   hw-b-control-plane   <none>           <none>
+hpa-demo-5d6676989b-f9cgn         1/1     Running   0          6m12s   10.244.0.17   hw-b-control-plane   <none>           <none>
+hpa-demo-5d6676989b-m24df         1/1     Running   0          53s     10.244.0.28   hw-b-control-plane   <none>           <none>
+load-generator-866cd7486d-chngx   1/1     Running   0          5m40s   10.244.0.18   hw-b-control-plane   <none>           <none>
+load-generator-866cd7486d-w27sg   1/1     Running   0          3m7s    10.244.0.24   hw-b-control-plane   <none>           <none>
+load-generator-866cd7486d-wgg4j   1/1     Running   0          3m7s    10.244.0.23   hw-b-control-plane   <none>           <none>
+
+$ kubectl top pods
+NAME                              CPU(cores)   MEMORY(bytes)   
+hpa-demo-5d6676989b-7zsxt         47m          11Mi            
+hpa-demo-5d6676989b-9mmwh         47m          12Mi            
+hpa-demo-5d6676989b-f9cgn         39m          12Mi            
+hpa-demo-5d6676989b-m24df         40m          11Mi            
+load-generator-866cd7486d-chngx   431m         5Mi             
+load-generator-866cd7486d-w27sg   497m         5Mi             
+load-generator-866cd7486d-wgg4j   493m         4Mi             
+
+$ kubectl describe hpa hpa-demo
+Name:                                                  hpa-demo
+Namespace:                                             default
+Labels:                                                <none>
+Annotations:                                           <none>
+CreationTimestamp:                                     Wed, 07 Oct 2026 21:58:09 +0530
+Reference:                                             Deployment/hpa-demo
+Metrics:                                               ( current / target )
+  resource cpu on pods  (as a percentage of request):  45% (45m) / 50%
+Min replicas:                                          1
+Max replicas:                                          5
+Behavior:
+  Scale Up:
+    Stabilization Window: 0 seconds
+    Select Policy: Max
+    Policies:
+      - Type: Pods     Value: 4    Period: 15 seconds
+      - Type: Percent  Value: 100  Period: 15 seconds
+  Scale Down:
+    Stabilization Window: 60 seconds
+    Select Policy: Max
+    Policies:
+      - Type: Percent  Value: 100  Period: 15 seconds
+Deployment pods:       4 current / 4 desired
+Conditions:
+  Type            Status  Reason              Message
+  ----            ------  ------              -------
+  AbleToScale     True    ReadyForNewScale    recommended size matches current size
+  ScalingActive   True    ValidMetricFound    the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  False   DesiredWithinRange  the desired count is within the acceptable range
+  ScaledToZero    False   NotScaledToZero     the HPA controller did not scale the workload to zero
+Events:
+  Type     Reason                        Age    From                       Message
+  ----     ------                        ----   ----                       -------
+  Warning  FailedGetResourceMetric       6m12s  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  6m12s  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedGetResourceMetric       5m57s  horizontal-pod-autoscaler  failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Warning  FailedComputeMetricsReplicas  5m57s  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Normal   SuccessfulRescale             2m39s  horizontal-pod-autoscaler  New size: 3; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             54s    horizontal-pod-autoscaler  New size: 4; reason: cpu resource utilization (percentage of request) above target
+
+$ kubectl get deployment hpa-demo
+NAME       READY   UP-TO-DATE   AVAILABLE   AGE
+hpa-demo   4/4     4            4           6m13s
+
+# Stop the load at 22:04:21
+$ kubectl delete deployment load-generator
+deployment.apps "load-generator" deleted from default namespace
+
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+22:04:23 45%/50%      4/4       4/4            47m 47m 39m 40m 
+22:04:39 43%/50%      4/4       4/4            43m 40m 44m 44m 
+22:04:54 42%/50%      4/4       4/4            44m 40m 43m 43m 
+22:05:09 42%/50%      4/4       4/4            18m 42m 40m 27m 
+22:05:26 31%/50%      4/4       4/4            0m 0m 0m 27m 
+22:05:41 6%/50%       4/4       4/4            0m 0m 0m 0m 
+22:05:57 0%/50%       4/4       4/4            0m 0m 0m 0m 
+22:06:12 0%/50%       4/3       3/3            0m 0m 0m 
+22:06:27 0%/50%       3/1       1/1            0m 
+22:06:43 0%/50%       1/1       1/1            0m 
+22:06:58 0%/50%       1/1       1/1            0m 
+22:07:13 0%/50%       1/1       1/1            0m 
+22:07:29 0%/50%       1/1       1/1            0m 
+22:07:44 0%/50%       1/1       1/1            0m 
+22:08:17 0%/50%       1/1       1/1            0m 
+Unable to connect to the server: net/http: TLS handshake timeout
+Unable to connect to the server: net/http: TLS handshake timeout
+22:09:22 ?%/%                   0/0            
+# After scale-down at 22:09:37
+$ kubectl get hpa hpa-demo
+NAME       REFERENCE             TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+hpa-demo   Deployment/hpa-demo   cpu: 0%/50%   1         5         1          11m
+
+$ kubectl get pods -l app=hpa-demo
+NAME                        READY   STATUS    RESTARTS   AGE
+hpa-demo-5d6676989b-f9cgn   1/1     Running   0          11m
+
+$ kubectl top pods
+Error from server (ServiceUnavailable): the server is currently unable to handle the request (get pods.metrics.k8s.io)
+
+$ kubectl describe hpa hpa-demo
+Name:                                                  hpa-demo
+Namespace:                                             default
+Labels:                                                <none>
+Annotations:                                           <none>
+CreationTimestamp:                                     Wed, 07 Oct 2026 21:58:09 +0530
+Reference:                                             Deployment/hpa-demo
+Metrics:                                               ( current / target )
+  resource cpu on pods  (as a percentage of request):  0% (0) / 50%
+Min replicas:                                          1
+Max replicas:                                          5
+Behavior:
+  Scale Up:
+    Stabilization Window: 0 seconds
+    Select Policy: Max
+    Policies:
+      - Type: Pods     Value: 4    Period: 15 seconds
+      - Type: Percent  Value: 100  Period: 15 seconds
+  Scale Down:
+    Stabilization Window: 60 seconds
+    Select Policy: Max
+    Policies:
+      - Type: Percent  Value: 100  Period: 15 seconds
+Deployment pods:       1 current / 1 desired
+Conditions:
+  Type            Status  Reason            Message
+  ----            ------  ------            -------
+  AbleToScale     True    ReadyForNewScale  recommended size matches current size
+  ScalingActive   True    ValidMetricFound  the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  True    TooFewReplicas    the desired replica count is less than the minimum replica count
+  ScaledToZero    False   NotScaledToZero   the HPA controller did not scale the workload to zero
+Events:
+  Type     Reason                        Age    From                       Message
+  ----     ------                        ----   ----                       -------
+  Warning  FailedGetResourceMetric       11m    horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  11m    horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedGetResourceMetric       11m    horizontal-pod-autoscaler  failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Warning  FailedComputeMetricsReplicas  11m    horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Normal   SuccessfulRescale             7m59s  horizontal-pod-autoscaler  New size: 3; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             6m14s  horizontal-pod-autoscaler  New size: 4; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             3m40s  horizontal-pod-autoscaler  New size: 3; reason: All metrics below target
+  Normal   SuccessfulRescale             3m25s  horizontal-pod-autoscaler  New size: 1; reason: All metrics below target
+
+$ kubectl get events --field-selector involvedObject.name=hpa-demo,involvedObject.kind=HorizontalPodAutoscaler
+LAST SEEN   TYPE      REASON                         OBJECT                             MESSAGE
+11m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo   failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+11m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo   invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+11m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo   failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+11m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo   invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+7m59s       Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo   New size: 3; reason: cpu resource utilization (percentage of request) above target
+6m14s       Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo   New size: 4; reason: cpu resource utilization (percentage of request) above target
+3m40s       Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo   New size: 3; reason: All metrics below target
+3m25s       Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo   New size: 1; reason: All metrics below target
+

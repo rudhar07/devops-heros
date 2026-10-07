@@ -1,0 +1,19 @@
+# Pod that consumes ../../03-storageclass/pvc.yaml (dynamic-pvc).
+# kind's "standard" StorageClass is WaitForFirstConsumer, so the PV is only
+# created once this Pod is scheduled.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dynamic-demo
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "echo 'hello from a dynamically provisioned volume' > /data/hello.txt; sleep 3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: dynamic-pvc

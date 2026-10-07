@@ -1,0 +1,31 @@
+# 1. Deploy the app (instructor's 04-hpa deployment + service)
+$ kubectl apply -f ../04-hpa/deployment.yaml -f ../04-hpa/service.yaml
+deployment.apps/hpa-demo created
+service/hpa-demo-service created
+
+$ kubectl rollout status deployment/hpa-demo --timeout=120s
+Waiting for deployment "hpa-demo" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "hpa-demo" rollout to finish: 0 of 1 updated replicas are available...
+deployment "hpa-demo" successfully rolled out
+
+$ kubectl get deploy,svc,pods -l app=hpa-demo -o wide
+NAME                            READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/hpa-demo-5d6676989b-f9cgn   1/1     Running   0          1s    10.244.0.17   hw-b-control-plane   <none>           <none>
+
+$ kubectl get svc hpa-demo-service
+NAME               TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+hpa-demo-service   ClusterIP   10.96.224.118   <none>        80/TCP    1s
+
+# 2. Configure the HPA (my copy with a 60s scale-down window)
+$ kubectl apply -f 02-hpa/hpa.yaml
+horizontalpodautoscaler.autoscaling/hpa-demo created
+
+# 3. Verify the HPA
+$ kubectl get hpa
+NAME       REFERENCE             TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+hpa-demo   Deployment/hpa-demo   cpu: <unknown>/50%   1         5         0          0s
+
+$ kubectl top nodes
+NAME                 CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+hw-b-control-plane   186m         1%       682Mi           8%          
+

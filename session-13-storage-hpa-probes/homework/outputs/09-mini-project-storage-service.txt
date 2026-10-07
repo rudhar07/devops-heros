@@ -1,0 +1,45 @@
+# ===== Task 1: storage persistence =====
+$ kubectl -n production-webapp exec web-app-d45775485-hfb4p -- sh -c echo "Student: Rudhar Bajaj (roll 10143)" > /data/student.txt
+
+$ kubectl -n production-webapp exec web-app-d45775485-hfb4p -- cat /data/student.txt
+Student: Rudhar Bajaj (roll 10143)
+
+# Both replicas mount the same RWO volume (same node, so RWO allows it):
+$ kubectl -n production-webapp exec web-app-d45775485-hfb4p -- cat /data/student.txt
+Student: Rudhar Bajaj (roll 10143)
+
+$ kubectl -n production-webapp exec web-app-d45775485-jcx8m -- cat /data/student.txt
+Student: Rudhar Bajaj (roll 10143)
+
+$ kubectl -n production-webapp delete pod web-app-d45775485-hfb4p
+pod "web-app-d45775485-hfb4p" deleted from production-webapp namespace
+
+$ kubectl -n production-webapp wait --for=condition=Ready pods -l app=web-app --timeout=240s
+pod/web-app-d45775485-jcx8m condition met
+pod/web-app-d45775485-qz4pb condition met
+
+$ kubectl -n production-webapp get pods
+NAME                      READY   STATUS    RESTARTS   AGE
+web-app-d45775485-jcx8m   1/1     Running   0          54s
+web-app-d45775485-qz4pb   1/1     Running   0          10s
+
+$ kubectl -n production-webapp exec web-app-d45775485-qz4pb -- cat /data/student.txt
+Student: Rudhar Bajaj (roll 10143)
+
+$ docker exec hw-b-control-plane sh -c cat /var/local-path-provisioner/pvc-dc16dabc-d278-4082-ae40-449f3b152a51_production-webapp_web-data/student.txt
+Student: Rudhar Bajaj (roll 10143)
+
+# ===== Task 2: service verification (port-forward to local port 30094) =====
+$ kubectl -n production-webapp port-forward svc/web-service 30094:80 &
+$ curl -s http://localhost:30094 | head -5
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+
+$ kubectl -n production-webapp get endpoints web-service
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME          ENDPOINTS                         AGE
+web-service   10.244.0.130:80,10.244.0.135:80   58s
+

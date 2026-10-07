@@ -1,0 +1,57 @@
+# Continuation of 11-mini-project-bonus.txt: the bonus-1 load stopped at about 23:31:40 with 4 replicas, and the
+# original hpa.yaml (50%, no behavior block = default 300s scale-down window) was re-applied. Watching the default scale-down:
+$ kubectl -n production-webapp get hpa web-app-hpa
+NAME          REFERENCE            TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+web-app-hpa   Deployment/web-app   cpu: <unknown>/50%   2         5         4          16m
+
+$ kubectl -n production-webapp describe hpa web-app-hpa | sed -n '/Conditions:/,/Events:/p'
+Conditions:
+  Type            Status  Reason                   Message
+  ----            ------  ------                   -------
+  AbleToScale     True    SucceededGetScale        the HPA controller was able to get the target's current scale
+  ScalingActive   False   FailedGetResourceMetric  the HPA was unable to compute the replica count: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  ScalingLimited  False   DesiredWithinRange       the desired count is within the acceptable range
+  ScaledToZero    False   NotScaledToZero          the HPA controller did not scale the workload to zero
+Events:
+
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+23:34:35 ?%/50%       4/4       4/4            2m 1m 7m 4m 
+23:35:06 1%/50%       4/4       4/4            2m 1m 1m 1m 
+23:35:36 1%/50%       4/4       4/4            1m 1m 1m 1m 
+23:36:07 1%/50%       4/4       4/4            1m 2m 1m 1m 
+23:36:37 1%/50%       4/4       4/4            1m 1m 1m 1m 
+23:37:08 1%/50%       3/2       2/2            1m 1m 
+23:37:38 1%/50%       2/2       2/2            1m 1m 
+23:38:08 1%/50%       2/2       2/2            1m 1m 
+23:38:39 1%/50%       2/2       2/2            1m 1m 
+23:39:09 1%/50%       2/2       2/2            2m 1m 
+23:39:40 1%/50%       2/2       2/2            1m 1m 
+23:40:10 1%/50%       2/2       2/2            2m 2m 
+$ kubectl -n production-webapp get hpa web-app-hpa
+NAME          REFERENCE            TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+web-app-hpa   Deployment/web-app   cpu: 1%/50%   2         5         2          22m
+
+$ kubectl -n production-webapp describe hpa web-app-hpa | sed -n '/Conditions:/,$p'
+Conditions:
+  Type            Status  Reason            Message
+  ----            ------  ------            -------
+  AbleToScale     True    ReadyForNewScale  recommended size matches current size
+  ScalingActive   True    ValidMetricFound  the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  True    TooFewReplicas    the desired replica count is less than the minimum replica count
+  ScaledToZero    False   NotScaledToZero   the HPA controller did not scale the workload to zero
+Events:
+  Type     Reason                        Age                  From                       Message
+  ----     ------                        ----                 ----                       -------
+  Normal   SuccessfulRescale             10m                  horizontal-pod-autoscaler  New size: 4; reason: cpu resource utilization (percentage of request) above target
+  Warning  FailedGetResourceMetric       6m17s (x8 over 22m)  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  6m17s (x8 over 22m)  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedGetResourceMetric       6m1s (x6 over 22m)   horizontal-pod-autoscaler  failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Warning  FailedComputeMetricsReplicas  6m1s (x6 over 22m)   horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Normal   SuccessfulRescale             4m1s                 horizontal-pod-autoscaler  New size: 3; reason: All metrics below target
+  Normal   SuccessfulRescale             3m46s                horizontal-pod-autoscaler  New size: 2; reason: All metrics below target
+
+$ kubectl -n production-webapp get pods
+NAME                      READY   STATUS    RESTARTS   AGE
+web-app-d45775485-hq4lp   1/1     Running   0          6m33s
+web-app-d45775485-jm65c   1/1     Running   0          6m33s
+

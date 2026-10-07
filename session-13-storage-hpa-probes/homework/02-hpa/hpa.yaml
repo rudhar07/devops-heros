@@ -1,0 +1,24 @@
+# Copy of ../../04-hpa/hpa.yaml (same target: 50% CPU, 1..5 replicas).
+# Only addition: a "behavior" block so scale-down waits 60s instead of the
+# default 300s stabilization window. This is just to keep the demo short.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-demo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hpa-demo
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60

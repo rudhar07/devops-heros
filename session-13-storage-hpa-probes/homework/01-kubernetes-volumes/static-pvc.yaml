@@ -1,0 +1,15 @@
+# Copy of ../../02-persistent-storage/pvc.yaml with one change:
+# storageClassName: "" so the claim binds to the hand-made PV (student-pv)
+# instead of being dynamically provisioned by kind's default "standard" class.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: student-pvc
+spec:
+  storageClassName: ""
+  volumeName: student-pv
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi

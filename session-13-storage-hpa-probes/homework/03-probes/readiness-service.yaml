@@ -1,0 +1,12 @@
+# Service in front of ../../05-probes/readiness.yaml so I can watch the
+# endpoint list change when the readiness probe fails.
+apiVersion: v1
+kind: Service
+metadata:
+  name: readiness-svc
+spec:
+  selector:
+    app: readiness-demo
+  ports:
+    - port: 80
+      targetPort: 80

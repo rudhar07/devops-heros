@@ -1,0 +1,92 @@
+$ kubectl get storageclass standard -o yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"storage.k8s.io/v1","kind":"StorageClass","metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"},"name":"standard"},"provisioner":"rancher.io/local-path","reclaimPolicy":"Delete","volumeBindingMode":"WaitForFirstConsumer"}
+    storageclass.kubernetes.io/is-default-class: "true"
+  creationTimestamp: "2026-10-07T16:23:32Z"
+  name: standard
+  resourceVersion: "313"
+  uid: ea0892d2-f28e-4c9e-bc82-f2a412dbb90d
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+
+$ kubectl get pv
+No resources found
+
+$ kubectl apply -f ../03-storageclass/pvc.yaml
+persistentvolumeclaim/dynamic-pvc created
+
+$ kubectl get pvc dynamic-pvc
+NAME          STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+dynamic-pvc   Pending                                      standard       <unset>                 0s
+
+# Pending is expected: volumeBindingMode is WaitForFirstConsumer. Now create a pod that uses it.
+$ kubectl apply -f 01-kubernetes-volumes/dynamic-pod.yaml
+pod/dynamic-demo created
+
+$ kubectl wait --for=condition=Ready pod/dynamic-demo --timeout=180s
+pod/dynamic-demo condition met
+
+$ kubectl get pvc dynamic-pvc
+NAME          STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+dynamic-pvc   Bound    pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87   500Mi      RWO            standard       <unset>                 4s
+
+# A PV was created automatically by rancher.io/local-path:
+$ kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                 STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87   500Mi      RWO            Delete           Bound    default/dynamic-pvc   standard       <unset>                          2s
+
+$ kubectl describe pv pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87
+Name:              pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87
+Labels:            <none>
+Annotations:       local.path.provisioner/selected-node: hw-b-control-plane
+                   pv.kubernetes.io/provisioned-by: rancher.io/local-path
+Finalizers:        [kubernetes.io/pv-protection]
+StorageClass:      standard
+Status:            Bound
+Claim:             default/dynamic-pvc
+Reclaim Policy:    Delete
+Access Modes:      RWO
+VolumeMode:        Filesystem
+Capacity:          500Mi
+Node Affinity:     
+  Required Terms:  
+    Term 0:        kubernetes.io/hostname in [hw-b-control-plane]
+Message:           
+Source:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/local-path-provisioner/pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87_default_dynamic-pvc
+    HostPathType:  DirectoryOrCreate
+Events:            <none>
+
+$ kubectl get events --field-selector involvedObject.name=dynamic-pvc
+LAST SEEN   TYPE     REASON                  OBJECT                              MESSAGE
+4s          Normal   WaitForFirstConsumer    persistentvolumeclaim/dynamic-pvc   waiting for first consumer to be created before binding
+3s          Normal   ExternalProvisioning    persistentvolumeclaim/dynamic-pvc   Waiting for a volume to be created either by the external provisioner 'rancher.io/local-path' or manually by the system administrator. If volume creation is delayed, please verify that the provisioner is running and correctly registered.
+4s          Normal   Provisioning            persistentvolumeclaim/dynamic-pvc   External provisioner is provisioning volume for claim "default/dynamic-pvc"
+2s          Normal   ProvisioningSucceeded   persistentvolumeclaim/dynamic-pvc   Successfully provisioned volume pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87
+
+$ kubectl exec dynamic-demo -- cat /data/hello.txt
+hello from a dynamically provisioned volume
+
+$ kubectl -n local-path-storage get pods
+NAME                                      READY   STATUS    RESTARTS   AGE
+local-path-provisioner-75f7fc7dc5-pt6kx   1/1     Running   0          3m18s
+
+# Reclaim policy Delete: removing the PVC removes the PV too
+$ kubectl delete pod dynamic-demo
+pod "dynamic-demo" deleted from default namespace
+
+$ kubectl delete pvc dynamic-pvc
+persistentvolumeclaim "dynamic-pvc" deleted from default namespace
+
+$ kubectl wait --for=delete pv/pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87 --timeout=60s
+persistentvolume/pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87 condition met
+
+$ kubectl get pv
+No resources found
+

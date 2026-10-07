@@ -1,0 +1,126 @@
+# Second HPA run with the instructor's hpa/ files (yatri-backend) and hpa/load_generator.sh
+$ kubectl create namespace yatri
+namespace/yatri created
+
+$ kubectl -n yatri apply -f 02-hpa/yatri-backend-deployment.yaml -f ../hpa/backend-service.yaml -f ../hpa/hpa-backend.yaml
+deployment.apps/yatri-backend created
+service/yatri-backend-service created
+horizontalpodautoscaler.autoscaling/yatri-backend-hpa created
+
+$ kubectl -n yatri rollout status deployment/yatri-backend --timeout=180s
+Waiting for deployment "yatri-backend" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "yatri-backend" rollout to finish: 1 of 2 updated replicas are available...
+deployment "yatri-backend" successfully rolled out
+
+$ kubectl -n yatri get hpa,pods -o wide
+NAME                                                    REFERENCE                  TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/yatri-backend-hpa   Deployment/yatri-backend   cpu: 20%/50%   2         10        2          31s
+
+NAME                                READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+pod/yatri-backend-cbc55c649-vzgsh   1/1     Running   0          31s   10.244.0.108   hw-b-control-plane   <none>           <none>
+pod/yatri-backend-cbc55c649-xr8w7   1/1     Running   0          31s   10.244.0.109   hw-b-control-plane   <none>           <none>
+
+# Run my copy of load_generator.sh from the Mac for 150s (curl via kubectl port-forward) at 22:56:27
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+22:56:27 20%/50%      2/2       2/2            14m 2m 
+22:56:43 2%/50%       2/2       2/2            4m 1m 
+22:56:58 2%/50%       2/2       2/2            69m 2m 
+22:57:14 35%/50%      2/2       2/2            73m 2m 
+22:57:29 37%/50%      2/2       2/2            67m 2m 
+22:57:44 28%/50%      2/2       2/2            55m 2m 
+22:58:00 30%/50%      2/2       2/2            60m 1m 
+22:58:15 33%/50%      2/2       2/2            66m 1m 
+22:58:30 29%/50%      2/2       2/2            58m 1m 
+22:58:46 33%/50%      2/2       2/2            65m 1m 
+22:59:01 36%/50%      2/2       2/2            72m 1m 
+--- load_generator.sh output ---
+==================================================
+      KUBERNETES HPA TRAFFIC LOAD GENERATOR       
+==================================================
+Pounding target endpoint: http://localhost:30093/
+Starting port-forward to yatri-backend-service in namespace yatri on port 30093...
+Traffic load active with 10 curl workers.
+Stopping after 150s
+
+$ kubectl -n yatri get hpa yatri-backend-hpa
+NAME                REFERENCE                  TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+yatri-backend-hpa   Deployment/yatri-backend   cpu: 25%/50%   2         10        2          3m20s
+
+$ kubectl -n yatri top pods
+NAME                            CPU(cores)   MEMORY(bytes)   
+yatri-backend-cbc55c649-vzgsh   49m          11Mi            
+yatri-backend-cbc55c649-xr8w7   1m           12Mi            
+
+$ kubectl -n yatri describe hpa yatri-backend-hpa
+Name:                                                  yatri-backend-hpa
+Namespace:                                             yatri
+Labels:                                                app=yatri-backend
+Annotations:                                           <none>
+CreationTimestamp:                                     Wed, 07 Oct 2026 22:55:56 +0530
+Reference:                                             Deployment/yatri-backend
+Metrics:                                               ( current / target )
+  resource cpu on pods  (as a percentage of request):  25% (25m) / 50%
+Min replicas:                                          2
+Max replicas:                                          10
+Deployment pods:                                       2 current / 2 desired
+Conditions:
+  Type            Status  Reason               Message
+  ----            ------  ------               -------
+  AbleToScale     True    ScaleDownStabilized  recent recommendations were higher than current one, applying the highest recent recommendation
+  ScalingActive   True    ValidMetricFound     the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  False   DesiredWithinRange   the desired count is within the acceptable range
+Events:
+  Type     Reason                        Age                   From                       Message
+  ----     ------                        ----                  ----                       -------
+  Warning  FailedGetResourceMetric       3m5s (x2 over 3m20s)  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  3m5s (x2 over 3m20s)  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+
+# Who got the traffic? (python http.server logs one line per request)
+pod/yatri-backend-cbc55c649-vzgsh requests logged: 4000
+pod/yatri-backend-cbc55c649-xr8w7 requests logged: 0
+
+# Load stopped; watching scale-down (this HPA has no behavior block -> default 300s window)
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+22:59:17 25%/50%      2/2       2/2            49m 1m 
+22:59:47 1%/50%       2/2       2/2            1m 1m 
+23:00:17 1%/50%       2/2       2/2            1m 1m 
+23:00:48 1%/50%       2/2       2/2            1m 2m 
+23:01:18 1%/50%       2/2       2/2            1m 1m 
+23:01:48 1%/50%       2/2       2/2            1m 1m 
+23:02:19 1%/50%       2/2       2/2            1m 1m 
+23:02:49 2%/50%       2/2       2/2            2m 2m 
+23:03:20 1%/50%       2/2       2/2            1m 2m 
+23:03:50 2%/50%       2/2       2/2            2m 2m 
+23:04:20 2%/50%       2/2       2/2            3m 2m 
+23:04:51 1%/50%       2/2       2/2            1m 1m 
+$ kubectl -n yatri get hpa yatri-backend-hpa
+NAME                REFERENCE                  TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+yatri-backend-hpa   Deployment/yatri-backend   cpu: 1%/50%   2         10        2          9m25s
+
+$ kubectl -n yatri describe hpa yatri-backend-hpa
+Name:                                                  yatri-backend-hpa
+Namespace:                                             yatri
+Labels:                                                app=yatri-backend
+Annotations:                                           <none>
+CreationTimestamp:                                     Wed, 07 Oct 2026 22:55:56 +0530
+Reference:                                             Deployment/yatri-backend
+Metrics:                                               ( current / target )
+  resource cpu on pods  (as a percentage of request):  1% (1m) / 50%
+Min replicas:                                          2
+Max replicas:                                          10
+Deployment pods:                                       2 current / 2 desired
+Conditions:
+  Type            Status  Reason            Message
+  ----            ------  ------            -------
+  AbleToScale     True    ReadyForNewScale  recommended size matches current size
+  ScalingActive   True    ValidMetricFound  the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  True    TooFewReplicas    the desired replica count is less than the minimum replica count
+Events:
+  Type     Reason                        Age                    From                       Message
+  ----     ------                        ----                   ----                       -------
+  Warning  FailedGetResourceMetric       9m10s (x2 over 9m25s)  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  9m10s (x2 over 9m25s)  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+
+$ kubectl delete namespace yatri
+namespace "yatri" deleted
+

@@ -1,0 +1,112 @@
+# Step 1: apply the instructor's PV and PVC exactly as they are
+$ kubectl apply -f ../02-persistent-storage/pv.yaml
+persistentvolume/student-pv created
+
+$ kubectl apply -f ../02-persistent-storage/pvc.yaml
+persistentvolumeclaim/student-pvc created
+
+$ kubectl get pv,pvc
+NAME                          CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+persistentvolume/student-pv   1Gi        RWO            Retain           Available                          <unset>                          0s
+
+NAME                                STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/student-pvc   Pending                                      standard       <unset>                 0s
+
+$ kubectl get pvc student-pvc -o jsonpath=storageClassName={.spec.storageClassName}{"
+"}
+storageClassName=standard
+
+# The PVC has no storageClassName, so the default class 'standard' was injected by the admission controller.
+# It will NOT bind to student-pv (whose class is empty); it waits for a consumer and would get a new dynamic PV.
+$ kubectl describe pvc student-pvc
+Name:          student-pvc
+Namespace:     default
+StorageClass:  standard
+Status:        Pending
+Volume:        
+Labels:        <none>
+Annotations:   <none>
+Finalizers:    [kubernetes.io/pvc-protection]
+Capacity:      
+Access Modes:  
+VolumeMode:    Filesystem
+Used By:       <none>
+Events:
+  Type    Reason                Age   From                         Message
+  ----    ------                ----  ----                         -------
+  Normal  WaitForFirstConsumer  1s    persistentvolume-controller  waiting for first consumer to be created before binding
+
+$ kubectl delete pvc student-pvc
+persistentvolumeclaim "student-pvc" deleted from default namespace
+
+# Step 2: my copy sets storageClassName: "" (and volumeName) so it binds to the static PV
+$ cat 01-kubernetes-volumes/static-pvc.yaml
+# Copy of ../../02-persistent-storage/pvc.yaml with one change:
+# storageClassName: "" so the claim binds to the hand-made PV (student-pv)
+# instead of being dynamically provisioned by kind's default "standard" class.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: student-pvc
+spec:
+  storageClassName: ""
+  volumeName: student-pv
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+
+$ kubectl apply -f 01-kubernetes-volumes/static-pvc.yaml
+persistentvolumeclaim/student-pvc created
+
+$ kubectl get pv,pvc
+NAME                          CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                 STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+persistentvolume/student-pv   1Gi        RWO            Retain           Bound    default/student-pvc                  <unset>                          1s
+
+NAME                                STATUS   VOLUME       CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/student-pvc   Bound    student-pv   1Gi        RWO                           <unset>                 0s
+
+# Step 3: instructor's pod uses student-pvc
+$ kubectl apply -f ../02-persistent-storage/pod.yaml
+pod/storage-demo created
+
+$ kubectl wait --for=condition=Ready pod/storage-demo --timeout=120s
+pod/storage-demo condition met
+
+$ kubectl exec storage-demo -- sh -c echo "Rudhar - data on a static PV" > /data/student.txt; cat /data/student.txt
+Rudhar - data on a static PV
+
+$ docker exec hw-b-control-plane cat /tmp/student-data/student.txt
+Rudhar - data on a static PV
+
+# Step 4: delete the pod, create a new one, data survives
+$ kubectl delete pod storage-demo
+pod "storage-demo" deleted from default namespace
+
+$ kubectl apply -f ../02-persistent-storage/pod.yaml
+pod/storage-demo created
+
+$ kubectl wait --for=condition=Ready pod/storage-demo --timeout=120s
+pod/storage-demo condition met
+
+$ kubectl exec storage-demo -- cat /data/student.txt
+Rudhar - data on a static PV
+
+# Step 5: reclaim policy Retain -> deleting the PVC leaves the PV as Released, data kept on the node
+$ kubectl delete pod storage-demo
+pod "storage-demo" deleted from default namespace
+
+$ kubectl delete pvc student-pvc
+persistentvolumeclaim "student-pvc" deleted from default namespace
+
+$ kubectl get pv student-pv
+NAME         CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                 STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+student-pv   1Gi        RWO            Retain           Released   default/student-pvc                  <unset>                          5s
+
+$ docker exec hw-b-control-plane cat /tmp/student-data/student.txt
+Rudhar - data on a static PV
+
+$ kubectl delete pv student-pv
+persistentvolume "student-pv" deleted
+

@@ -1,0 +1,25 @@
+# In-cluster load generator: busybox pods hitting the Service in a tight wget loop.
+# Start with 1 replica, then scale it up to increase the load.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      containers:
+        - name: busybox
+          image: busybox:1.36
+          command: ["/bin/sh", "-c", "while true; do wget -q -O- http://hpa-demo-service > /dev/null; done"]
+          resources:
+            requests:
+              cpu: 50m
+            limits:
+              cpu: 500m

@@ -1,0 +1,19 @@
+# Same slow app, but the startupProbe only allows 3 x 2s = 6s.
+# The kubelet kills the container before it ever finishes warming up -> restart loop.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: startup-too-short
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27
+      command: ["sh", "-c", "echo warming up for 20s; sleep 20; echo starting nginx; exec nginx -g 'daemon off;'"]
+      ports:
+        - containerPort: 80
+      startupProbe:
+        httpGet:
+          path: /
+          port: 80
+        failureThreshold: 3
+        periodSeconds: 2

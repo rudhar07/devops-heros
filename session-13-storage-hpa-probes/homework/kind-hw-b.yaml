@@ -1,0 +1,14 @@
+# Single-node kind cluster used for sessions 13-15 homework.
+# Only NodePorts 30090-30092 are mapped to the Mac (host ports given to me).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hw-b
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30090
+        hostPort: 30090
+      - containerPort: 30091
+        hostPort: 30091
+      - containerPort: 30092
+        hostPort: 30092

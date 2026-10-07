@@ -1,0 +1,71 @@
+# Part A: instructor's single-container emptyDir pod
+$ kubectl apply -f ../01-volumes/emptydir-pod.yaml
+pod/emptydir-demo created
+
+$ kubectl wait --for=condition=Ready pod/emptydir-demo --timeout=120s
+pod/emptydir-demo condition met
+
+$ kubectl exec emptydir-demo -- sh -c echo "temp data" > /data/file.txt; ls -l /data; cat /data/file.txt
+total 4
+-rw-r--r-- 1 root root 10 Oct  7 16:25 file.txt
+temp data
+
+$ kubectl get pod emptydir-demo -o jsonpath={.metadata.uid}{"
+"}
+c7e16e9f-fba8-4660-ae9e-083631945b45
+
+# emptyDir lives under the pod UID on the node:
+$ docker exec hw-b-control-plane ls -l /var/lib/kubelet/pods/c7e16e9f-fba8-4660-ae9e-083631945b45/volumes/kubernetes.io~empty-dir/app-storage
+total 4
+-rw-r--r-- 1 root root 10 Oct  7 16:25 file.txt
+
+# Delete and recreate the pod -> emptyDir is gone
+$ kubectl delete pod emptydir-demo
+pod "emptydir-demo" deleted from default namespace
+
+$ kubectl apply -f ../01-volumes/emptydir-pod.yaml
+pod/emptydir-demo created
+
+$ kubectl wait --for=condition=Ready pod/emptydir-demo --timeout=120s
+pod/emptydir-demo condition met
+
+$ kubectl exec emptydir-demo -- ls -la /data
+total 8
+drwxrwxrwx 2 root root 4096 Oct  7 16:25 .
+drwxr-xr-x 1 root root 4096 Oct  7 16:25 ..
+
+$ docker exec hw-b-control-plane ls /var/lib/kubelet/pods/c7e16e9f-fba8-4660-ae9e-083631945b45
+ls: cannot access '/var/lib/kubelet/pods/c7e16e9f-fba8-4660-ae9e-083631945b45': No such file or directory
+
+# Part B: emptyDir shared by two containers
+$ kubectl apply -f 01-kubernetes-volumes/emptydir-shared.yaml
+pod/emptydir-shared created
+
+$ kubectl wait --for=condition=Ready pod/emptydir-shared --timeout=120s
+pod/emptydir-shared condition met
+
+$ kubectl get pod emptydir-shared
+NAME              READY   STATUS    RESTARTS   AGE
+emptydir-shared   2/2     Running   0          6s
+
+$ kubectl exec emptydir-shared -c writer -- cat /shared/index.html
+written by writer at Wed Oct  7 16:25:35 UTC 2026
+
+# the nginx container reads the same file and serves it over HTTP:
+$ kubectl exec emptydir-shared -c web -- curl -s http://localhost/
+written by writer at Wed Oct  7 16:25:35 UTC 2026
+
+$ kubectl exec emptydir-shared -c web -- df -h /usr/share/nginx/html
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1       911G  145G  720G  17% /usr/share/nginx/html
+
+# A few seconds later: both containers see the lines the writer keeps appending
+$ kubectl exec emptydir-shared -c web -- curl -s http://localhost/
+written by writer at Wed Oct  7 16:25:35 UTC 2026
+written by writer at Wed Oct  7 16:25:40 UTC 2026
+written by writer at Wed Oct  7 16:25:45 UTC 2026
+
+$ kubectl delete pod emptydir-shared emptydir-demo
+pod "emptydir-shared" deleted from default namespace
+pod "emptydir-demo" deleted from default namespace
+

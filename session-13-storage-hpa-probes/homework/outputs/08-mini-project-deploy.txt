@@ -1,0 +1,90 @@
+# ===== 5.1 - 5.4 Deploy =====
+$ kubectl apply -f ../mini-project/namespace.yaml
+namespace/production-webapp created
+
+$ kubectl apply -f ../mini-project/pvc.yaml
+persistentvolumeclaim/web-data created
+
+$ kubectl -n production-webapp get pvc
+NAME       STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+web-data   Pending                                      standard       <unset>                 0s
+
+# Pending is expected on kind: the 'standard' class is WaitForFirstConsumer, it binds when the first pod is scheduled.
+$ kubectl apply -f ../mini-project/deployment.yaml -f ../mini-project/service.yaml
+deployment.apps/web-app created
+service/web-service created
+
+$ kubectl -n production-webapp rollout status deployment/web-app --timeout=240s
+Waiting for deployment "web-app" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "web-app" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "web-app" rollout to finish: 1 of 2 updated replicas are available...
+deployment "web-app" successfully rolled out
+
+$ kubectl -n production-webapp get pods -o wide
+NAME                      READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+web-app-d45775485-hfb4p   1/1     Running   0          13s   10.244.0.131   hw-b-control-plane   <none>           <none>
+web-app-d45775485-jcx8m   1/1     Running   0          13s   10.244.0.130   hw-b-control-plane   <none>           <none>
+
+$ kubectl -n production-webapp get pvc
+NAME       STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+web-data   Bound    pvc-dc16dabc-d278-4082-ae40-449f3b152a51   500Mi      RWO            standard       <unset>                 13s
+
+$ kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                        STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pvc-dc16dabc-d278-4082-ae40-449f3b152a51   500Mi      RWO            Delete           Bound    production-webapp/web-data   standard       <unset>                          10s
+
+$ kubectl apply -f ../mini-project/hpa.yaml
+horizontalpodautoscaler.autoscaling/web-app-hpa created
+
+$ kubectl -n production-webapp get hpa
+NAME          REFERENCE            TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+web-app-hpa   Deployment/web-app   cpu: 2%/50%   2         5         2          31s
+
+$ kubectl -n production-webapp describe deployment web-app
+Name:               web-app
+Namespace:          production-webapp
+CreationTimestamp:  Wed, 07 Oct 2026 23:17:35 +0530
+Labels:             app=web-app
+Annotations:        deployment.kubernetes.io/revision: 1
+Selector:           app=web-app
+Replicas:           2 desired | 2 updated | 2 total | 2 available | 0 unavailable
+StrategyType:       Recreate
+MinReadySeconds:    0
+Pod Template:
+  Labels:  app=web-app
+  Containers:
+   nginx:
+    Image:      nginx:1.27
+    Port:       80/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:     200m
+      memory:  128Mi
+    Requests:
+      cpu:        100m
+      memory:     64Mi
+    Liveness:     http-get http://:80/ delay=5s timeout=2s period=5s #success=1 #failure=3
+    Readiness:    http-get http://:80/ delay=5s timeout=2s period=5s #success=1 #failure=2
+    Startup:      http-get http://:80/ delay=0s timeout=1s period=2s #success=1 #failure=30
+    Environment:  <none>
+    Mounts:
+      /data from persistent-storage (rw)
+  Volumes:
+   persistent-storage:
+    Type:          PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:     web-data
+    ReadOnly:      false
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   web-app-d45775485 (2/2 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  44s   deployment-controller  Scaled up replica set web-app-d45775485 from 0 to 2
+

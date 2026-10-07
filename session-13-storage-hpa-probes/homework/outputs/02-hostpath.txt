@@ -1,0 +1,33 @@
+$ kubectl apply -f ../01-volumes/hostpath-pod.yaml
+pod/hostpath-demo created
+
+$ kubectl wait --for=condition=Ready pod/hostpath-demo --timeout=120s
+pod/hostpath-demo condition met
+
+$ kubectl exec hostpath-demo -- sh -c echo "written from pod at $(date)" > /data/note.txt; cat /data/note.txt
+written from pod at Wed Oct  7 16:26:24 UTC 2026
+
+# The file is really on the node (the kind node is a Docker container):
+$ docker exec hw-b-control-plane cat /tmp/hostpath-data/note.txt
+written from pod at Wed Oct  7 16:26:24 UTC 2026
+
+# Delete the pod and create it again -> the file is still there
+$ kubectl delete pod hostpath-demo
+pod "hostpath-demo" deleted from default namespace
+
+$ kubectl apply -f ../01-volumes/hostpath-pod.yaml
+pod/hostpath-demo created
+
+$ kubectl wait --for=condition=Ready pod/hostpath-demo --timeout=120s
+pod/hostpath-demo condition met
+
+$ kubectl exec hostpath-demo -- cat /data/note.txt
+written from pod at Wed Oct  7 16:26:24 UTC 2026
+
+$ kubectl get pod hostpath-demo -o wide
+NAME            READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+hostpath-demo   1/1     Running   0          1s    10.244.0.11   hw-b-control-plane   <none>           <none>
+
+$ kubectl delete pod hostpath-demo
+pod "hostpath-demo" deleted from default namespace
+

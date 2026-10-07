@@ -1,0 +1,111 @@
+# ===== Task 3: HPA elastic scaling (mini project HPA: 2-5 replicas, 50%, DEFAULT 5 min scale-down) =====
+$ kubectl -n production-webapp get hpa
+NAME          REFERENCE            TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+web-app-hpa   Deployment/web-app   cpu: 2%/50%   2         5         2          45s
+
+$ kubectl apply -f mini-project/load-generator.yaml
+deployment.apps/load-generator created
+
+$ kubectl -n production-webapp rollout status deployment/load-generator --timeout=180s
+Waiting for deployment "load-generator" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "load-generator" rollout to finish: 1 of 2 updated replicas are available...
+deployment "load-generator" successfully rolled out
+
+# Timeline under load (2 busybox load pods):
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+23:18:34 4%/50%       2/2       2/2            4m 
+23:18:49 14%/50%      2/2       2/2            14m 10m 
+23:19:05 51%/50%      2/2       2/2            53m 50m 
+23:19:20 52%/50%      2/2       2/2            52m 53m 
+23:19:35 53%/50%      2/2       2/2            54m 53m 
+23:19:50 55%/50%      2/2       2/2            54m 56m 
+23:20:06 53%/50%      2/2       2/2            53m 54m 
+23:20:21 54%/50%      2/2       2/2            54m 54m 
+23:20:36 55%/50%      2/2       2/2            57m 54m 
+23:20:52 54%/50%      2/2       2/2            55m 53m 
+23:21:07 53%/50%      2/2       2/2            49m 57m 
+23:21:22 53%/50%      2/2       2/2            54m 52m 
+23:21:38 54%/50%      2/2       2/2            53m 55m 
+23:21:53 54%/50%      2/2       2/2            53m 55m 
+$ kubectl -n production-webapp get hpa
+NAME          REFERENCE            TARGETS        MINPODS   MAXPODS   REPLICAS   AGE
+web-app-hpa   Deployment/web-app   cpu: 53%/50%   2         5         2          4m20s
+
+$ kubectl -n production-webapp get pods -o wide
+NAME                              READY   STATUS    RESTARTS   AGE     IP             NODE                 NOMINATED NODE   READINESS GATES
+load-generator-68488dd975-2dvt9   1/1     Running   0          3m35s   10.244.0.136   hw-b-control-plane   <none>           <none>
+load-generator-68488dd975-djdq9   1/1     Running   0          3m35s   10.244.0.137   hw-b-control-plane   <none>           <none>
+web-app-d45775485-jcx8m           1/1     Running   0          4m33s   10.244.0.130   hw-b-control-plane   <none>           <none>
+web-app-d45775485-qz4pb           1/1     Running   0          3m49s   10.244.0.135   hw-b-control-plane   <none>           <none>
+
+$ kubectl -n production-webapp top pods
+NAME                              CPU(cores)   MEMORY(bytes)   
+load-generator-68488dd975-2dvt9   501m         7Mi             
+load-generator-68488dd975-djdq9   500m         6Mi             
+web-app-d45775485-jcx8m           53m          12Mi            
+web-app-d45775485-qz4pb           54m          12Mi            
+
+$ kubectl -n production-webapp describe hpa web-app-hpa
+Name:                                                  web-app-hpa
+Namespace:                                             production-webapp
+Labels:                                                <none>
+Annotations:                                           <none>
+CreationTimestamp:                                     Wed, 07 Oct 2026 23:17:48 +0530
+Reference:                                             Deployment/web-app
+Metrics:                                               ( current / target )
+  resource cpu on pods  (as a percentage of request):  53% (53m) / 50%
+Min replicas:                                          2
+Max replicas:                                          5
+Deployment pods:                                       2 current / 2 desired
+Conditions:
+  Type            Status  Reason              Message
+  ----            ------  ------              -------
+  AbleToScale     True    ReadyForNewScale    recommended size matches current size
+  ScalingActive   True    ValidMetricFound    the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)
+  ScalingLimited  False   DesiredWithinRange  the desired count is within the acceptable range
+Events:
+  Type     Reason                        Age    From                       Message
+  ----     ------                        ----   ----                       -------
+  Warning  FailedGetResourceMetric       4m21s  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  4m21s  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedGetResourceMetric       4m6s   horizontal-pod-autoscaler  failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Warning  FailedComputeMetricsReplicas  4m6s   horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+
+# Stop the load at 23:22:09
+$ kubectl -n production-webapp delete deployment load-generator
+deployment.apps "load-generator" deleted from production-webapp namespace
+
+# Scale-down with the default 300s stabilization window:
+TIME     TARGET       REPLICAS  PODS_READY     POD_CPU
+23:22:09 53%/50%      2/2       2/2            53m 54m 
+23:22:40 52%/50%      2/2       2/2            51m 53m 
+23:23:11 11%/50%      2/2       2/2            19m 4m 
+23:23:41 1%/50%       2/2       2/2            1m 1m 
+23:24:11 1%/50%       2/2       2/2            1m 1m 
+23:24:42 1%/50%       2/2       2/2            1m 1m 
+23:25:12 1%/50%       2/2       2/2            1m 1m 
+23:25:42 1%/50%       2/2       2/2            1m 1m 
+23:26:12 1%/50%       2/2       2/2            1m 2m 
+23:26:42 1%/50%       2/2       2/2            1m 1m 
+23:27:13 1%/50%       2/2       2/2            1m 1m 
+23:27:43 1%/50%       2/2       2/2            3m 1m 
+23:28:13 1%/50%       2/2       2/2            1m 1m 
+23:28:44 1%/50%       2/2       2/2            1m 1m 
+$ kubectl -n production-webapp get hpa
+NAME          REFERENCE            TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+web-app-hpa   Deployment/web-app   cpu: 1%/50%   2         5         2          11m
+
+$ kubectl -n production-webapp get pods
+NAME                      READY   STATUS    RESTARTS   AGE
+web-app-d45775485-jcx8m   1/1     Running   0          11m
+web-app-d45775485-qz4pb   1/1     Running   0          10m
+
+$ kubectl -n production-webapp describe hpa web-app-hpa | sed -n '/Events:/,$p'
+Events:
+  Type     Reason                        Age   From                       Message
+  ----     ------                        ----  ----                       -------
+  Warning  FailedGetResourceMetric       11m   horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedComputeMetricsReplicas  11m   horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedGetResourceMetric       11m   horizontal-pod-autoscaler  failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Warning  FailedComputeMetricsReplicas  11m   horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+

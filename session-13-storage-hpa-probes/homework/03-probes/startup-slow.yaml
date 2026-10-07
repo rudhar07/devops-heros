@@ -1,0 +1,30 @@
+# Slow-starting app: nginx only starts after a 20s "warm-up".
+# startupProbe allows up to 30 x 2s = 60s, so the pod comes up without restarts,
+# and liveness/readiness are held back until startup passes.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: startup-slow
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27
+      command: ["sh", "-c", "echo warming up for 20s; sleep 20; echo starting nginx; exec nginx -g 'daemon off;'"]
+      ports:
+        - containerPort: 80
+      startupProbe:
+        httpGet:
+          path: /
+          port: 80
+        failureThreshold: 30
+        periodSeconds: 2
+      livenessProbe:
+        httpGet:
+          path: /
+          port: 80
+        periodSeconds: 5
+      readinessProbe:
+        httpGet:
+          path: /
+          port: 80
+        periodSeconds: 5
