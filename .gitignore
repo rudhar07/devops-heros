@@ -3,4 +3,17 @@
 node_modules/
 dist/
 target/
+*.zip
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
 session3-shell-scripting/Shell-Scripting-Homework-Task/system_info/
+
+# Terraform: providers, state and local overrides never belong in Git
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl.bak
+crash.log
+*.tfplan
