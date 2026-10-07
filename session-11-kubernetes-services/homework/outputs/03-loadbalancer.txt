@@ -1,0 +1,148 @@
+### Deploy the app (3 replicas) and the LoadBalancer Service - with no load-balancer provider yet
+$ kubectl apply -f services/03-loadbalancer/app-deployment.yaml -f services/03-loadbalancer/service.yaml
+deployment.apps/web-app-loadbalancer created
+service/web-service-loadbalancer created
+
+$ kubectl rollout status deployment/web-app-loadbalancer --timeout=180s
+Waiting for deployment "web-app-loadbalancer" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "web-app-loadbalancer" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "web-app-loadbalancer" rollout to finish: 1 of 3 updated replicas are available...
+deployment "web-app-loadbalancer" successfully rolled out
+
+# (polled until http://web-service-loadbalancer:80 answered 200 from the client pod - about 2s; kube-proxy on this busy node needs a moment to program new Services)
+
+$ kubectl get svc web-service-loadbalancer
+NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+web-service-loadbalancer   LoadBalancer   10.96.148.250   <pending>     80:30737/TCP   14s
+
+# EXTERNAL-IP stays <pending>: kind has no cloud controller to create a load balancer. Note it already got a
+# ClusterIP and a NodePort - a LoadBalancer Service is built on top of a NodePort Service.
+### Install MetalLB (v0.16.1, native manifest) as the load-balancer provider
+$ kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
+namespace/metallb-system created
+customresourcedefinition.apiextensions.k8s.io/bfdprofiles.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/bgpadvertisements.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/bgppeers.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/communities.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/configurationstates.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/ipaddresspools.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/l2advertisements.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/servicebgpstatuses.metallb.io created
+customresourcedefinition.apiextensions.k8s.io/servicel2statuses.metallb.io created
+serviceaccount/controller created
+serviceaccount/speaker created
+role.rbac.authorization.k8s.io/controller created
+role.rbac.authorization.k8s.io/pod-lister created
+clusterrole.rbac.authorization.k8s.io/metallb-system:controller created
+clusterrole.rbac.authorization.k8s.io/metallb-system:speaker created
+rolebinding.rbac.authorization.k8s.io/controller created
+rolebinding.rbac.authorization.k8s.io/pod-lister created
+clusterrolebinding.rbac.authorization.k8s.io/metallb-system:controller created
+clusterrolebinding.rbac.authorization.k8s.io/metallb-system:speaker created
+configmap/metallb-excludel2 created
+secret/metallb-webhook-cert created
+service/metallb-webhook-service created
+deployment.apps/controller created
+daemonset.apps/speaker created
+validatingwebhookconfiguration.admissionregistration.k8s.io/metallb-webhook-configuration created
+
+$ kubectl wait -n metallb-system --for=condition=Ready pod --all --timeout=240s
+pod/controller-76f4cf76b7-zfsds condition met
+pod/speaker-z8nkm condition met
+
+$ kubectl get pods -n metallb-system -o wide
+NAME                          READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+controller-76f4cf76b7-zfsds   1/1     Running   0          90s   10.244.0.212   hw-a-control-plane   <none>           <none>
+speaker-z8nkm                 1/1     Running   0          90s   172.18.0.3     hw-a-control-plane   <none>           <none>
+
+$ docker network inspect kind --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
+fc00:f853:ccd:e793::/64 172.18.0.0/16 
+
+$ cat services/03-loadbalancer/metallb-pool.yaml
+# MetalLB = the "cloud load balancer" for my kind cluster.
+# The pool is a small slice of the docker "kind" network (172.18.0.0/16), far away from the
+# addresses Docker hands out to node containers (172.18.0.x), so it cannot collide with them.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: hw-a-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 172.18.203.200-172.18.203.210
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: hw-a-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - hw-a-pool
+
+# (my script first applied the pool in a silent retry loop, because MetalLB's admission webhook needs a few
+#  seconds after the pods are Ready; this visible apply therefore reports 'unchanged')
+$ kubectl apply -f services/03-loadbalancer/metallb-pool.yaml
+ipaddresspool.metallb.io/hw-a-pool unchanged
+l2advertisement.metallb.io/hw-a-l2 unchanged
+
+### Verify: EXTERNAL-IP is now assigned
+$ kubectl get svc web-service-loadbalancer -o wide
+NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE    SELECTOR
+web-service-loadbalancer   LoadBalancer   10.96.148.250   172.18.203.200   80:30737/TCP   113s   app=web-loadbalancer
+
+$ kubectl describe svc web-service-loadbalancer
+Name:                     web-service-loadbalancer
+Namespace:                default
+Labels:                   app=web-loadbalancer
+Annotations:              metallb.io/ip-allocated-from-pool: hw-a-pool
+Selector:                 app=web-loadbalancer
+Type:                     LoadBalancer
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.148.250
+IPs:                      10.96.148.250
+LoadBalancer Ingress:     172.18.203.200 (VIP)
+Port:                     http  80/TCP
+TargetPort:               80/TCP
+NodePort:                 http  30737/TCP
+Endpoints:                10.244.0.209:80,10.244.0.211:80,10.244.0.210:80
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Internal Traffic Policy:  Cluster
+Events:
+  Type    Reason        Age   From                Message
+  ----    ------        ----  ----                -------
+  Normal  IPAllocated   2s    metallb-controller  Assigned IP ["172.18.203.200"]
+  Normal  nodeAssigned  1s    metallb-speaker     announcing from node "hw-a-control-plane" with protocol "layer2"
+
+### Test connectivity to the EXTERNAL-IP 172.18.203.200
+# a) from a container on the docker 'kind' network (same L2 segment MetalLB answers ARP on):
+$ docker run --rm --network kind curlimages/curl:8.5.0 -s -o /dev/null -w 'kind network -> http://172.18.203.200 -> HTTP %{http_code}\n' http://172.18.203.200
+kind network -> http://172.18.203.200 -> HTTP 200
+
+$ docker run --rm --network kind --entrypoint sh curlimages/curl:8.5.0 -c "curl -s http://172.18.203.200 | grep -o '<title>.*</title>'"
+<title>Welcome to nginx!</title>
+
+# b) from a pod inside the cluster:
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'pod -> http://172.18.203.200 -> HTTP %{http_code}\n' http://172.18.203.200
+pod -> http://172.18.203.200 -> HTTP 200
+
+# c) from my Mac directly:
+$ curl -s -m 5 -o /dev/null -w 'mac -> http://172.18.203.200 -> HTTP %{http_code}\n' http://172.18.203.200
+mac -> http://172.18.203.200 -> HTTP 000
+
+# Docker Desktop on macOS runs containers inside a Linux VM; the 172.18.0.0/16 bridge is not routed to the Mac,
+# so the LB IP is only reachable from inside that VM (other containers / pods). On Linux it would work from the host.
+$ kubectl get ipaddresspools.metallb.io,l2advertisements.metallb.io -n metallb-system
+NAME                                 AUTO ASSIGN   AVOID BUGGY IPS   ADDRESSES
+ipaddresspool.metallb.io/hw-a-pool   true          false             ["172.18.203.200-172.18.203.210"]
+
+NAME                                 IPADDRESSPOOLS   IPADDRESSPOOL SELECTORS   INTERFACES
+l2advertisement.metallb.io/hw-a-l2   ["hw-a-pool"]                              
+
+$ kubectl get events --field-selector involvedObject.name=web-service-loadbalancer --sort-by=.lastTimestamp
+LAST SEEN   TYPE     REASON         OBJECT                             MESSAGE
+11s         Normal   IPAllocated    service/web-service-loadbalancer   Assigned IP ["172.18.203.200"]
+10s         Normal   nodeAssigned   service/web-service-loadbalancer   announcing from node "hw-a-control-plane" with protocol "layer2"
+

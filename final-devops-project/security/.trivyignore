@@ -1,0 +1,13 @@
+# Accepted Trivy misconfiguration findings for "trivy config" (IaC scan).
+# Every entry needs a reason. Reviewed 2026-10-08 by Rudhar Bajaj.
+
+# AWS-0104 (CRITICAL) unrestricted egress on the EKS node security group.
+# Nodes must reach public registries (ghcr.io, docker.io) and AWS APIs through
+# the NAT gateway; the destination set is not a fixed CIDR list. Ingress is
+# what is locked down (only from the LB SG and from other nodes).
+AWS-0104
+
+# AWS-0132 (HIGH) S3 bucket not encrypted with a customer managed KMS key.
+# The artifacts bucket uses SSE-S3 (AES256) + versioning + public access
+# block. A CMK adds cost and key management for data that is not sensitive.
+AWS-0132

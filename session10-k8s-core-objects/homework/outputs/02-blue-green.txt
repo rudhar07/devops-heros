@@ -1,0 +1,165 @@
+### Step 1: create the Blue version (v1) and the Service that points at it
+$ kubectl apply -f strategies/02-blue-green/deployment-blue.yaml -f strategies/02-blue-green/service-blue.yaml
+deployment.apps/app-blue created
+service/myapp-service created
+
+$ kubectl rollout status deployment/app-blue --timeout=180s
+Waiting for deployment "app-blue" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-blue" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "app-blue" rollout to finish: 1 of 3 updated replicas are available...
+Waiting for deployment "app-blue" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "app-blue" rollout to finish: 1 of 3 updated replicas are available...
+Waiting for deployment "app-blue" rollout to finish: 2 of 3 updated replicas are available...
+deployment "app-blue" successfully rolled out
+
+### Step 2: create the Green version (v2) next to it - it gets no traffic yet
+$ kubectl apply -f strategies/02-blue-green/deployment-green.yaml
+deployment.apps/app-green created
+
+$ kubectl rollout status deployment/app-green --timeout=180s
+Waiting for deployment "app-green" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "app-green" rollout to finish: 1 of 3 updated replicas are available...
+Waiting for deployment "app-green" rollout to finish: 2 of 3 updated replicas are available...
+deployment "app-green" successfully rolled out
+
+$ kubectl get deploy,pods -l app=myapp -L slot,version
+NAME                        READY   UP-TO-DATE   AVAILABLE   AGE   SLOT    VERSION
+deployment.apps/app-blue    3/3     3            3           14s   blue    v1
+deployment.apps/app-green   3/3     3            3           7s    green   v2
+
+NAME                            READY   STATUS    RESTARTS   AGE   SLOT    VERSION
+pod/app-blue-5c69d7785c-7s7x9   1/1     Running   0          13s   blue    v1
+pod/app-blue-5c69d7785c-sw4cd   1/1     Running   0          13s   blue    v1
+pod/app-blue-5c69d7785c-vd4kq   1/1     Running   0          13s   blue    v1
+pod/app-green-84df7f978-ccl9l   1/1     Running   0          7s    green   v2
+pod/app-green-84df7f978-sfcpz   1/1     Running   0          7s    green   v2
+pod/app-green-84df7f978-wtn2z   1/1     Running   0          7s    green   v2
+
+$ kubectl get svc myapp-service -o wide
+NAME            TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE   SELECTOR
+myapp-service   NodePort   10.96.126.1   <none>        80:30020/TCP   13s   app=myapp,slot=blue
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=myapp-service
+NAME                  ADDRESSTYPE   PORTS   ENDPOINTS                             AGE
+myapp-service-mjmhm   IPv4          80      10.244.0.64,10.244.0.65,10.244.0.66   14s
+
+# 10 requests through the Service before the switch:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 BLUE ENVIRONMENT
+
+# Green can be smoke-tested directly (pod IP) before it gets any user traffic:
+$ kubectl exec client -- sh -c 'curl -s 10.244.0.67 | grep -o -E "GREEN ENVIRONMENT|Version: v2"'
+GREEN ENVIRONMENT
+Version: v2
+
+### Step 3: switch traffic - flip the Service selector from slot=blue to slot=green
+$ kubectl patch service myapp-service -p '{"spec":{"selector":{"app":"myapp","slot":"green"}}}'
+service/myapp-service patched
+
+# requests sent immediately after the patch:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 GREEN ENVIRONMENT
+
+# (polled: the EndpointSlice now lists exactly the green pod IPs: 10.244.0.67 10.244.0.68 10.244.0.69 - took about 0s)
+
+$ kubectl get svc myapp-service -o wide
+NAME            TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE   SELECTOR
+myapp-service   NodePort   10.96.126.1   <none>        80:30020/TCP   14s   app=myapp,slot=green
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=myapp-service
+NAME                  ADDRESSTYPE   PORTS   ENDPOINTS                             AGE
+myapp-service-mjmhm   IPv4          80      10.244.0.68,10.244.0.69,10.244.0.67   15s
+
+$ kubectl get pods -l slot=green -o wide
+NAME                        READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+app-green-84df7f978-ccl9l   1/1     Running   0          9s    10.244.0.67   hw-a-control-plane   <none>           <none>
+app-green-84df7f978-sfcpz   1/1     Running   0          9s    10.244.0.68   hw-a-control-plane   <none>           <none>
+app-green-84df7f978-wtn2z   1/1     Running   0          9s    10.244.0.69   hw-a-control-plane   <none>           <none>
+
+# (re-sent batches of 10 requests until all 10 said GREEN - that took about 0s after the EndpointSlice was already correct)
+
+# 10 requests after the switch:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 GREEN ENVIRONMENT
+
+### Step 4: verify the active version
+$ kubectl describe service myapp-service
+Name:                     myapp-service
+Namespace:                default
+Labels:                   app=myapp
+Annotations:              <none>
+Selector:                 app=myapp,slot=green
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.126.1
+IPs:                      10.96.126.1
+Port:                     http  80/TCP
+TargetPort:               80/TCP
+NodePort:                 http  30020/TCP
+Endpoints:                10.244.0.68:80,10.244.0.69:80,10.244.0.67:80
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+### Step 5: rollback = flip the selector back (with the instructor's service-blue.yaml)
+$ kubectl apply -f strategies/02-blue-green/service-blue.yaml
+service/myapp-service configured
+
+$ kubectl get svc myapp-service -o 'jsonpath={.spec.selector}'
+{"app":"myapp","slot":"blue"}
+
+
+# requests sent immediately after the apply:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 BLUE ENVIRONMENT
+
+# (polled: the EndpointSlice now lists exactly the blue pod IPs: 10.244.0.64 10.244.0.65 10.244.0.66 - took about 0s)
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=myapp-service
+NAME                  ADDRESSTYPE   PORTS   ENDPOINTS                             AGE
+myapp-service-mjmhm   IPv4          80      10.244.0.64,10.244.0.66,10.244.0.65   16s
+
+# requests after the EndpointSlice caught up:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 BLUE ENVIRONMENT
+
+# (re-sent batches of 10 requests until all 10 said BLUE - that took about 0s after the EndpointSlice was already correct)
+
+# Promote Green again with service-green.yaml
+$ kubectl apply -f strategies/02-blue-green/service-green.yaml
+service/myapp-service configured
+
+# requests sent immediately after the apply:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 GREEN ENVIRONMENT
+
+# (polled: the EndpointSlice now lists exactly the green pod IPs: 10.244.0.67 10.244.0.68 10.244.0.69 - took about 0s)
+
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 GREEN ENVIRONMENT
+
+# (re-sent batches of 10 requests until all 10 said GREEN - that took about 0s after the EndpointSlice was already correct)
+
+$ kubectl exec client -- sh -c 'for i in $(seq 1 10); do curl -s -m2 myapp-service | grep -o "[A-Z]* ENVIRONMENT" || echo FAILED; done | sort | uniq -c'
+     10 GREEN ENVIRONMENT
+
+# once Green is trusted, Blue can be scaled to 0 (kept for a fast rollback) or deleted
+$ kubectl scale deployment app-blue --replicas=0
+deployment.apps/app-blue scaled
+
+$ kubectl rollout status deployment/app-blue --timeout=120s
+deployment "app-blue" successfully rolled out
+
+$ kubectl get deploy -l app=myapp
+NAME        READY   UP-TO-DATE   AVAILABLE   AGE
+app-blue    3/0     3            3           19s
+app-green   3/3     3            3           12s
+
+### Cleanup
+$ kubectl delete -f strategies/02-blue-green/deployment-blue.yaml -f strategies/02-blue-green/deployment-green.yaml -f strategies/02-blue-green/service-green.yaml
+deployment.apps "app-blue" deleted from default namespace
+deployment.apps "app-green" deleted from default namespace
+service "myapp-service" deleted from default namespace
+

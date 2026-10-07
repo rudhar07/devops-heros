@@ -1,0 +1,172 @@
+# CASE 3 - Service selector does not match the pods (service/networking layer) + the alert it triggers
+# BEFORE
+$ kubectl -n taskboard get endpointslices -l kubernetes.io/service-name=taskboard-backend
+NAME                      ADDRESSTYPE   PORTS   ENDPOINTS                 AGE
+taskboard-backend-tkvg4   IPv4          8000    10.244.0.16,10.244.0.17   39m
+
+# BREAK: a 'refactor' renames the component label in the Service selector to 'api'
+$ kubectl -n taskboard patch svc taskboard-backend --type=json -p "$(cat troubleshooting/case3-service-selector.patch.json)"
+service/taskboard-backend patched
+
+$ for i in $(seq 1 10); do c=$(curl -s -o /dev/null -w '%{http_code}' http://taskboard.localhost:30110/api/tasks); echo "$(date +%T) /api/tasks -> $c"; [ $c = 503 ] && break; sleep 2; done
+00:52:29 /api/tasks -> 200
+00:52:31 /api/tasks -> 200
+00:52:33 /api/tasks -> 503
+
+# IDENTIFY: UI loads but every API call is 503; pods are all Running/Ready
+$ curl -s -o /dev/null -w 'UI: HTTP %{http_code}
+' http://taskboard.localhost:30110/
+UI: HTTP 200
+
+$ kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS    RESTARTS   AGE
+taskboard-backend-59d5dcc795-4r2g9   1/1     Running   0          34m
+taskboard-backend-59d5dcc795-865pz   1/1     Running   0          34m
+
+# INVESTIGATE
+$ kubectl -n taskboard get endpointslices -l kubernetes.io/service-name=taskboard-backend
+NAME                      ADDRESSTYPE   PORTS     ENDPOINTS   AGE
+taskboard-backend-tkvg4   IPv4          <unset>   <unset>     39m
+
+$ kubectl -n taskboard get svc taskboard-backend -o jsonpath='{.spec.selector}'; echo
+{"app.kubernetes.io/component":"api","app.kubernetes.io/instance":"taskboard","app.kubernetes.io/name":"taskboard"}
+
+$ kubectl -n taskboard get pods -l app.kubernetes.io/component=backend --show-labels | awk '{print $1, $NF}' | sed 's/,app.kubernetes.io\/managed-by.*component=/ ... component=/' | cut -c1-140
+NAME LABELS
+taskboard-backend-59d5dcc795-4r2g9 app.kubernetes.io/component=backend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/managed-by=Hel
+taskboard-backend-59d5dcc795-865pz app.kubernetes.io/component=backend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/managed-by=Hel
+
+$ kubectl -n taskboard get pods -l app.kubernetes.io/name=taskboard,app.kubernetes.io/instance=taskboard,app.kubernetes.io/component=api
+No resources found in taskboard namespace.
+
+$ kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --since=1m | grep -m2 'does not have any active Endpoint'
+W1007 19:22:32.586491      11 controller.go:1241] Service "taskboard/taskboard-backend" does not have any active Endpoint.
+
+# Monitoring sees it too: the ServiceMonitor discovers pods through the Service's endpoints, so the backend targets disappear and TaskboardBackendDown goes pending, then firing (for: 1m).
+$ for i in $(seq 1 30); do s=$(curl -s http://localhost:30112/api/v1/alerts | jq -r '[.data.alerts[] | select(.labels.alertname=="TaskboardBackendDown") | .state] | first // "inactive"'); echo "$(date +%T) TaskboardBackendDown=$s"; [ "$s" = firing ] && break; sleep 10; done
+00:52:33 TaskboardBackendDown=inactive
+00:52:43 TaskboardBackendDown=inactive
+00:52:53 TaskboardBackendDown=inactive
+00:53:03 TaskboardBackendDown=pending
+00:53:13 TaskboardBackendDown=pending
+00:53:23 TaskboardBackendDown=pending
+00:53:33 TaskboardBackendDown=pending
+00:53:43 TaskboardBackendDown=pending
+00:53:53 TaskboardBackendDown=pending
+00:54:03 TaskboardBackendDown=firing
+
+$ curl -s http://localhost:30112/api/v1/alerts | jq -c '.data.alerts[] | select(.labels.alertname=="TaskboardBackendDown") | {state, activeAt, severity: .labels.severity, summary: .annotations.summary}'
+{"state":"firing","activeAt":"2026-10-07T19:22:57.566628837Z","severity":"critical","summary":"No TaskBoard backend target is up in taskboard"}
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=absent(up{namespace="taskboard",service="taskboard-backend"})' | jq -c '.data.result'
+[{"metric":{"namespace":"taskboard","service":"taskboard-backend"},"value":[1791401044.005,"1"]}]
+
+# ROOT CAUSE: Service selector app.kubernetes.io/component=api, pods carry component=backend -> selector matches 0 pods -> no endpoints -> ingress-nginx returns 503.
+# FIX: re-apply the chart (helm puts the selector back from the template)
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml --wait --timeout 3m | grep -E 'STATUS|REVISION'
+level=WARN msg="upgrade failed" name=taskboard error="conflict occurred while applying object taskboard/taskboard-backend /v1, Kind=Service: Apply failed with 1 conflict: conflict with \"kubectl-patch\" using v1: .spec.selector"
+Error: UPGRADE FAILED: conflict occurred while applying object taskboard/taskboard-backend /v1, Kind=Service: Apply failed with 1 conflict: conflict with "kubectl-patch" using v1: .spec.selector
+[exit code 1]
+
+# VERIFY
+$ kubectl -n taskboard get svc taskboard-backend -o jsonpath='{.spec.selector}'; echo
+{"app.kubernetes.io/component":"api","app.kubernetes.io/instance":"taskboard","app.kubernetes.io/name":"taskboard"}
+
+$ kubectl -n taskboard get endpointslices -l kubernetes.io/service-name=taskboard-backend
+NAME                      ADDRESSTYPE   PORTS     ENDPOINTS   AGE
+taskboard-backend-tkvg4   IPv4          <unset>   <unset>     41m
+
+$ for i in $(seq 1 10); do c=$(curl -s -o /dev/null -w '%{http_code}' http://taskboard.localhost:30110/api/tasks); echo "$(date +%T) /api/tasks -> $c"; [ $c = 200 ] && break; sleep 2; done
+00:54:04 /api/tasks -> 503
+00:54:06 /api/tasks -> 503
+00:54:08 /api/tasks -> 503
+00:54:10 /api/tasks -> 503
+00:54:12 /api/tasks -> 503
+00:54:14 /api/tasks -> 503
+00:54:17 /api/tasks -> 503
+00:54:19 /api/tasks -> 503
+00:54:21 /api/tasks -> 503
+00:54:23 /api/tasks -> 503
+
+$ for i in $(seq 1 30); do s=$(curl -s http://localhost:30112/api/v1/alerts | jq -r '[.data.alerts[] | select(.labels.alertname=="TaskboardBackendDown") | .state] | first // "inactive"'); echo "$(date +%T) TaskboardBackendDown=$s"; [ "$s" = inactive ] && break; sleep 10; done
+00:54:25 TaskboardBackendDown=firing
+00:54:35 TaskboardBackendDown=firing
+00:54:45 TaskboardBackendDown=firing
+00:54:55 TaskboardBackendDown=firing
+00:55:05 TaskboardBackendDown=firing
+00:55:15 TaskboardBackendDown=firing
+00:55:25 TaskboardBackendDown=firing
+00:55:35 TaskboardBackendDown=firing
+00:55:45 TaskboardBackendDown=firing
+00:55:55 TaskboardBackendDown=firing
+00:56:05 TaskboardBackendDown=firing
+00:56:15 TaskboardBackendDown=firing
+00:56:25 TaskboardBackendDown=firing
+00:56:35 TaskboardBackendDown=firing
+00:56:45 TaskboardBackendDown=firing
+00:56:55 TaskboardBackendDown=firing
+00:57:05 TaskboardBackendDown=firing
+00:57:15 TaskboardBackendDown=firing
+00:57:25 TaskboardBackendDown=firing
+00:57:35 TaskboardBackendDown=firing
+00:57:45 TaskboardBackendDown=firing
+00:57:55 TaskboardBackendDown=firing
+00:58:05 TaskboardBackendDown=firing
+00:58:15 TaskboardBackendDown=firing
+00:58:26 TaskboardBackendDown=firing
+00:58:36 TaskboardBackendDown=firing
+00:58:46 TaskboardBackendDown=firing
+00:58:56 TaskboardBackendDown=firing
+00:59:06 TaskboardBackendDown=firing
+00:59:16 TaskboardBackendDown=firing
+# ================ FIX attempt 1 failed - why ================
+# Helm 4 applies manifests with server-side apply. My 'kubectl patch' made the field manager 'kubectl-patch' the owner of .spec.selector, so Helm refuses to overwrite it (a conflict, not a silent overwrite as with Helm 3's three-way merge).
+$ kubectl -n taskboard get svc taskboard-backend --show-managed-fields -o json | jq -r '.metadata.managedFields[] | "\(.manager)  \(.operation)  owns selector: \(.fieldsV1."f:spec"."f:selector" != null)"'
+helm  Apply  owns selector: false
+kubectl-patch  Update  owns selector: true
+
+# FIX attempt 2: take ownership back explicitly. --force-conflicts is the right tool here because the chart is the source of truth.
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml --force-conflicts --wait --timeout 3m | grep -E 'STATUS|REVISION'
+STATUS: deployed
+REVISION: 10
+
+# VERIFY
+$ kubectl -n taskboard get svc taskboard-backend -o jsonpath='{.spec.selector}'; echo
+{"app.kubernetes.io/component":"backend","app.kubernetes.io/instance":"taskboard","app.kubernetes.io/name":"taskboard"}
+
+$ kubectl -n taskboard get endpointslices -l kubernetes.io/service-name=taskboard-backend
+NAME                      ADDRESSTYPE   PORTS   ENDPOINTS                 AGE
+taskboard-backend-tkvg4   IPv4          8000    10.244.0.16,10.244.0.17   47m
+
+$ for i in $(seq 1 10); do c=$(curl -s -o /dev/null -w '%{http_code}' http://taskboard.localhost:30110/api/tasks); echo "$(date +%T) /api/tasks -> $c"; [ $c = 200 ] && break; sleep 2; done
+00:59:45 /api/tasks -> 503
+00:59:47 /api/tasks -> 503
+00:59:50 /api/tasks -> 200
+
+$ for i in $(seq 1 30); do s=$(curl -s http://localhost:30112/api/v1/alerts | jq -r '[.data.alerts[] | select(.labels.alertname=="TaskboardBackendDown") | .state] | first // "inactive"'); echo "$(date +%T) TaskboardBackendDown=$s"; [ "$s" = inactive ] && break; sleep 10; done
+00:59:50 TaskboardBackendDown=firing
+01:00:00 TaskboardBackendDown=inactive
+
+$ curl -s 'http://localhost:30112/api/v1/query' --data-urlencode 'query=up{namespace="taskboard"}' | jq -r '.data.result[] | "\(.metric.pod) up=\(.value[1])"'
+taskboard-backend-59d5dcc795-4r2g9 up=1
+taskboard-backend-59d5dcc795-865pz up=1
+
+
+# ---- the instructor's troubleshooting/broken-service.yaml ----
+$ kubectl apply -f troubleshooting/instructor-broken-service.yaml
+service/broken-service created
+
+$ kubectl -n taskboard get svc broken-service -o wide
+NAME             TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE   SELECTOR
+broken-service   ClusterIP   10.96.53.201   <none>        8080/TCP   0s    app=label-that-does-not-exist
+
+$ kubectl -n taskboard get endpointslices -l kubernetes.io/service-name=broken-service
+NAME                   ADDRESSTYPE   PORTS     ENDPOINTS   AGE
+broken-service-l6wbc   IPv4          <unset>   <unset>     0s
+
+$ kubectl -n taskboard get pods -l app=label-that-does-not-exist
+No resources found in taskboard namespace.
+
+# Same lesson: selector app=label-that-does-not-exist matches nothing -> no endpoints. Removed again.
+$ kubectl delete -f troubleshooting/instructor-broken-service.yaml
+service "broken-service" deleted from taskboard namespace

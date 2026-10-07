@@ -1,0 +1,226 @@
+# GitOps demo. The real Application (gitops/argocd-application.yaml) points at github.com/rudhar07/devops-heros, path final-devops-project/helm/taskboard, which exists only after the push. For a live demo I serve a scratch copy of the same layout from a git daemon container on the docker 'kind' network.
+# (G = <scratchpad>/final-gitops-repo, outside the student repo)
+$ rm -rf /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo && mkdir -p /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo/final-devops-project && cp -R helm /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo/final-devops-project/ && cd /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo && git init -q -b main && git -c user.name='Rudhar Bajaj' -c user.email=demo@example.invalid add -A && git -c user.name='Rudhar Bajaj' -c user.email=demo@example.invalid commit -q -m 'taskboard chart: initial GitOps state (appEnv gitops-v1)' && git log --oneline
+891df0c taskboard chart: initial GitOps state (appEnv gitops-v1)
+
+$ docker run -d --name hw-f-gitd --network kind --memory 64m -v /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo:/srv/git/final-gitops-repo:ro alpine:3.20 sh -c "apk add --no-cache git git-daemon >/dev/null && exec git -c safe.directory='*' daemon --verbose --reuseaddr --export-all --base-path=/srv/git /srv/git"
+6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0
+
+$ for i in $(seq 1 30); do docker exec hw-f-gitd sh -c 'command -v git-daemon >/dev/null || test -x /usr/libexec/git-core/git-daemon' && docker logs hw-f-gitd 2>&1 | grep -q 'Ready to rumble' && break; sleep 2; done; docker logs hw-f-gitd 2>&1 | tail -2
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+Error response from daemon: container 6f52be902ee3ea9a3fbc22c2ed76e8dfdd2fbd36185cc5471218db63198e3db0 is not running
+  git-daemon (no such package):
+    required by: world[git-daemon]
+
+$ kubectl run gitcheck -n argocd --rm -i --restart=Never --image=alpine/git:latest --command -- git ls-remote git://hw-f-gitd/final-gitops-repo
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+pod "gitcheck" deleted from argocd namespace
+pod argocd/gitcheck terminated (Error)
+[exit code 128]
+
+# First try failed: 'apk add' got 'temporary error' from dl-cdn.alpinelinux.org (the same flaky DNS as in the Trivy section), so the package index was empty. Second try with a retry loop:
+$ docker logs hw-f-gitd 2>&1 | head -2; docker rm -f hw-f-gitd
+Error response from daemon: No such container: hw-f-gitd
+Error response from daemon: No such container: hw-f-gitd
+
+$ docker run -d --name hw-f-gitd --network kind --memory 128m -v /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo:/srv/git/final-gitops-repo:ro alpine:3.20 sh -c "for i in 1 2 3 4 5; do apk add --no-cache git git-daemon >/dev/null 2>&1 && break; sleep 3; done; exec git -c safe.directory='*' daemon --verbose --reuseaddr --export-all --base-path=/srv/git /srv/git"
+fe01f9862f6815af84663ed8fd648ecf951ede9555f3357b7f329021ab914d88
+
+$ for i in $(seq 1 30); do docker logs hw-f-gitd 2>&1 | grep -q 'Ready to rumble' && break; sleep 2; done; docker ps --filter name=hw-f-gitd --format '{{.Names}} {{.Status}}'; docker logs hw-f-gitd 2>&1 | tail -1
+hw-f-gitd Up 12 seconds
+[15] Ready to rumble
+
+$ kubectl run gitcheck -n argocd --rm -i --restart=Never --image=alpine/git:latest --command -- git ls-remote git://hw-f-gitd/final-gitops-repo 2>&1 | grep -v 'recorded in container logs\|command prompt'
+891df0c59d38238ecb21c878c8414d7a3abd2fe0	HEAD
+891df0c59d38238ecb21c878c8414d7a3abd2fe0	refs/heads/main
+pod "gitcheck" deleted from argocd namespace
+
+# Log the argocd CLI in (initial admin password read from the cluster Secret, not printed; CLI config kept in the scratchpad):
+$ argocd login localhost:30113 --insecure --username admin --password "$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)" --grpc-web
+'admin:login' logged in successfully
+Context 'localhost:30113' updated
+
+# Create the Application (local demo variant, see gitops/argocd-application-local-demo.yaml)
+$ kubectl apply -f gitops/argocd-application-local-demo.yaml
+Warning: metadata.finalizers: "resources-finalizer.argocd.argoproj.io": prefer a domain-qualified finalizer name including a path (/) to avoid accidental conflicts with other finalizer writers
+application.argoproj.io/taskboard-gitops created
+
+$ for i in $(seq 1 60); do s=$(kubectl -n argocd get application taskboard-gitops -o jsonpath='{.status.sync.status}/{.status.health.status}'); echo "$(date +%T) $s"; [ "$s" = Synced/Healthy ] && break; sleep 5; done
+01:09:52 /
+01:09:58 Synced/Progressing
+01:10:03 Synced/Progressing
+01:10:08 Synced/Progressing
+01:10:13 Synced/Progressing
+01:10:18 Synced/Progressing
+01:10:23 Synced/Healthy
+
+$ argocd app get taskboard-gitops --grpc-web
+Name:               argocd/taskboard-gitops
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          taskboard-gitops
+URL:                https://localhost:30113/applications/taskboard-gitops
+Source:
+- Repo:             git://hw-f-gitd/final-gitops-repo
+  Target:           main
+  Path:             final-devops-project/helm/taskboard
+  Helm Values:      values-gitops.yaml
+SyncWindow:         Sync Allowed
+Sync Policy:        Automated (Prune)
+Sync Status:        Synced to main (891df0c)
+Health Status:      Healthy
+
+GROUP                  KIND                   NAMESPACE         NAME                            STATUS   HEALTH   HOOK  MESSAGE
+                       Namespace                                taskboard-gitops                Running  Synced         namespace/taskboard-gitops serverside-applied
+                       Secret                 taskboard-gitops  taskboard-gitops-db             Synced                  secret/taskboard-gitops-db serverside-applied
+                       ConfigMap              taskboard-gitops  taskboard-gitops-config         Synced                  configmap/taskboard-gitops-config serverside-applied
+                       PersistentVolumeClaim  taskboard-gitops  taskboard-gitops-postgres-data  Synced   Healthy        persistentvolumeclaim/taskboard-gitops-postgres-data serverside-applied
+                       Service                taskboard-gitops  taskboard-gitops-backend        Synced   Healthy        service/taskboard-gitops-backend serverside-applied
+                       Service                taskboard-gitops  taskboard-gitops-frontend       Synced   Healthy        service/taskboard-gitops-frontend serverside-applied
+                       Service                taskboard-gitops  taskboard-gitops-postgres       Synced   Healthy        service/taskboard-gitops-postgres serverside-applied
+apps                   Deployment             taskboard-gitops  taskboard-gitops-postgres       Synced   Healthy        deployment.apps/taskboard-gitops-postgres serverside-applied
+apps                   Deployment             taskboard-gitops  taskboard-gitops-backend        Synced   Healthy        deployment.apps/taskboard-gitops-backend serverside-applied
+apps                   Deployment             taskboard-gitops  taskboard-gitops-frontend       Synced   Healthy        deployment.apps/taskboard-gitops-frontend serverside-applied
+networking.k8s.io      Ingress                taskboard-gitops  taskboard-gitops                Synced   Healthy        ingress.networking.k8s.io/taskboard-gitops serverside-applied
+monitoring.coreos.com  PrometheusRule         taskboard-gitops  taskboard-gitops-alerts         Synced                  prometheusrule.monitoring.coreos.com/taskboard-gitops-alerts serverside-applied
+monitoring.coreos.com  ServiceMonitor         taskboard-gitops  taskboard-gitops-backend        Synced                  servicemonitor.monitoring.coreos.com/taskboard-gitops-backend serverside-applied
+
+$ kubectl -n taskboard-gitops get deploy,pods,svc,ingress
+NAME                                        READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/taskboard-gitops-backend    1/1     1            1           27s
+deployment.apps/taskboard-gitops-frontend   1/1     1            1           27s
+deployment.apps/taskboard-gitops-postgres   1/1     1            1           27s
+
+NAME                                             READY   STATUS    RESTARTS   AGE
+pod/taskboard-gitops-backend-d94bbd7fb-ss5jm     1/1     Running   0          27s
+pod/taskboard-gitops-frontend-578568f8b8-sptjg   1/1     Running   0          27s
+pod/taskboard-gitops-postgres-7c8d9b5f86-f9bhh   1/1     Running   0          27s
+
+NAME                                TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+service/taskboard-gitops-backend    ClusterIP   10.96.140.53   <none>        8000/TCP   27s
+service/taskboard-gitops-frontend   ClusterIP   10.96.37.245   <none>        80/TCP     27s
+service/taskboard-gitops-postgres   ClusterIP   10.96.63.164   <none>        5432/TCP   27s
+
+NAME                                         CLASS   HOSTS              ADDRESS     PORTS   AGE
+ingress.networking.k8s.io/taskboard-gitops   nginx   gitops.localhost   localhost   80      27s
+
+$ for i in $(seq 1 15); do c=$(curl -s -o /dev/null -w '%{http_code}' http://gitops.localhost:30110/api/info); [ $c = 200 ] && break; sleep 2; done; curl -s http://gitops.localhost:30110/api/info
+{"service":"TaskBoard API","version":"2.0.0","environment":"gitops-v1","commit":"local","docs":"/docs"}
+
+# ================ 1) A change in Git is deployed by ArgoCD ================
+# Edit values-gitops.yaml in the Git repo: appEnv gitops-v1 -> gitops-v2 and frontend replicas 1 -> 2, then commit. No kubectl, no helm.
+$ cd /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo && sed -i '' 's/appEnv: gitops-v1/appEnv: gitops-v2/' final-devops-project/helm/taskboard/values-gitops.yaml && python3 - <<'PY'
+p='final-devops-project/helm/taskboard/values-gitops.yaml'
+s=open(p).read()
+s=s.replace('''frontend:
+  image:
+    tag: ""
+  replicaCount: 1''','''frontend:
+  image:
+    tag: ""
+  replicaCount: 2''')
+open(p,'w').write(s)
+PY
+git diff --stat && git diff | grep -E '^[-+] '
+ final-devops-project/helm/taskboard/values-gitops.yaml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+-  replicaCount: 1
++  replicaCount: 2
+-  appEnv: gitops-v1
++  appEnv: gitops-v2
+
+$ cd /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/final-gitops-repo && git -c user.name='Rudhar Bajaj' -c user.email=demo@example.invalid commit -qam 'gitops: appEnv gitops-v2, frontend 2 replicas' && git log --oneline
+d5889ef gitops: appEnv gitops-v2, frontend 2 replicas
+891df0c taskboard chart: initial GitOps state (appEnv gitops-v1)
+
+# ArgoCD polls Git every 3 minutes by default; a webhook would make this instant. I ask for a refresh instead of waiting:
+$ argocd app get taskboard-gitops --refresh --grpc-web | grep -E 'Sync Status|Health Status'
+Sync Status:        OutOfSync from main (d5889ef)
+Health Status:      Healthy
+
+$ for i in $(seq 1 40); do rev=$(kubectl -n argocd get application taskboard-gitops -o jsonpath='{.status.sync.revision}' | cut -c1-7); s=$(kubectl -n argocd get application taskboard-gitops -o jsonpath='{.status.sync.status}/{.status.health.status}'); env=$(curl -s http://gitops.localhost:30110/api/info | jq -r .environment 2>/dev/null); echo "$(date +%T) revision=$rev $s api.environment=$env"; [ "$env" = gitops-v2 ] && [ "$s" = Synced/Healthy ] && break; sleep 5; done
+01:10:39 revision=d5889ef OutOfSync/Healthy api.environment=gitops-v1
+01:10:44 revision=d5889ef Synced/Progressing api.environment=gitops-v1
+01:10:49 revision=d5889ef Synced/Progressing api.environment=gitops-v1
+01:10:54 revision=d5889ef Synced/Healthy api.environment=gitops-v2
+
+$ kubectl -n taskboard-gitops get deploy
+NAME                        READY   UP-TO-DATE   AVAILABLE   AGE
+taskboard-gitops-backend    1/1     1            1           58s
+taskboard-gitops-frontend   2/2     2            2           58s
+taskboard-gitops-postgres   1/1     1            1           58s
+
+$ argocd app history taskboard-gitops --grpc-web
+SOURCE  git://hw-f-gitd/final-gitops-repo
+ID      DATE                           REVISION
+0       2026-10-08 01:09:56 +0530 IST  main (891df0c)
+1       2026-10-08 01:10:39 +0530 IST  main (d5889ef)
+
+
+# ================ 2) Drift: someone changes the cluster by hand -> selfHeal reverts it ================
+$ kubectl -n argocd get application taskboard-gitops -o jsonpath='{.spec.syncPolicy}'; echo
+{"automated":{"prune":true,"selfHeal":true},"syncOptions":["CreateNamespace=true","ServerSideApply=true"]}
+
+$ kubectl -n taskboard-gitops scale deploy taskboard-gitops-frontend --replicas=4
+deployment.apps/taskboard-gitops-frontend scaled
+
+$ kubectl -n taskboard-gitops patch configmap taskboard-gitops-config --type merge -p '{"data":{"LOG_LEVEL":"DEBUG"}}'
+configmap/taskboard-gitops-config patched
+
+$ for i in $(seq 1 30); do r=$(kubectl -n taskboard-gitops get deploy taskboard-gitops-frontend -o jsonpath='{.spec.replicas}'); l=$(kubectl -n taskboard-gitops get cm taskboard-gitops-config -o jsonpath='{.data.LOG_LEVEL}'); s=$(kubectl -n argocd get application taskboard-gitops -o jsonpath='{.status.sync.status}'); echo "$(date +%T) frontend.spec.replicas=$r LOG_LEVEL=$l app=$s"; [ "$r" = 2 ] && [ "$l" = INFO ] && break; sleep 2; done
+01:11:05 frontend.spec.replicas=4 LOG_LEVEL=DEBUG app=Synced
+01:11:07 frontend.spec.replicas=2 LOG_LEVEL=INFO app=Synced
+
+$ kubectl -n taskboard-gitops get deploy taskboard-gitops-frontend
+NAME                        READY   UP-TO-DATE   AVAILABLE   AGE
+taskboard-gitops-frontend   2/2     2            2           71s
+
+$ kubectl -n argocd logs statefulset/argocd-application-controller --since=3m | grep -iE 'self-heal|selfheal|Initiated automated sync|sync.*taskboard-gitops' | head -5 | cut -c1-260
+{"application":"taskboard-gitops","dest-namespace":"taskboard-gitops","dest-server":"https://kubernetes.default.svc","level":"info","msg":"Initiated automated sync to '891df0c59d38238ecb21c878c8414d7a3abd2fe0'","reason":"OperationStarted","time":"2026-10-07T19
+{"app-namespace":"argocd","application":"taskboard-gitops","level":"info","msg":"Initiated automated sync to '891df0c59d38238ecb21c878c8414d7a3abd2fe0'","project":"default","time":"2026-10-07T19:39:55Z"}
+{"app-namespace":"argocd","application":"taskboard-gitops","level":"info","msg":"Initialized new operation: {\u0026SyncOperation{Revision:891df0c59d38238ecb21c878c8414d7a3abd2fe0,Prune:true,DryRun:false,SyncStrategy:nil,Resources:[]SyncOperationResource{},Sour
+{"app-namespace":"argocd","app_status_update_ms":0,"application":"taskboard-gitops","auto_sync_ms":31,"compare_app_state_ms":2837,"comparison-level":3,"comparison_with_nothing_ms":0,"dedup_ms":0,"dest-name":"","dest-namespace":"taskboard-gitops","dest-server":
+{"app-namespace":"argocd","application":"taskboard-gitops","level":"info","msg":"Creating namespace","project":"default","syncId":"00001-FPgGA","task":"PreSync/0 resource /Namespace:/taskboard-gitops nil-\u003eobj (,,)","time":"2026-10-07T19:39:55Z"}
+
+$ argocd app history taskboard-gitops --grpc-web
+SOURCE  git://hw-f-gitd/final-gitops-repo
+ID      DATE                           REVISION
+0       2026-10-08 01:09:56 +0530 IST  main (891df0c)
+1       2026-10-08 01:10:39 +0530 IST  main (d5889ef)
+
+$ argocd app get taskboard-gitops --grpc-web | grep -E 'Sync Status|Health Status'
+Sync Status:        Synced to main (d5889ef)
+Health Status:      Healthy
+
+# The controller log for the self-heal (the earlier grep only caught the initial sync): only the two drifted objects were re-applied, as a partial sync to the same Git revision.
+$ kubectl -n argocd logs statefulset/argocd-application-controller --since=10m | grep taskboard-gitops | grep -E '"time":"2026-10-07T19:41:0' | jq -r '"\(.time)  \(.msg)"' | grep -E 'Initiated automated sync|Applying resource|Partial sync' | cut -c1-170
+2026-10-07T19:41:05Z  Initiated automated sync to 'd5889ef011fa82e6632b68ab8de2149598f58336'
+2026-10-07T19:41:05Z  Initiated automated sync to 'd5889ef011fa82e6632b68ab8de2149598f58336'
+2026-10-07T19:41:05Z  Applying resource ConfigMap/taskboard-gitops-config in cluster: https://10.96.0.1:443, namespace: taskboard-gitops
+2026-10-07T19:41:05Z  Applying resource Deployment/taskboard-gitops-frontend in cluster: https://10.96.0.1:443, namespace: taskboard-gitops
+2026-10-07T19:41:05Z  Partial sync operation to d5889ef011fa82e6632b68ab8de2149598f58336 succeeded
+

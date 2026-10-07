@@ -1,0 +1,97 @@
+$ kubectl apply -f pod-lifecycle/09-startup.yaml
+pod/lifecycle-startup created
+
+$ kubectl get pod lifecycle-startup
+NAME                READY   STATUS    RESTARTS   AGE
+lifecycle-startup   0/1     Running   0          15s
+
+$ kubectl get pod lifecycle-startup -o 'jsonpath=started={.status.containerStatuses[0].started} ready={.status.containerStatuses[0].ready}{"\n"}'
+started=false ready=false
+
+$ kubectl wait --for=condition=Ready pod/lifecycle-startup --timeout=120s
+pod/lifecycle-startup condition met
+
+$ kubectl get pods --field-selector metadata.name=lifecycle-startup -w --output-watch-events    # ran in the background from apply until now
+EVENT      NAME                READY   STATUS    RESTARTS   AGE
+ADDED      lifecycle-startup   0/1     Pending   0          0s
+MODIFIED   lifecycle-startup   0/1     Pending   0          0s
+MODIFIED   lifecycle-startup   0/1     ContainerCreating   0          0s
+MODIFIED   lifecycle-startup   0/1     ContainerCreating   0          1s
+MODIFIED   lifecycle-startup   0/1     Running             0          1s
+MODIFIED   lifecycle-startup   0/1     Running             0          36s
+MODIFIED   lifecycle-startup   1/1     Running             0          36s
+
+$ kubectl get pod lifecycle-startup
+NAME                READY   STATUS    RESTARTS   AGE
+lifecycle-startup   1/1     Running   0          36s
+
+$ kubectl get pod lifecycle-startup -o 'jsonpath=started={.status.containerStatuses[0].started} ready={.status.containerStatuses[0].ready} restarts={.status.containerStatuses[0].restartCount}{"\n"}'
+started=true ready=true restarts=0
+
+$ kubectl describe pod lifecycle-startup
+Name:             lifecycle-startup
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-a-control-plane/172.18.0.3
+Start Time:       Wed, 07 Oct 2026 22:48:47 +0530
+Labels:           <none>
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.187
+IPs:
+  IP:  10.244.0.187
+Containers:
+  slow-app:
+    Container ID:  containerd://a7682359aa110015c71f26a40eea3fb7e0e8916f7d4efb72b779a072f8c62ecd
+    Image:         busybox:1.36
+    Image ID:      docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo 'Application starting...'; sleep 30; touch /tmp/started; echo 'Application started'; sleep 300
+    State:          Running
+      Started:      Wed, 07 Oct 2026 22:48:48 +0530
+    Ready:          True
+    Restart Count:  0
+    Startup:        exec [sh -c test -f /tmp/started] delay=0s timeout=1s period=5s #success=1 #failure=10
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-8kvpn (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-8kvpn:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age               From               Message
+  ----     ------     ----              ----               -------
+  Normal   Scheduled  35s               default-scheduler  Successfully assigned default/lifecycle-startup to hw-a-control-plane
+  Normal   Pulled     35s               kubelet            spec.containers{slow-app}: Container image "busybox:1.36" already present on machine and can be accessed by the pod
+  Normal   Created    35s               kubelet            spec.containers{slow-app}: Container created
+  Normal   Started    35s               kubelet            spec.containers{slow-app}: Container started
+  Warning  Unhealthy  5s (x6 over 30s)  kubelet            spec.containers{slow-app}: Startup probe failed:
+
+$ kubectl logs lifecycle-startup
+Application starting...
+Application started
+
+### cleanup
+$ kubectl delete pod lifecycle-startup --wait=false
+pod "lifecycle-startup" deleted from default namespace
+

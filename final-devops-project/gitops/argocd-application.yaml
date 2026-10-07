@@ -1,0 +1,38 @@
+# The real GitOps definition: ArgoCD watches the public GitHub repo and keeps
+# namespace "taskboard-gitops" equal to the Helm chart in Git.
+#
+#   kubectl apply -n argocd -f gitops/argocd-application.yaml
+#
+# Images are pulled from GHCR (pushed by .github/workflows/session21-final.yml).
+# GHCR packages are private by default: make them public, or add an
+# imagePullSecret (imagePullSecrets value) for the cluster to pull them.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: taskboard
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io   # deleting the app deletes its resources
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/rudhar07/devops-heros.git
+    targetRevision: main
+    path: final-devops-project/helm/taskboard
+    helm:
+      releaseName: taskboard-gitops
+      valueFiles:
+        - values-gitops.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: taskboard-gitops
+  syncPolicy:
+    automated:
+      prune: true      # delete what was removed from Git
+      selfHeal: true   # undo manual changes in the cluster (drift)
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff: {duration: 10s, factor: 2, maxDuration: 1m}

@@ -1,0 +1,17 @@
+### Why did Grafana and kube-scheduler/kube-controller-manager restart? (noticed in the final pod list)
+$ kubectl -n monitoring get pod -l app.kubernetes.io/name=grafana -o jsonpath={range .items[0].status.containerStatuses[*]}{.name}: restarts={.restartCount} lastState={.lastState.terminated.reason} exit={.lastState.terminated.exitCode} at={.lastState.terminated.finishedAt}{"
+"}{end}
+grafana: restarts=2 lastState=OOMKilled exit=137 at=2026-10-07T18:21:13Z
+grafana-sc-dashboard: restarts=0 lastState= exit= at=
+grafana-sc-datasources: restarts=0 lastState= exit= at=
+
+$ kubectl -n kube-system get pod kube-scheduler-hw-e-control-plane kube-controller-manager-hw-e-control-plane -o jsonpath={range .items[*]}{.metadata.name}: lastState={.status.containerStatuses[0].lastState.terminated.reason} exit={.status.containerStatuses[0].lastState.terminated.exitCode} at={.status.containerStatuses[0].lastState.terminated.finishedAt}{"
+"}{end}
+kube-scheduler-hw-e-control-plane: lastState=Error exit=1 at=2026-10-07T18:21:09Z
+kube-controller-manager-hw-e-control-plane: lastState=Error exit=1 at=2026-10-07T18:21:09Z
+
+$ kubectl -n kube-system logs kube-scheduler-hw-e-control-plane --previous | tail -3
+I1007 18:21:09.445963       1 server.go:281] "[graceful-termination] secure server has stopped listening"
+I1007 18:21:09.472462       1 server.go:283] "[graceful-termination] secure server is exiting"
+E1007 18:21:09.472523       1 server.go:337] "Leaderelection lost"
+

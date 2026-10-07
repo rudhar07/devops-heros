@@ -1,0 +1,76 @@
+# Workflow lint
+$ actionlint -version | head -1; command -v shellcheck >/dev/null && echo "shellcheck: $(shellcheck --version | sed -n 2p)" || echo 'shellcheck: not installed (actionlint skips the shell checks of run: blocks)'
+1.7.12
+shellcheck: version: 0.11.0
+
+$ cd .. && actionlint -verbose .github/workflows/session21-final.yml 2>&1 | tail -3; echo actionlint-exit=${PIPESTATUS[0]}
+verbose: Found 0 parse errors in 1 ms for .github/workflows/session21-final.yml
+verbose: Rule "pyflakes" was disabled: exec: "pyflakes": executable file not found in $PATH
+verbose: Found total 0 errors in 141 ms for .github/workflows/session21-final.yml
+actionlint-exit=0
+
+$ cd .. && actionlint .github/workflows/session16-cicd.yml .github/workflows/session17-devsecops.yml .github/workflows/session21-final.yml && echo 'all 3 root workflows lint clean'
+all 3 root workflows lint clean
+
+$ diff ../.github/workflows/session21-final.yml .github/workflows/session21-final.yml && echo 'reference copy identical'
+diff: .github/workflows/session21-final.yml: No such file or directory
+[exit code 2]
+
+
+# Local rehearsal of the CI 'compose-e2e' job: same commands as the workflow step, GITHUB_SHA=local because the local image was built without the build arg (GIT_SHA defaults to 'local').
+$ docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E '^taskboard-(backend|frontend):local$'
+taskboard-frontend:local
+taskboard-backend:local
+
+$ docker compose -f docker/docker-compose.yml up -d --no-build --wait --wait-timeout 180 2>&1 | grep -E 'Healthy|Exited|Started' | sort -u
+ Container taskboard-backend-1 Healthy 
+ Container taskboard-backend-1 Started 
+ Container taskboard-frontend-1 Healthy 
+ Container taskboard-frontend-1 Started 
+ Container taskboard-migrate-1 Exited 
+ Container taskboard-migrate-1 Started 
+ Container taskboard-postgres-1 Healthy 
+ Container taskboard-postgres-1 Started 
+
+$ export GITHUB_SHA=local; base=http://localhost:18090
+curl -fsS "${base}/" | grep -q '<title>TaskBoard</title>'
+id=$(curl -fsS -X POST "${base}/api/tasks" -H 'Content-Type: application/json' -d '{"title":"ci compose test","priority":"HIGH"}' | jq -r .id)
+curl -fsS "${base}/api/tasks/${id}" | jq -e '.title == "ci compose test"'
+curl -fsS -X PUT "${base}/api/tasks/${id}" -H 'Content-Type: application/json' -d '{"status":"DONE"}' | jq -e '.status == "DONE"'
+curl -fsS "${base}/api/tasks" | jq -e 'length == 1'
+test "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "${base}/api/tasks/${id}")" = 204
+test "$(curl -s -o /dev/null -w '%{http_code}' "${base}/api/tasks/${id}")" = 404
+curl -fsS "${base}/api/info" | jq -e --arg sha "${GITHUB_SHA}" '.commit == $sha'
+echo 'Compose CRUD OK'
+true
+true
+true
+true
+Compose CRUD OK
+
+$ docker compose -f docker/docker-compose.yml down -v
+ Container taskboard-frontend-1 Stopping 
+ Container taskboard-frontend-1 Stopped 
+ Container taskboard-frontend-1 Removing 
+ Container taskboard-frontend-1 Removed 
+ Container taskboard-backend-1 Stopping 
+ Container taskboard-backend-1 Stopped 
+ Container taskboard-backend-1 Removing 
+ Container taskboard-backend-1 Removed 
+ Container taskboard-migrate-1 Stopping 
+ Container taskboard-migrate-1 Stopped 
+ Container taskboard-migrate-1 Removing 
+ Container taskboard-migrate-1 Removed 
+ Container taskboard-postgres-1 Stopping 
+ Container taskboard-postgres-1 Stopped 
+ Container taskboard-postgres-1 Removing 
+ Container taskboard-postgres-1 Removed 
+ Network taskboard_default Removing 
+ Volume taskboard_postgres-data Removing 
+ Volume taskboard_postgres-data Removed 
+ Network taskboard_default Removed 
+
+# (the diff above failed because I had not copied the reference file yet:)
+$ cp ../.github/workflows/session21-final.yml .github/workflows/session21-final.yml && diff ../.github/workflows/session21-final.yml .github/workflows/session21-final.yml && echo 'reference copy identical'
+reference copy identical
+

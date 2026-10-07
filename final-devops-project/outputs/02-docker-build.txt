@@ -1,0 +1,102 @@
+# Build both images (run from final-devops-project/). --progress=plain so every step is visible.
+$ docker build --progress=plain --build-arg GIT_SHA=local-dev -t taskboard-backend:local application/backend 2>&1 | grep -E '^#[0-9]+ (\[|DONE|naming|exporting)' | grep -v CACHED
+#1 [internal] load build definition from Dockerfile
+#1 DONE 0.1s
+#2 [internal] load metadata for docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
+#2 DONE 0.1s
+#3 [internal] load .dockerignore
+#3 DONE 0.0s
+#4 [1/7] FROM docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
+#5 [internal] load build context
+#5 DONE 0.1s
+#6 [2/7] WORKDIR /app
+#6 DONE 0.1s
+#7 [3/7] COPY requirements.txt .
+#7 DONE 0.0s
+#8 [4/7] RUN pip install -r requirements.txt  && pip uninstall -y pip  && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin appuser
+#8 DONE 21.5s
+#9 [5/7] COPY alembic.ini ./
+#9 DONE 0.0s
+#10 [6/7] COPY alembic ./alembic
+#10 DONE 0.0s
+#11 [7/7] COPY app ./app
+#11 DONE 0.0s
+#12 exporting to image
+#12 exporting layers
+#12 exporting layers 1.5s done
+#12 exporting manifest sha256:bb8417cd574f1a3b38bfea105c4813d29aecb4645a94020978c8cb76dbc23c5c done
+#12 exporting config sha256:f00d22a6a7233952cf211308b31675058a69bc3b1ff87d2cbffa5c0778776d38 done
+#12 exporting attestation manifest sha256:870e88ed677aca5ee1d9534d7b1a9598ee5c6a13b8ca4c50402e3113ec4d9702 done
+#12 exporting manifest list sha256:9ba713a1b7e1f0928b4dc9a89bab717dd0018f537d1f7b96bde8ebb1ddc18c6d done
+#12 naming to docker.io/library/taskboard-backend:local done
+#12 DONE 2.0s
+
+$ docker build --progress=plain -t taskboard-frontend:local application/frontend 2>&1 | grep -E '^#[0-9]+ (\[|DONE|naming|exporting|.*tests|.*pass|.*built)' 
+#1 [internal] load build definition from Dockerfile
+#1 DONE 0.1s
+#2 [internal] load metadata for docker.io/nginxinc/nginx-unprivileged:1.30-alpine@sha256:15c994d10d6d78658721c3bcafff14cb281fba2a4bdf9d5ba92c416a472516e3
+#2 DONE 0.0s
+#3 [internal] load metadata for docker.io/library/node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+#3 DONE 0.0s
+#4 [internal] load .dockerignore
+#4 DONE 0.0s
+#5 [internal] load build context
+#5 DONE 0.0s
+#6 [stage-1 1/3] FROM docker.io/nginxinc/nginx-unprivileged:1.30-alpine@sha256:15c994d10d6d78658721c3bcafff14cb281fba2a4bdf9d5ba92c416a472516e3
+#5 [internal] load build context
+#5 DONE 0.0s
+#7 [build 1/7] FROM docker.io/library/node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+#7 DONE 0.1s
+#6 [stage-1 1/3] FROM docker.io/nginxinc/nginx-unprivileged:1.30-alpine@sha256:15c994d10d6d78658721c3bcafff14cb281fba2a4bdf9d5ba92c416a472516e3
+#8 [build 2/7] WORKDIR /app
+#8 DONE 0.2s
+#6 [stage-1 1/3] FROM docker.io/nginxinc/nginx-unprivileged:1.30-alpine@sha256:15c994d10d6d78658721c3bcafff14cb281fba2a4bdf9d5ba92c416a472516e3
+#6 DONE 0.3s
+#9 [build 3/7] COPY package.json package-lock.json ./
+#9 DONE 0.1s
+#10 [stage-1 2/3] COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+#10 DONE 0.0s
+#11 [build 4/7] RUN npm ci --no-audit --no-fund
+#11 DONE 2.9s
+#12 [build 5/7] COPY index.html vite.config.js ./
+#12 DONE 0.1s
+#13 [build 6/7] COPY src ./src
+#13 DONE 0.0s
+#14 [build 7/7] RUN npm test && npm run build
+#14 0.382 ℹ tests 5
+#14 0.382 ℹ pass 5
+#14 1.131 ✓ built in 316ms
+#14 DONE 1.2s
+#15 [stage-1 3/3] COPY --from=build /app/dist /usr/share/nginx/html
+#15 DONE 0.1s
+#16 exporting to image
+#16 exporting layers 0.1s done
+#16 exporting manifest sha256:7bc6043085033ba5fcec2e5cf2b4b259ba8359f44f96f62661e10f2097ae7d3b done
+#16 exporting config sha256:6e25cdb762959e5a95394b5d1235ef44d3a185c326f3f059e4dfa526002a1d81 done
+#16 exporting attestation manifest sha256:d17c4f8c799218df3a494dfeaa4cf5e52bc2d7f948bff67ca98c074aa0e245c2 done
+#16 exporting manifest list sha256:6f833c1d305290bb9fdcba6517439a7d6f3d0e9aa2a77c1f0683712a7e2399b9 done
+#16 naming to docker.io/library/taskboard-frontend:local done
+#16 DONE 0.1s
+
+$ docker image ls --format 'table {{.Repository}}	{{.Tag}}	{{.Size}}' | grep -E 'REPOSITORY|taskboard'
+REPOSITORY                                                     TAG                SIZE
+taskboard-frontend                                             local              90.6MB
+taskboard-backend                                              local              305MB
+
+$ docker image inspect -f '{{.Config.User}}' taskboard-backend:local taskboard-frontend:local
+10001
+101
+
+$ docker run --rm --entrypoint id taskboard-backend:local
+uid=10001(appuser) gid=10001(appuser) groups=10001(appuser)
+
+$ docker run --rm --entrypoint id taskboard-frontend:local
+uid=101(nginx) gid=101(nginx) groups=101(nginx),101(nginx)
+
+$ docker run --rm --entrypoint sh taskboard-backend:local -c 'python -m pip --version || echo pip not present in the final image'
+/usr/local/bin/python: No module named pip
+pip not present in the final image
+
+$ docker history --format '{{.CreatedBy}}' taskboard-frontend:local | grep -ciE 'node|npm' || true
+0
+

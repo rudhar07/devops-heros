@@ -1,0 +1,83 @@
+# PromQL queries against the Prometheus HTTP API (NodePort 30101 -> localhost:8085), Wed Oct  7 23:45:55 IST 2026
+# Label output is trimmed of endpoint/service/id/image noise by the helper script; values are untouched.
+
+## 1. Targets up
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=up{namespace="podinfo"}'
+status: success | resultType: vector | series: 2
+   {"__name__":"up","container":"podinfo","instance":"10.244.0.12:9898","job":"podinfo","namespace":"podinfo","pod":"podinfo-ff5c6b4f-mgzg6"} => 1
+   {"__name__":"up","container":"podinfo","instance":"10.244.0.13:9898","job":"podinfo","namespace":"podinfo","pod":"podinfo-ff5c6b4f-bjffk"} => 1
+
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=count by (job) (up == 1)'
+status: success | resultType: vector | series: 10
+   {"job":"apiserver"} => 1
+   {"job":"kps-kube-prometheus-stack-prometheus"} => 2
+   {"job":"kubelet"} => 3
+   {"job":"coredns"} => 2
+   {"job":"kps-kube-prometheus-stack-operator"} => 1
+   {"job":"node-exporter"} => 1
+   {"job":"kube-state-metrics"} => 1
+   {"job":"kps-kube-prometheus-stack-alertmanager"} => 2
+   {"job":"kps-grafana"} => 1
+   {"job":"podinfo"} => 2
+
+## 2. CPU per podinfo pod (cores)
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="podinfo", container!=""}[2m]))'
+status: success | resultType: vector | series: 3
+   {"pod":"podinfo-ff5c6b4f-bjffk"} => 0.002474208333333333
+   {"pod":"podinfo-ff5c6b4f-mgzg6"} => 0.002259749737703822
+   {"pod":"loadgen"} => 0.005875159359572597
+
+## 3. Memory working set per pod (bytes)
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=sum by (pod) (container_memory_working_set_bytes{namespace="podinfo", container!=""})'
+status: success | resultType: vector | series: 3
+   {"pod":"podinfo-ff5c6b4f-bjffk"} => 17375232
+   {"pod":"podinfo-ff5c6b4f-mgzg6"} => 16781312
+   {"pod":"loadgen"} => 356352
+
+## 3b. Memory as % of the container limit
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=sum by (pod) (container_memory_working_set_bytes{namespace="podinfo", container="podinfo"}) / sum by (pod) (kube_pod_container_resource_limits{namespace="podinfo", resource="memory"}) * 100'
+status: success | resultType: vector | series: 2
+   {"pod":"podinfo-ff5c6b4f-bjffk"} => 25.89111328125
+   {"pod":"podinfo-ff5c6b4f-mgzg6"} => 25.006103515625
+
+## 4. App request rate (req/s) by status
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=sum by (status) (rate(http_requests_total{namespace="podinfo"}[2m]))'
+status: success | resultType: vector | series: 1
+   {"status":"200"} => 2.115866527777778
+
+## 4b. p95 latency (seconds) from the histogram
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="podinfo"}[2m])))'
+status: success | resultType: vector | series: 1
+   {} => 0.004842181643319325
+
+## 5. App health: readiness from kube-state-metrics
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=kube_pod_status_ready{namespace="podinfo", condition="true"}'
+status: success | resultType: vector | series: 3
+   {"__name__":"kube_pod_status_ready","condition":"true","container":"kube-state-metrics","instance":"10.244.0.7:8080","job":"kube-state-metrics","namespace":"podinfo","pod":"podinfo-ff5c6b4f-mgzg6"} => 1
+   {"__name__":"kube_pod_status_ready","condition":"true","container":"kube-state-metrics","instance":"10.244.0.7:8080","job":"kube-state-metrics","namespace":"podinfo","pod":"podinfo-ff5c6b4f-bjffk"} => 1
+   {"__name__":"kube_pod_status_ready","condition":"true","container":"kube-state-metrics","instance":"10.244.0.7:8080","job":"kube-state-metrics","namespace":"podinfo","pod":"loadgen"} => 1
+
+## 5b. App health: probe results from the kubelet (/metrics/probes)
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=prober_probe_total{namespace="podinfo", result="successful"}'
+status: success | resultType: vector | series: 4
+   {"__name__":"prober_probe_total","container":"podinfo","instance":"172.18.0.4:10250","job":"kubelet","namespace":"podinfo","node":"hw-e-control-plane","pod":"podinfo-ff5c6b4f-bjffk","pod_uid":"153de934-1ab4-45f1-b4db-c264611d086e","probe_type":"Liveness","result":"successful"} => 8
+   {"__name__":"prober_probe_total","container":"podinfo","instance":"172.18.0.4:10250","job":"kubelet","namespace":"podinfo","node":"hw-e-control-plane","pod":"podinfo-ff5c6b4f-mgzg6","pod_uid":"f990971b-a1d3-47e5-8b2a-93562d05ac41","probe_type":"Liveness","result":"successful"} => 8
+   {"__name__":"prober_probe_total","container":"podinfo","instance":"172.18.0.4:10250","job":"kubelet","namespace":"podinfo","node":"hw-e-control-plane","pod":"podinfo-ff5c6b4f-mgzg6","pod_uid":"f990971b-a1d3-47e5-8b2a-93562d05ac41","probe_type":"Readiness","result":"successful"} => 17
+   {"__name__":"prober_probe_total","container":"podinfo","instance":"172.18.0.4:10250","job":"kubelet","namespace":"podinfo","node":"hw-e-control-plane","pod":"podinfo-ff5c6b4f-bjffk","pod_uid":"153de934-1ab4-45f1-b4db-c264611d086e","probe_type":"Readiness","result":"successful"} => 15
+
+## 5c. Restarts
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=kube_pod_container_status_restarts_total{namespace="podinfo"}'
+status: success | resultType: vector | series: 3
+   {"__name__":"kube_pod_container_status_restarts_total","container":"podinfo","instance":"10.244.0.7:8080","job":"kube-state-metrics","namespace":"podinfo","pod":"podinfo-ff5c6b4f-mgzg6"} => 0
+   {"__name__":"kube_pod_container_status_restarts_total","container":"podinfo","instance":"10.244.0.7:8080","job":"kube-state-metrics","namespace":"podinfo","pod":"podinfo-ff5c6b4f-bjffk"} => 0
+   {"__name__":"kube_pod_container_status_restarts_total","container":"loadgen","instance":"10.244.0.7:8080","job":"kube-state-metrics","namespace":"podinfo","pod":"loadgen"} => 0
+
+## 6. Node-level CPU/memory (node-exporter)
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m]))'
+status: success | resultType: vector | series: 1
+   {} => 0.3044011021802352
+
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes'
+status: success | resultType: vector | series: 1
+   {"container":"node-exporter","instance":"172.18.0.4:9100","job":"node-exporter","namespace":"monitoring","pod":"kps-prometheus-node-exporter-kj8lw"} => 0.5029178679848719
+

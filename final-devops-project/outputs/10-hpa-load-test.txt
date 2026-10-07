@@ -1,0 +1,169 @@
+# HPA: backend, min 2 / max 4, target 50% CPU of the 100m request. metrics-server provides the CPU numbers.
+# (First run of the load script did nothing: kubectl run --overrides replaced the whole container incl. the command, so curl ran without arguments. Rewritten as a Pod manifest; this is the second run.)
+$ kubectl -n taskboard get hpa
+NAME                REFERENCE                      TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+taskboard-backend   Deployment/taskboard-backend   cpu: 7%/50%   2         4         2          11m
+
+$ kubectl -n taskboard top pods
+NAME                                  CPU(cores)   MEMORY(bytes)   
+taskboard-backend-59d5dcc795-4r2g9    7m           66Mi            
+taskboard-backend-59d5dcc795-865pz    7m           65Mi            
+taskboard-frontend-ddd478648-d4n8k    1m           12Mi            
+taskboard-frontend-ddd478648-zwtpg    1m           12Mi            
+taskboard-postgres-5b7c9564fd-lgfc8   4m           30Mi            
+
+# Start the load (in-cluster curl pod, 8 workers x 150 s):
+$ DURATION=150 WORKERS=8 scripts/load-test.sh
+pod/loadgen created
+loadgen pod started: 8 workers x 150s against http://taskboard-backend.taskboard.svc:8000
+
+# Polling every 15 s (timestamp, HPA line, backend pods):
+--- 00:24:24
+taskboard-backend   Deployment/taskboard-backend   cpu: 7%/50%   2     4     2     11m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+--- 00:24:39
+taskboard-backend   Deployment/taskboard-backend   cpu: 114%/50%   2     4     2     12m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 0/1 Running
+   taskboard-backend-59d5dcc795-rm557 0/1 Running
+--- 00:24:55
+taskboard-backend   Deployment/taskboard-backend   cpu: 345%/50%   2     4     4     12m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:25:10
+taskboard-backend   Deployment/taskboard-backend   cpu: 354%/50%   2     4     4     12m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:25:25
+taskboard-backend   Deployment/taskboard-backend   cpu: 253%/50%   2     4     4     12m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:25:40
+taskboard-backend   Deployment/taskboard-backend   cpu: 206%/50%   2     4     4     13m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:25:56
+taskboard-backend   Deployment/taskboard-backend   cpu: 198%/50%   2     4     4     13m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:26:11
+taskboard-backend   Deployment/taskboard-backend   cpu: 242%/50%   2     4     4     13m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+   NAME                                  CPU(cores)   MEMORY(bytes)   
+   loadgen                               1001m        15Mi            
+   taskboard-backend-59d5dcc795-4r2g9    251m         66Mi            
+   taskboard-backend-59d5dcc795-865pz    246m         65Mi            
+   taskboard-backend-59d5dcc795-r5s8g    281m         67Mi            
+   taskboard-backend-59d5dcc795-rm557    252m         67Mi            
+   taskboard-frontend-ddd478648-d4n8k    1m           12Mi            
+   taskboard-frontend-ddd478648-zwtpg    1m           12Mi            
+   taskboard-postgres-5b7c9564fd-lgfc8   145m         64Mi            
+--- 00:26:26
+taskboard-backend   Deployment/taskboard-backend   cpu: 257%/50%   2     4     4     13m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:26:41
+taskboard-backend   Deployment/taskboard-backend   cpu: 208%/50%   2     4     4     14m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:26:57
+taskboard-backend   Deployment/taskboard-backend   cpu: 196%/50%   2     4     4     14m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:27:12
+taskboard-backend   Deployment/taskboard-backend   cpu: 243%/50%   2     4     4     14m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:27:27
+taskboard-backend   Deployment/taskboard-backend   cpu: 96%/50%   2     4     4     14m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:27:42
+taskboard-backend   Deployment/taskboard-backend   cpu: 5%/50%   2     4     4     15m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:27:58
+taskboard-backend   Deployment/taskboard-backend   cpu: 6%/50%   2     4     4     15m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:28:13
+taskboard-backend   Deployment/taskboard-backend   cpu: 9%/50%   2     4     4     15m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+   taskboard-backend-59d5dcc795-r5s8g 1/1 Running
+   taskboard-backend-59d5dcc795-rm557 1/1 Running
+--- 00:28:28
+taskboard-backend   Deployment/taskboard-backend   cpu: 4%/50%   2     4     4     15m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+--- 00:28:43
+taskboard-backend   Deployment/taskboard-backend   cpu: 6%/50%   2     4     2     16m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+--- 00:28:58
+taskboard-backend   Deployment/taskboard-backend   cpu: 5%/50%   2     4     2     16m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+--- 00:29:14
+taskboard-backend   Deployment/taskboard-backend   cpu: 7%/50%   2     4     2     16m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+--- 00:29:29
+taskboard-backend   Deployment/taskboard-backend   cpu: 6%/50%   2     4     2     16m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+--- 00:29:44
+taskboard-backend   Deployment/taskboard-backend   cpu: 6%/50%   2     4     2     17m
+   taskboard-backend-59d5dcc795-4r2g9 1/1 Running
+   taskboard-backend-59d5dcc795-865pz 1/1 Running
+
+$ kubectl -n taskboard logs loadgen --tail 10
+worker 3 sent 6285 requests
+worker 8 sent 6279 requests
+worker 1 sent 6345 requests
+worker 5 sent 6321 requests
+worker 2 sent 6318 requests
+worker 7 sent 6309 requests
+worker 6 sent 6393 requests
+worker 4 sent 6333 requests
+load test finished
+
+$ kubectl -n taskboard describe hpa taskboard-backend | sed -n '/Events/,$p'
+Events:
+  Type     Reason                        Age                 From                       Message
+  ----     ------                        ----                ----                       -------
+  Normal   SuccessfulRescale             17m                 horizontal-pod-autoscaler  New size: 2; reason: Current number of replicas below Spec.MinReplicas
+  Warning  FailedComputeMetricsReplicas  14m (x12 over 17m)  horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Warning  FailedGetResourceMetric       12m (x21 over 17m)  horizontal-pod-autoscaler  failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+  Normal   SuccessfulRescale             5m23s               horizontal-pod-autoscaler  New size: 4; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             98s                 horizontal-pod-autoscaler  New size: 2; reason: All metrics below target
+

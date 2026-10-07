@@ -1,0 +1,117 @@
+### Install the ingress-nginx controller (kind flavour: hostPort 80/443 on the node)
+$ kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
+namespace/ingress-nginx created
+serviceaccount/ingress-nginx created
+serviceaccount/ingress-nginx-admission created
+role.rbac.authorization.k8s.io/ingress-nginx created
+role.rbac.authorization.k8s.io/ingress-nginx-admission created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx-admission created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+configmap/ingress-nginx-controller created
+service/ingress-nginx-controller created
+service/ingress-nginx-controller-admission created
+deployment.apps/ingress-nginx-controller created
+job.batch/ingress-nginx-admission-create created
+job.batch/ingress-nginx-admission-patch created
+ingressclass.networking.k8s.io/nginx created
+validatingwebhookconfiguration.admissionregistration.k8s.io/ingress-nginx-admission created
+
+$ kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=240s
+pod/ingress-nginx-controller-7c467b649f-6tszt condition met
+
+$ kubectl get pods,svc -n ingress-nginx -o wide
+NAME                                            READY   STATUS      RESTARTS      AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/ingress-nginx-admission-create-m8jdz        0/1     Completed   0             13s   10.244.0.32   hw-a-control-plane   <none>           <none>
+pod/ingress-nginx-admission-patch-4w6wf         0/1     Completed   1 (12s ago)   13s   10.244.0.33   hw-a-control-plane   <none>           <none>
+pod/ingress-nginx-controller-7c467b649f-6tszt   1/1     Running     0             13s   10.244.0.34   hw-a-control-plane   <none>           <none>
+
+NAME                                         TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)                      AGE   SELECTOR
+service/ingress-nginx-controller             LoadBalancer   10.96.97.23     172.18.203.200   80:32704/TCP,443:31850/TCP   13s   app.kubernetes.io/component=controller,app.kubernetes.io/instance=ingress-nginx,app.kubernetes.io/name=ingress-nginx
+service/ingress-nginx-controller-admission   ClusterIP      10.96.225.171   <none>           443/TCP                      13s   app.kubernetes.io/component=controller,app.kubernetes.io/instance=ingress-nginx,app.kubernetes.io/name=ingress-nginx
+
+$ kubectl get ingressclass
+NAME    CONTROLLER             PARAMETERS   AGE
+nginx   k8s.io/ingress-nginx   <none>       13s
+
+### The same Ingress, now picked up by the controller
+$ kubectl get ingress yatri-ingress
+NAME            CLASS   HOSTS         ADDRESS     PORTS   AGE
+yatri-ingress   nginx   yatri.local   localhost   80      44s
+
+$ kubectl describe ingress yatri-ingress
+Name:             yatri-ingress
+Labels:           app=yatri-app
+Namespace:        default
+Address:          localhost
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host         Path  Backends
+  ----         ----  --------
+  yatri.local  
+               /api(/|$)(.*)   yatri-backend-service:80 (10.244.0.28:5000,10.244.0.30:5000)
+               /               yatri-frontend-service:80 (10.244.0.29:80,10.244.0.31:80)
+Annotations:   nginx.ingress.kubernetes.io/rewrite-target: /$2
+               nginx.ingress.kubernetes.io/ssl-redirect: false
+               nginx.ingress.kubernetes.io/use-regex: true
+Events:
+  Type    Reason  Age                From                      Message
+  ----    ------  ----               ----                      -------
+  Normal  Sync    10s (x2 over 10s)  nginx-ingress-controller  Scheduled for sync
+
+### Access the app through the Ingress (path-based routing on host yatri.local)
+$ curl -s -o /dev/null -w 'GET yatri.local/ -> HTTP %{http_code}\n' -H 'Host: yatri.local' http://localhost:30081/
+GET yatri.local/ -> HTTP 200
+
+$ sh -c 'curl -s -H '"'"'Host: yatri.local'"'"' http://localhost:30081/ | grep -o '"'"'<title>.*</title>'"'"''
+<title>Welcome to nginx!</title>
+
+$ curl -s -H 'Host: yatri.local' http://localhost:30081/api/
+Yatri Backend API
+=================
+ENVIRONMENT     : production
+LOG_LEVEL       : INFO
+DEFAULT_CURRENCY: INR
+POSTGRES_USER   : yatri_admin
+POSTGRES_DB     : yatri_production_db
+
+$ curl -s -H 'Host: yatri.local' http://localhost:30081/api/bookings
+Yatri Backend API
+=================
+ENVIRONMENT     : production
+LOG_LEVEL       : INFO
+DEFAULT_CURRENCY: INR
+POSTGRES_USER   : yatri_admin
+POSTGRES_DB     : yatri_production_db
+
+# /api/... goes to the Python backend (it prints values injected from the ConfigMap and the Secret),
+# everything else goes to nginx. The rewrite-target /$2 strips the /api prefix before the request reaches the backend.
+$ curl -s -o /dev/null -w 'unknown host -> HTTP %{http_code}\n' -H 'Host: other.local' http://localhost:30081/
+unknown host -> HTTP 404
+
+$ curl -s -o /dev/null -w 'no Host header match (plain localhost) -> HTTP %{http_code}\n' http://localhost:30081/
+no Host header match (plain localhost) -> HTTP 404
+
+$ sh -c 'curl -s --resolve yatri.local:30081:127.0.0.1 http://yatri.local:30081/api/ | head -3'
+Yatri Backend API
+=================
+ENVIRONMENT     : production
+
+### The controller turned the Ingress into nginx config:
+$ kubectl exec -n ingress-nginx ingress-nginx-controller-7c467b649f-6tszt -- grep -n -E 'server_name yatri.local|location ~\*? "?\^/' /etc/nginx/nginx.conf
+335:		server_name yatri.local ;
+348:		location ~* "^/api(/|$)(.*)" {
+444:		location ~* "^/" {
+
+$ kubectl logs -n ingress-nginx ingress-nginx-controller-7c467b649f-6tszt --tail=6
+192.168.65.1 - - [07/Oct/2026:17:59:34 +0000] "GET / HTTP/1.1" 200 615 "-" "curl/8.7.1" 74 0.020 [default-yatri-frontend-service-80] [] 10.244.0.29:80 615 0.021 200 50d214a032ef61f235ba323b1bb42a21
+192.168.65.1 - - [07/Oct/2026:17:59:34 +0000] "GET / HTTP/1.1" 200 615 "-" "curl/8.7.1" 74 0.004 [default-yatri-frontend-service-80] [] 10.244.0.29:80 615 0.003 200 cc286cc5de220b187d6b9fe7e2dd423a
+192.168.65.1 - - [07/Oct/2026:17:59:34 +0000] "GET / HTTP/1.1" 200 615 "-" "curl/8.7.1" 74 0.035 [default-yatri-frontend-service-80] [] 10.244.0.31:80 615 0.036 200 83d649e95e472d56ede6de51de989af6
+192.168.65.1 - - [07/Oct/2026:17:59:34 +0000] "GET /api/ HTTP/1.1" 200 178 "-" "curl/8.7.1" 78 0.182 [default-yatri-backend-service-80] [] 10.244.0.30:5000 178 0.181 200 1334c11fcf4d2d04b725628b910957fe
+192.168.65.1 - - [07/Oct/2026:17:59:34 +0000] "GET /api/bookings HTTP/1.1" 200 178 "-" "curl/8.7.1" 86 0.075 [default-yatri-backend-service-80] [] 10.244.0.28:5000 178 0.076 200 e724261acb43f2f8352c2a573e2f69c0
+192.168.65.1 - - [07/Oct/2026:17:59:34 +0000] "GET /api/ HTTP/1.1" 200 178 "-" "curl/8.7.1" 84 0.002 [default-yatri-backend-service-80] [] 10.244.0.28:5000 178 0.003 200 5f89dee619c6bdd7394f19e037d99c0f
+

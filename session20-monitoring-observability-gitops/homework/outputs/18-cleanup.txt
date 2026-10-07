@@ -1,0 +1,17 @@
+$ docker rm -f hw-e-gitd
+hw-e-gitd
+
+$ kind delete cluster --name hw-e
+Deleting cluster "hw-e" ...
+Deleted nodes: ["hw-e-control-plane"]
+
+$ kind get clusters
+No kind clusters found.
+
+$ docker ps --format {{.Names}}
+taskboard-frontend-1
+taskboard-backend-1
+taskboard-postgres-1
+pitchbook-web
+zohocrm-website
+

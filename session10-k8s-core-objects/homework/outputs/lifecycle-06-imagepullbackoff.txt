@@ -1,0 +1,76 @@
+$ kubectl apply -f pod-lifecycle/06-imagepullbackoff.yaml
+pod/lifecycle-image-error created
+
+$ kubectl get pods --field-selector metadata.name=lifecycle-image-error -w --output-watch-events    # ran in the background from apply until now
+EVENT      NAME                    READY   STATUS    RESTARTS   AGE
+ADDED      lifecycle-image-error   0/1     Pending   0          0s
+MODIFIED   lifecycle-image-error   0/1     Pending   0          0s
+MODIFIED   lifecycle-image-error   0/1     ContainerCreating   0          0s
+MODIFIED   lifecycle-image-error   0/1     ContainerCreating   0          1s
+MODIFIED   lifecycle-image-error   0/1     ErrImagePull        0          4s
+MODIFIED   lifecycle-image-error   0/1     ImagePullBackOff    0          16s
+MODIFIED   lifecycle-image-error   0/1     ErrImagePull        0          32s
+
+$ kubectl get pod lifecycle-image-error
+NAME                    READY   STATUS         RESTARTS   AGE
+lifecycle-image-error   0/1     ErrImagePull   0          40s
+
+$ kubectl describe pod lifecycle-image-error
+Name:             lifecycle-image-error
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-a-control-plane/172.18.0.3
+Start Time:       Wed, 07 Oct 2026 22:47:26 +0530
+Labels:           <none>
+Annotations:      <none>
+Status:           Pending
+IP:               10.244.0.185
+IPs:
+  IP:  10.244.0.185
+Containers:
+  broken-image:
+    Container ID:   
+    Image:          jakwehrgkaejw:kahsdfgkhj
+    Image ID:       
+    Port:           <none>
+    Host Port:      <none>
+    State:          Waiting
+      Reason:       ErrImagePull
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-phbxd (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-phbxd:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  40s                default-scheduler  Successfully assigned default/lifecycle-image-error to hw-a-control-plane
+  Normal   Pulling    24s (x2 over 39s)  kubelet            spec.containers{broken-image}: Pulling image "jakwehrgkaejw:kahsdfgkhj"
+  Warning  Failed     22s (x2 over 37s)  kubelet            spec.containers{broken-image}: Failed to pull image "jakwehrgkaejw:kahsdfgkhj": failed to pull and unpack image "docker.io/library/jakwehrgkaejw:kahsdfgkhj": failed to resolve reference "docker.io/library/jakwehrgkaejw:kahsdfgkhj": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+  Warning  Failed     22s (x2 over 37s)  kubelet            spec.containers{broken-image}: Error: ErrImagePull
+  Normal   BackOff    8s (x2 over 36s)   kubelet            spec.containers{broken-image}: Back-off pulling image "jakwehrgkaejw:kahsdfgkhj"
+  Warning  Failed     8s (x2 over 36s)   kubelet            spec.containers{broken-image}: Error: ImagePullBackOff
+
+### cleanup
+$ kubectl delete pod lifecycle-image-error --wait=false
+pod "lifecycle-image-error" deleted from default namespace
+

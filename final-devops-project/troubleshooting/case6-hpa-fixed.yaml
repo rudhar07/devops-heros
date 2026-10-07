@@ -1,0 +1,23 @@
+# Fix for case 6: give the container a CPU request (and limits).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpa-demo
+  namespace: taskboard
+  labels: {app: hpa-demo}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: hpa-demo}}
+  template:
+    metadata: {labels: {app: hpa-demo}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 101, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: web
+          image: taskboard-frontend:local
+          ports: [{containerPort: 8080}]
+          env: [{name: BACKEND_URL, value: "http://taskboard-backend:8000"}]
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 64Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}

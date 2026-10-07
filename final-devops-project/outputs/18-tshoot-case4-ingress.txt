@@ -1,0 +1,64 @@
+# CASE 4 - Ingress points at the wrong Service name and the wrong port (routing layer)
+# This is the bug in the instructor's chart: /api -> taskboard-backend:8080, but the Service listens on 8000. I added a second mistake for '/': Service taskboard-frontend-v2 does not exist.
+$ kubectl apply -f troubleshooting/case4-broken-ingress.yaml
+ingress.networking.k8s.io/taskboard-broken created
+
+$ for i in $(seq 1 15); do c=$(curl -s -o /dev/null -w '%{http_code}' http://broken.localhost:30110/api/tasks); [ $c != 404 ] && break; sleep 2; done; echo ready
+ready
+
+# IDENTIFY
+$ curl -s -o /dev/null -w '/api/tasks -> HTTP %{http_code}
+' http://broken.localhost:30110/api/tasks
+/api/tasks -> HTTP 503
+
+$ curl -s -o /dev/null -w '/          -> HTTP %{http_code}
+' http://broken.localhost:30110/
+/          -> HTTP 503
+
+# INVESTIGATE
+$ kubectl -n taskboard describe ingress taskboard-broken | sed -n '/Rules/,/Annotations/p'
+Rules:
+  Host              Path  Backends
+  ----              ----  --------
+  broken.localhost  
+                    /api   taskboard-backend:8080 ()
+                    /      taskboard-frontend-v2:80 (<error: services "taskboard-frontend-v2" not found>)
+Annotations:        <none>
+
+$ kubectl -n taskboard get svc taskboard-backend -o jsonpath='{.spec.ports}'; echo
+[{"name":"http","port":8000,"protocol":"TCP","targetPort":"http"}]
+
+$ kubectl -n taskboard get svc taskboard-frontend-v2
+Error from server (NotFound): services "taskboard-frontend-v2" not found
+[exit code 1]
+
+$ kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --since=2m | grep -E 'taskboard-frontend-v2|8080' | grep -vE '^[0-9.]+ - ' | sort -u | head -4
+W1007 19:30:13.982688      11 controller.go:1135] Error obtaining Endpoints for Service "taskboard/taskboard-frontend-v2": no object matching key "taskboard/taskboard-frontend-v2" in local store
+W1007 19:30:13.996743      11 controller.go:1135] Error obtaining Endpoints for Service "taskboard/taskboard-frontend-v2": no object matching key "taskboard/taskboard-frontend-v2" in local store
+
+# ROOT CAUSE: (a) backend port 8080 is not a port of Service taskboard-backend (it exposes 8000/'http'); (b) Service taskboard-frontend-v2 does not exist. ingress-nginx has no upstream for either -> 503.
+# FIX: refer to the real Services and use the named port 'http' (survives port number changes) - exactly what helm/taskboard/templates/ingress.yaml does.
+$ kubectl -n taskboard patch ingress taskboard-broken --type=json -p='[{"op":"replace","path":"/spec/rules/0/http/paths/0/backend/service/port","value":{"name":"http"}},{"op":"replace","path":"/spec/rules/0/http/paths/1/backend/service/name","value":"taskboard-frontend"},{"op":"replace","path":"/spec/rules/0/http/paths/1/backend/service/port","value":{"name":"http"}}]'
+ingress.networking.k8s.io/taskboard-broken patched
+
+# VERIFY
+$ kubectl -n taskboard describe ingress taskboard-broken | sed -n '/Rules/,/Annotations/p'
+Rules:
+  Host              Path  Backends
+  ----              ----  --------
+  broken.localhost  
+                    /api   taskboard-backend:http (10.244.0.16:8000,10.244.0.17:8000)
+                    /      taskboard-frontend:http (10.244.0.57:8080,10.244.0.58:8080)
+Annotations:        <none>
+
+$ for i in $(seq 1 15); do c=$(curl -s -o /dev/null -w '%{http_code}' http://broken.localhost:30110/api/tasks); echo "/api/tasks -> $c"; [ $c = 200 ] && break; sleep 2; done
+/api/tasks -> 503
+/api/tasks -> 200
+
+$ curl -s -o /dev/null -w '/ -> HTTP %{http_code}
+' http://broken.localhost:30110/
+/ -> HTTP 200
+
+$ kubectl delete -f troubleshooting/case4-broken-ingress.yaml
+ingress.networking.k8s.io "taskboard-broken" deleted from taskboard namespace
+

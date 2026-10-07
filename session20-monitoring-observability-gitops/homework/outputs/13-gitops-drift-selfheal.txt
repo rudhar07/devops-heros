@@ -1,0 +1,64 @@
+### Before (00:04:44): Git says replicas=4, APP_MESSAGE=version 2
+$ kubectl -n gitops-demo get deploy web
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+web    4/4     4            4           7m35s
+
+### Drift: change the live objects by hand, behind Git's back
+$ kubectl -n gitops-demo scale deploy web --replicas=1
+deployment.apps/web scaled
+
+$ kubectl -n gitops-demo set env deploy/web APP_MESSAGE=edited by hand with kubectl
+deployment.apps/web env updated
+
+  00:04:45 +1s  deploy[spec ready APP_MESSAGE]=[1 1 edited by hand with kubectl]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:04:47 +3s  deploy[spec ready APP_MESSAGE]=[4 3 hello from git, version 2]  app=Synced/Progressing rev=22f6509f0044216f2
+  00:04:49 +5s  deploy[spec ready APP_MESSAGE]=[4 4 hello from git, version 2]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+
+$ kubectl -n gitops-demo get deploy web
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+web    4/4     4            4           7m40s
+
+$ kubectl -n gitops-demo get deploy web -o jsonpath={.spec.template.spec.containers[0].env}{"\n"}
+[{"name":"APP_MESSAGE","value":"hello from git, version 2"}]
+
+### Self-heal shows up as extra sync operations in the Application status (operationState) and in the controller log:
+$ kubectl -n argocd get application gitops-demo-web -o jsonpath={.status.operationState.operation.initiatedBy}{"\n"}{.status.operationState.phase}{"  "}{.status.operationState.message}{"\n"}{.status.operationState.finishedAt}{"\n"}
+{"automated":true}
+Succeeded  successfully synced (all tasks run)
+2026-10-07T18:34:45Z
+
+$ kubectl -n argocd logs argocd-application-controller-0 --since=3m | grep -iE "self-heal|selfheal|Initiated automated sync|needs selfheal" | tail -6
+{"application":"gitops-demo-web","dest-namespace":"gitops-demo","dest-server":"https://kubernetes.default.svc","level":"info","msg":"Initiated automated sync to '22f6509f0044216f2b61d2ef01719ce60ea28f6a'","reason":"OperationStarted","time":"2026-10-07T18:34:07Z","type":"Normal"}
+{"app-namespace":"argocd","application":"gitops-demo-web","level":"info","msg":"Initiated automated sync to '22f6509f0044216f2b61d2ef01719ce60ea28f6a'","project":"default","time":"2026-10-07T18:34:07Z"}
+{"app-namespace":"argocd","application":"gitops-demo-web","level":"info","msg":"Initialized new operation: {\u0026SyncOperation{Revision:22f6509f0044216f2b61d2ef01719ce60ea28f6a,Prune:true,DryRun:false,SyncStrategy:nil,Resources:[]SyncOperationResource{},Source:\u0026ApplicationSource{RepoURL:git://hw-e-gitd/gitops-demo-repo,Path:app,TargetRevision:main,Helm:nil,Kustomize:nil,Directory:nil,Plugin:
+{"application":"gitops-demo-web","dest-namespace":"gitops-demo","dest-server":"https://kubernetes.default.svc","level":"info","msg":"Initiated automated sync to '22f6509f0044216f2b61d2ef01719ce60ea28f6a'","reason":"OperationStarted","time":"2026-10-07T18:34:45Z","type":"Normal"}
+{"app-namespace":"argocd","application":"gitops-demo-web","level":"info","msg":"Initiated automated sync to '22f6509f0044216f2b61d2ef01719ce60ea28f6a'","project":"default","time":"2026-10-07T18:34:45Z"}
+{"app-namespace":"argocd","application":"gitops-demo-web","level":"info","msg":"Initialized new operation: {\u0026SyncOperation{Revision:22f6509f0044216f2b61d2ef01719ce60ea28f6a,Prune:true,DryRun:false,SyncStrategy:nil,Resources:[]SyncOperationResource{SyncOperationResource{Group:apps,Kind:Deployment,Name:web,Namespace:,},},Source:\u0026ApplicationSource{RepoURL:git://hw-e-gitd/gitops-demo-repo,Pa
+
+$ argocd app get gitops-demo-web
+Name:               argocd/gitops-demo-web
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          gitops-demo
+URL:                https://localhost:8086/applications/gitops-demo-web
+Source:
+- Repo:             git://hw-e-gitd/gitops-demo-repo
+  Target:           main
+  Path:             app
+SyncWindow:         Sync Allowed
+Sync Policy:        Automated (Prune)
+Sync Status:        Synced to main (22f6509)
+Health Status:      Healthy
+
+GROUP  KIND        NAMESPACE    NAME              STATUS  HEALTH   HOOK  MESSAGE
+apps   Deployment  gitops-demo  web               Synced  Healthy        deployment.apps/web configured
+       ConfigMap   gitops-demo  web-extra-config  Synced                 
+       Namespace                gitops-demo       Synced                 
+       Service     gitops-demo  web               Synced  Healthy        
+
+$ argocd app history gitops-demo-web
+SOURCE  git://hw-e-gitd/gitops-demo-repo
+ID      DATE                           REVISION
+0       2026-10-07 23:57:09 +0530 IST  main (c404e4b)
+1       2026-10-08 00:04:07 +0530 IST  main (22f6509)
+

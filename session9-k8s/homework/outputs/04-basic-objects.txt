@@ -1,0 +1,299 @@
+$ kubectl api-resources --namespaced=true --api-group=
+NAME                     SHORTNAMES   APIVERSION   NAMESPACED   KIND
+bindings                              v1           true         Binding
+configmaps               cm           v1           true         ConfigMap
+endpoints                ep           v1           true         Endpoints
+events                   ev           v1           true         Event
+limitranges              limits       v1           true         LimitRange
+persistentvolumeclaims   pvc          v1           true         PersistentVolumeClaim
+pods                     po           v1           true         Pod
+podtemplates                          v1           true         PodTemplate
+replicationcontrollers   rc           v1           true         ReplicationController
+resourcequotas           quota        v1           true         ResourceQuota
+secrets                               v1           true         Secret
+serviceaccounts          sa           v1           true         ServiceAccount
+services                 svc          v1           true         Service
+
+$ kubectl api-resources --api-group=apps
+NAME                  SHORTNAMES   APIVERSION   NAMESPACED   KIND
+controllerrevisions                apps/v1      true         ControllerRevision
+daemonsets            ds           apps/v1      true         DaemonSet
+deployments           deploy       apps/v1      true         Deployment
+replicasets           rs           apps/v1      true         ReplicaSet
+statefulsets          sts          apps/v1      true         StatefulSet
+
+$ kubectl run hello-pod --image=nginx:1.27-alpine --labels=app=hello --port=80
+pod/hello-pod created
+
+$ kubectl wait --for=condition=Ready pod/hello-pod --timeout=120s
+pod/hello-pod condition met
+
+$ kubectl get pods -o wide --show-labels
+NAME        READY   STATUS    RESTARTS   AGE   IP           NODE          NOMINATED NODE   READINESS GATES   LABELS
+hello-pod   1/1     Running   0          14s   10.244.0.3   hw-minikube   <none>           <none>            app=hello
+
+$ kubectl describe pod hello-pod
+Name:             hello-pod
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-minikube/192.168.49.2
+Start Time:       Wed, 07 Oct 2026 21:54:18 +0530
+Labels:           app=hello
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.3
+IPs:
+  IP:  10.244.0.3
+Containers:
+  hello-pod:
+    Container ID:   containerd://026afe27b8e56288d8895560b640352aaffa9b39a92bb425ca6ed8ded9f7cf07
+    Image:          nginx:1.27-alpine
+    Image ID:       docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Wed, 07 Oct 2026 21:54:32 +0530
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-5wv2d (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-5wv2d:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  14s   default-scheduler  Successfully assigned default/hello-pod to hw-minikube
+  Normal  Pulling    14s   kubelet            spec.containers{hello-pod}: Pulling image "nginx:1.27-alpine"
+  Normal  Pulled     0s    kubelet            spec.containers{hello-pod}: Successfully pulled image "nginx:1.27-alpine" in 13.423s (13.423s including waiting). Image size: 21832241 bytes.
+  Normal  Created    0s    kubelet            spec.containers{hello-pod}: Container created
+  Normal  Started    0s    kubelet            spec.containers{hello-pod}: Container started
+
+$ kubectl logs hello-pod --tail=5
+2026/10/07 16:24:32 [notice] 1#1: start worker process 39
+2026/10/07 16:24:32 [notice] 1#1: start worker process 40
+2026/10/07 16:24:32 [notice] 1#1: start worker process 41
+2026/10/07 16:24:32 [notice] 1#1: start worker process 42
+2026/10/07 16:24:32 [notice] 1#1: start worker process 43
+
+$ kubectl exec hello-pod -- nginx -v
+nginx version: nginx/1.27.5
+
+$ kubectl get pod hello-pod -o yaml --show-managed-fields=false
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: "2026-10-07T16:24:18Z"
+  generation: 1
+  labels:
+    app: hello
+  name: hello-pod
+  namespace: default
+  resourceVersion: "529"
+  uid: a5c38ff4-aa3c-48e8-84a7-a53e2468024b
+spec:
+  containers:
+  - image: nginx:1.27-alpine
+    imagePullPolicy: IfNotPresent
+    name: hello-pod
+    ports:
+    - containerPort: 80
+      protocol: TCP
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-5wv2d
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: hw-minikube
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: kube-api-access-5wv2d
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2026-10-07T16:24:18Z"
+    observedGeneration: 1
+    status: "True"
+    type: PodReadyToStartContainers
+  - lastProbeTime: null
+    lastTransitionTime: "2026-10-07T16:24:18Z"
+    observedGeneration: 1
+    status: "True"
+    type: Initialized
+  - lastProbeTime: null
+    lastTransitionTime: "2026-10-07T16:24:32Z"
+    observedGeneration: 1
+    status: "True"
+    type: Ready
+  - lastProbeTime: null
+    lastTransitionTime: "2026-10-07T16:24:32Z"
+    observedGeneration: 1
+    status: "True"
+    type: ContainersReady
+  - lastProbeTime: null
+    lastTransitionTime: "2026-10-07T16:24:18Z"
+    observedGeneration: 1
+    status: "True"
+    type: PodScheduled
+  containerStatuses:
+  - containerID: containerd://026afe27b8e56288d8895560b640352aaffa9b39a92bb425ca6ed8ded9f7cf07
+    image: docker.io/library/nginx:1.27-alpine
+    imageID: docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    lastState: {}
+    name: hello-pod
+    ready: true
+    resources: {}
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2026-10-07T16:24:32Z"
+    user:
+      linux:
+        gid: 0
+        supplementalGroups:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 6
+        - 10
+        - 11
+        - 20
+        - 26
+        - 27
+        uid: 0
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-5wv2d
+      readOnly: true
+      recursiveReadOnly: Disabled
+  hostIP: 192.168.49.2
+  hostIPs:
+  - ip: 192.168.49.2
+  observedGeneration: 1
+  phase: Running
+  podIP: 10.244.0.3
+  podIPs:
+  - ip: 10.244.0.3
+  qosClass: BestEffort
+  resources: {}
+  startTime: "2026-10-07T16:24:18Z"
+
+$ kubectl explain pod.spec.containers.ports --recursive=false
+KIND:       Pod
+VERSION:    v1
+
+FIELD: ports <[]ContainerPort>
+
+
+DESCRIPTION:
+    List of ports to expose from the container. Not specifying a port here DOES
+    NOT prevent that port from being exposed. Any port which is listening on the
+    default "0.0.0.0" address inside a container will be accessible from the
+    network. Modifying this array with strategic merge patch may corrupt the
+    data. For more information See
+    https://github.com/kubernetes/kubernetes/issues/108255. Cannot be updated.
+    ContainerPort represents a network port in a single container.
+    
+FIELDS:
+  containerPort	<integer> -required-
+    Number of port to expose on the pod's IP address. This must be a valid port
+    number, 0 < x < 65536.
+
+  hostIP	<string>
+    What host IP to bind the external port to.
+
+  hostPort	<integer>
+    Number of port to expose on the host. If specified, this must be a valid
+    port number, 0 < x < 65536. If HostNetwork is specified, this must match
+    ContainerPort. Most containers do not need this.
+
+  name	<string>
+    If specified, this must be an IANA_SVC_NAME and unique within the pod. Each
+    named port in a pod must have a unique name. Name for the port that can be
+    referred to by services.
+
+  protocol	<string>
+  enum: SCTP, TCP, UDP
+    Protocol for port. Must be UDP, TCP, or SCTP. Defaults to "TCP".
+    
+    Possible enum values:
+     - `"SCTP"` is the SCTP protocol.
+     - `"TCP"` is the TCP protocol.
+     - `"UDP"` is the UDP protocol.
+
+
+
+$ kubectl create namespace demo-ns
+namespace/demo-ns created
+
+$ kubectl get ns
+NAME              STATUS   AGE
+default           Active   106s
+demo-ns           Active   0s
+kube-node-lease   Active   106s
+kube-public       Active   106s
+kube-system       Active   106s
+
+$ kubectl delete pod hello-pod
+pod "hello-pod" deleted from default namespace
+
+$ kubectl delete namespace demo-ns
+namespace "demo-ns" deleted
+

@@ -1,0 +1,13 @@
+# Shared Trivy settings: trivy --config security/trivy.yaml <command> ...
+severity:
+  - HIGH
+  - CRITICAL
+exit-code: 1
+ignorefile: security/.trivyignore
+vulnerability:
+  ignore-unfixed: true
+scan:
+  skip-dirs:
+    - application/frontend/node_modules
+    - application/frontend/dist
+    - troubleshooting   # deliberately broken manifests for the troubleshooting lab

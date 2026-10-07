@@ -1,0 +1,21 @@
+{{- if and .Values.monitoring.serviceMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+# Rendered only when the Prometheus Operator CRDs exist (so the chart still
+# installs on a bare cluster, e.g. the kind cluster in CI).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "taskboard.fullname" . }}-backend
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "taskboard.selectorLabels" (dict "ctx" . "component" "backend") | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+{{- end }}

@@ -1,0 +1,8 @@
+# Used in the prune step: this file is deleted from Git later, and ArgoCD removes the ConfigMap.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-extra-config
+  namespace: gitops-demo
+data:
+  feature-flag: "on"

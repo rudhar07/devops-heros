@@ -1,0 +1,19 @@
+# Fixed copy of session10-k8s-core-objects/troubleshooting/selector-mismatch.yaml:
+# the template label now matches spec.selector.matchLabels.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selector-error-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: correct-app-name
+  template:
+    metadata:
+      labels:
+        app: correct-app-name   # FIX: was wrong-app-name
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine

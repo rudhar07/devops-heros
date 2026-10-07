@@ -1,0 +1,80 @@
+# CASE 1 - wrong DB host in the ConfigMap (config layer)
+# BEFORE: healthy
+$ kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS    RESTARTS   AGE
+taskboard-backend-59d5dcc795-4r2g9   1/1     Running   0          30m
+taskboard-backend-59d5dcc795-865pz   1/1     Running   0          30m
+
+$ kubectl -n taskboard get cm taskboard-config -o jsonpath='{.data.DB_HOST}'; echo
+taskboard-postgres
+
+# BREAK: helm upgrade with a typo in database.host
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml -f troubleshooting/case1-wrong-db-host.values.yaml --wait --timeout 90s
+level=WARN msg="upgrade failed" name=taskboard error="resource Deployment/taskboard/taskboard-backend not ready. status: InProgress, message: Updated: 1/2\ncontext deadline exceeded"
+Error: UPGRADE FAILED: resource Deployment/taskboard/taskboard-backend not ready. status: InProgress, message: Updated: 1/2
+context deadline exceeded
+[exit code 1]
+
+# IDENTIFY
+$ kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS     RESTARTS   AGE
+taskboard-backend-59d5dcc795-4r2g9   1/1     Running    0          32m
+taskboard-backend-59d5dcc795-865pz   1/1     Running    0          31m
+taskboard-backend-77fd84c58-6dmf5    0/1     Init:0/2   0          90s
+
+$ kubectl -n taskboard rollout status deploy/taskboard-backend --timeout=5s
+Waiting for deployment "taskboard-backend" rollout to finish: 1 out of 2 new replicas have been updated...
+error: timed out waiting for the condition
+[exit code 1]
+
+# INVESTIGATE: the new pod is stuck in its first initContainer
+$ NEW=$(kubectl -n taskboard get pods -l app.kubernetes.io/component=backend --sort-by=.metadata.creationTimestamp -o name | tail -1); kubectl -n taskboard logs $NEW -c wait-for-db --tail 4
+taskboard-postgress:5432 - no response
+waiting for taskboard-postgress:5432 (43)
+taskboard-postgress:5432 - no response
+waiting for taskboard-postgress:5432 (44)
+
+$ kubectl -n taskboard get cm taskboard-config -o jsonpath='{.data.DB_HOST}'; echo
+taskboard-postgress
+
+$ kubectl -n taskboard get svc
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+taskboard-backend    ClusterIP   10.96.255.59    <none>        8000/TCP   37m
+taskboard-frontend   ClusterIP   10.96.219.172   <none>        80/TCP     37m
+taskboard-postgres   ClusterIP   10.96.34.134    <none>        5432/TCP   37m
+
+$ kubectl -n taskboard run dnscheck --rm -i --restart=Never --image=curlimages/curl:8.5.0 --command -- nslookup taskboard-postgress.taskboard.svc.cluster.local 2>&1 | grep -iE 'name|NXDOMAIN|can.t find' | head -3
+** server can't find taskboard-postgress.taskboard.svc.cluster.local: NXDOMAIN
+** server can't find taskboard-postgress.taskboard.svc.cluster.local: NXDOMAIN
+** server can't find taskboard-postgress.taskboard.svc.cluster.local: NXDOMAIN
+
+# Users are not affected: the old ReplicaSet keeps serving because maxUnavailable rounds to 0 and the new pod never becomes Ready.
+$ curl -s -o /dev/null -w 'API through Ingress during the incident: HTTP %{http_code}
+' http://taskboard.localhost:30110/api/tasks
+API through Ingress during the incident: HTTP 200
+
+# ROOT CAUSE: database.host=taskboard-postgress (typo) -> ConfigMap DB_HOST -> no such Service/DNS name -> initContainer waits forever, migration and app never start.
+# FIX: roll back to the last good Helm revision
+$ helm history taskboard -n taskboard | tail -3
+3       	Thu Oct  8 00:18:54 2026	superseded	taskboard-2.0.0	2.0.0      	Upgrade complete                                                                                                                  
+4       	Thu Oct  8 00:36:07 2026	deployed  	taskboard-2.0.0	2.0.0      	Upgrade complete                                                                                                                  
+5       	Thu Oct  8 00:48:48 2026	failed    	taskboard-2.0.0	2.0.0      	Upgrade "taskboard" failed: resource Deployment/taskboard/taskboard-backend not ready. status: InProgress, message: Updated: 1/...
+
+$ helm rollback taskboard 0 -n taskboard --wait --timeout 3m
+Rollback was a success! Happy Helming!
+
+# VERIFY
+$ kubectl -n taskboard get cm taskboard-config -o jsonpath='{.data.DB_HOST}'; echo
+taskboard-postgres
+
+$ kubectl -n taskboard rollout status deploy/taskboard-backend --timeout=120s
+deployment "taskboard-backend" successfully rolled out
+
+$ kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS        RESTARTS   AGE
+taskboard-backend-59d5dcc795-4r2g9   1/1     Running       0          32m
+taskboard-backend-59d5dcc795-865pz   1/1     Running       0          32m
+taskboard-backend-77fd84c58-6dmf5    0/1     Terminating   0          98s
+
+$ curl -s http://taskboard.localhost:30110/api/tasks/stats
+{"total":72,"todo":70,"inProgress":1,"done":1,"highPriorityOpen":0,"overdue":0}

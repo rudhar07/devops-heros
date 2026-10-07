@@ -1,0 +1,62 @@
+$ kubectl get node -o custom-columns=NODE:.metadata.name,ALLOCATABLE-CPU:.status.allocatable.cpu,ALLOCATABLE-MEM:.status.allocatable.memory
+NODE                 ALLOCATABLE-CPU   ALLOCATABLE-MEM
+hw-a-control-plane   15                8125796Ki
+
+$ kubectl apply -f pod-lifecycle/02-pending.yaml
+pod/lifecycle-pending created
+
+$ kubectl get pods --field-selector metadata.name=lifecycle-pending -w --output-watch-events    # ran in the background from apply until now
+EVENT      NAME                READY   STATUS    RESTARTS   AGE
+ADDED      lifecycle-pending   0/1     Pending   0          0s
+MODIFIED   lifecycle-pending   0/1     Pending   0          0s
+
+$ kubectl get pod lifecycle-pending -o wide
+NAME                READY   STATUS    RESTARTS   AGE   IP       NODE     NOMINATED NODE   READINESS GATES
+lifecycle-pending   0/1     Pending   0          15s   <none>   <none>   <none>           <none>
+
+$ kubectl describe pod lifecycle-pending
+Name:             lifecycle-pending
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             <none>
+Labels:           <none>
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Containers:
+  impossible-resource:
+    Image:      nginx:1.27
+    Port:       <none>
+    Host Port:  <none>
+    Requests:
+      cpu:        1
+      memory:     9Gi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-2ckpv (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  kube-api-access-2ckpv:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age               From               Message
+  ----     ------            ----              ----               -------
+  Warning  FailedScheduling  15s               default-scheduler  0/1 nodes are available: 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+  Warning  FailedScheduling  7s (x2 over 12s)  default-scheduler  0/1 nodes are available: 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+
+### cleanup
+$ kubectl delete pod lifecycle-pending --wait=false
+pod "lifecycle-pending" deleted from default namespace
+

@@ -1,0 +1,57 @@
+$ docker stats --no-stream --format {{.Name}} {{.MemUsage}} hw-e-control-plane
+hw-e-control-plane 2.16GiB / 7.749GiB
+
+$ kubectl create namespace argocd
+namespace/argocd created
+
+$ kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml | tail -5
+networkpolicy.networking.k8s.io/argocd-dex-server-network-policy serverside-applied
+networkpolicy.networking.k8s.io/argocd-notifications-controller-network-policy serverside-applied
+networkpolicy.networking.k8s.io/argocd-redis-network-policy serverside-applied
+networkpolicy.networking.k8s.io/argocd-repo-server-network-policy serverside-applied
+networkpolicy.networking.k8s.io/argocd-server-network-policy serverside-applied
+
+# Memory is tight (Docker shared with other clusters): ArgoCD UI login uses the local admin user, no SSO, no notifications, no ApplicationSets -> scale those to 0.
+$ kubectl -n argocd scale deploy argocd-dex-server argocd-notifications-controller argocd-applicationset-controller --replicas=0
+deployment.apps/argocd-dex-server scaled
+deployment.apps/argocd-notifications-controller scaled
+deployment.apps/argocd-applicationset-controller scaled
+
+$ kubectl -n argocd patch svc argocd-server -p {"spec":{"type":"NodePort","ports":[{"name":"https","port":443,"targetPort":8080,"nodePort":30102}]}}
+service/argocd-server patched
+
+$ kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
+Waiting for deployment "argocd-server" rollout to finish: 0 of 1 updated replicas are available...
+deployment "argocd-server" successfully rolled out
+
+$ kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=10m
+Waiting for deployment "argocd-repo-server" rollout to finish: 0 of 1 updated replicas are available...
+deployment "argocd-repo-server" successfully rolled out
+
+$ kubectl -n argocd rollout status deploy/argocd-redis --timeout=10m
+Waiting for deployment "argocd-redis" rollout to finish: 0 of 1 updated replicas are available...
+deployment "argocd-redis" successfully rolled out
+
+$ kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=10m
+partitioned roll out complete: 1 new pods have been updated...
+
+$ kubectl -n argocd get pods,deploy,sts
+NAME                                     READY   STATUS    RESTARTS   AGE
+pod/argocd-application-controller-0      1/1     Running   0          2m23s
+pod/argocd-redis-bdbdffcb4-9tjwz         1/1     Running   0          2m24s
+pod/argocd-repo-server-d89c7967d-4s6sd   1/1     Running   0          2m24s
+pod/argocd-server-776b7cdd4d-tspbj       1/1     Running   0          2m23s
+
+NAME                                               READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/argocd-applicationset-controller   0/0     0            0           2m24s
+deployment.apps/argocd-dex-server                  0/0     0            0           2m24s
+deployment.apps/argocd-notifications-controller    0/0     0            0           2m24s
+deployment.apps/argocd-redis                       1/1     1            1           2m24s
+deployment.apps/argocd-repo-server                 1/1     1            1           2m24s
+deployment.apps/argocd-server                      1/1     1            1           2m24s
+
+NAME                                             READY   AGE
+statefulset.apps/argocd-application-controller   1/1     2m23s
+
+$ kubectl -n argocd get deploy argocd-server -o jsonpath={.spec.template.spec.containers[0].image}
+quay.io/argoproj/argocd:v3.5.4

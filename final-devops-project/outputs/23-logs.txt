@@ -1,0 +1,47 @@
+# Logs: one request followed through every layer (Ingress -> backend -> DB), plus events.
+$ curl -s -X POST http://taskboard.localhost:30110/api/tasks -H 'Content-Type: application/json' -d '{"title":"trace me through the logs","priority":"HIGH"}' | jq -c '{id,title}'
+{"id":75,"title":"trace me through the logs"}
+
+$ kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --since=1m | grep 'POST /api/tasks' | tail -1
+192.168.65.1 - - [07/Oct/2026:19:41:28 +0000] "POST /api/tasks HTTP/1.1" 201 222 "-" "curl/8.7.1" 205 0.050 [taskboard-taskboard-backend-http] [] 10.244.0.66:8000 222 0.050 201 85616b23c724d282af1949452bae97be
+
+$ kubectl -n taskboard logs -l app.kubernetes.io/component=backend --since=1m --prefix | grep -E 'task created|POST /api/tasks' | tail -4
+Defaulted container "backend" out of: backend, wait-for-db (init), migrate (init)
+Defaulted container "backend" out of: backend, wait-for-db (init), migrate (init)
+[pod/taskboard-backend-59d5dcc795-dmqvg/backend] 2026-10-07 19:41:28,250 INFO taskboard task created id=74 priority=HIGH
+[pod/taskboard-backend-59d5dcc795-dmqvg/backend] INFO:     192.168.65.1:0 - "POST /api/tasks HTTP/1.1" 201 Created
+[pod/taskboard-backend-59d5dcc795-gk9nx/backend] 2026-10-07 19:41:28,332 INFO taskboard task created id=75 priority=HIGH
+[pod/taskboard-backend-59d5dcc795-gk9nx/backend] INFO:     192.168.65.1:0 - "POST /api/tasks HTTP/1.1" 201 Created
+
+$ kubectl -n taskboard logs -l app.kubernetes.io/component=backend --since=10m --prefix | grep -E ' 404 ' | tail -2
+Defaulted container "backend" out of: backend, wait-for-db (init), migrate (init)
+Defaulted container "backend" out of: backend, wait-for-db (init), migrate (init)
+[pod/taskboard-backend-59d5dcc795-dmqvg/backend] INFO:     192.168.65.1:0 - "GET /api/tasks/99999 HTTP/1.1" 404 Not Found
+
+$ kubectl -n taskboard logs deploy/taskboard-frontend --tail 3
+Found 2 pods, using pod/taskboard-frontend-667cdcf97d-w2cbs
+2026/10/07 19:17:54 [notice] 1#1: start worker process 42
+2026/10/07 19:17:54 [notice] 1#1: start worker process 43
+2026/10/07 19:17:54 [notice] 1#1: start worker process 44
+
+$ kubectl -n taskboard logs deploy/taskboard-postgres --tail 4
+2026-10-07 19:08:04.968 UTC [46] LOG:  checkpoint starting: time
+2026-10-07 19:08:05.500 UTC [46] LOG:  checkpoint complete: wrote 6 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.516 s, sync=0.005 s, total=0.533 s; sync files=6, longest=0.004 s, average=0.001 s; distance=15 kB, estimate=250 kB; lsn=0/19A8208, redo lsn=0/19A81B0
+2026-10-07 19:13:04.603 UTC [46] LOG:  checkpoint starting: time
+2026-10-07 19:13:05.922 UTC [46] LOG:  checkpoint complete: wrote 14 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.310 s, sync=0.003 s, total=1.319 s; sync files=11, longest=0.002 s, average=0.001 s; distance=40 kB, estimate=229 kB; lsn=0/19B2230, redo lsn=0/19B21D8
+
+$ kubectl -n taskboard logs deploy/taskboard-backend -c migrate
+Found 2 pods, using pod/taskboard-backend-59d5dcc795-dmqvg
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+
+$ kubectl -n taskboard get events --sort-by=.lastTimestamp | tail -8
+7m7s        Normal    Pulled                         pod/hpa-demo-758c5598d-chtjd                    Container image "taskboard-frontend:local" already present on machine and can be accessed by the pod
+7m7s        Normal    Created                        pod/hpa-demo-758c5598d-chtjd                    Container created
+7m7s        Normal    Started                        pod/hpa-demo-758c5598d-chtjd                    Container started
+7m7s        Normal    SuccessfulCreate               replicaset/hpa-demo-758c5598d                   Created pod: hpa-demo-758c5598d-chtjd
+7m7s        Normal    ScalingReplicaSet              deployment/hpa-demo                             Scaled up replica set hpa-demo-758c5598d from 0 to 1
+6m53s       Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo                failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+6m53s       Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo                invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+6m36s       Normal    Killing                        pod/hpa-demo-758c5598d-chtjd                    Stopping container web
+

@@ -1,0 +1,5 @@
+# Case 1 (config layer): typo in the database host that ends up in the ConfigMap.
+#   helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml \
+#     -f troubleshooting/case1-wrong-db-host.values.yaml
+database:
+  host: taskboard-postgress   # extra "s" - no such Service

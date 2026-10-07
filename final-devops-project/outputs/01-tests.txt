@@ -1,0 +1,94 @@
+# Backend unit tests (SQLite in-memory test DB, real PostgreSQL never touched). Run from final-devops-project/application/backend with a venv outside the repo.
+$ python --version
+Python 3.13.14
+
+$ python -m pytest -v -p no:cacheprovider --cov=app --cov-report=term-missing --cov-fail-under=80
+============================= test session starts ==============================
+platform darwin -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/hwf/.venv/bin/python
+rootdir: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/final-devops-project/application/backend
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, platformdirs-4.12.3, anyio-4.15.1
+collecting ... collected 24 items
+
+tests/test_api.py::test_health PASSED                                    [  4%]
+tests/test_api.py::test_root_shows_service_and_version PASSED            [  8%]
+tests/test_api.py::test_api_info_matches_root PASSED                     [ 12%]
+tests/test_api.py::test_ready_when_database_answers PASSED               [ 16%]
+tests/test_api.py::test_ready_returns_503_when_database_is_down PASSED   [ 20%]
+tests/test_api.py::test_metrics_endpoint_exposes_prometheus_format PASSED [ 25%]
+tests/test_api.py::test_create_task_returns_201_and_defaults PASSED      [ 29%]
+tests/test_api.py::test_create_task_rejects_empty_title PASSED           [ 33%]
+tests/test_api.py::test_create_task_rejects_unknown_priority PASSED      [ 37%]
+tests/test_api.py::test_list_tasks_newest_first PASSED                   [ 41%]
+tests/test_api.py::test_list_tasks_filters_by_status_and_priority PASSED [ 45%]
+tests/test_api.py::test_list_tasks_search_and_paging PASSED              [ 50%]
+tests/test_api.py::test_get_single_task PASSED                           [ 54%]
+tests/test_api.py::test_get_missing_task_returns_404 PASSED              [ 58%]
+tests/test_api.py::test_update_task_changes_only_sent_fields PASSED      [ 62%]
+tests/test_api.py::test_update_rejects_invalid_status PASSED             [ 66%]
+tests/test_api.py::test_update_missing_task_returns_404 PASSED           [ 70%]
+tests/test_api.py::test_delete_task PASSED                               [ 75%]
+tests/test_api.py::test_delete_missing_task_returns_404 PASSED           [ 79%]
+tests/test_api.py::test_stats_counts_by_status_priority_and_overdue PASSED [ 83%]
+tests/test_api.py::test_stats_on_empty_board PASSED                      [ 87%]
+tests/test_config_and_migrations.py::test_database_url_built_from_parts_escapes_password PASSED [ 91%]
+tests/test_config_and_migrations.py::test_full_database_url_wins PASSED  [ 95%]
+tests/test_config_and_migrations.py::test_alembic_migrations_upgrade_and_downgrade PASSED [100%]
+
+================================ tests coverage ================================
+______________ coverage: platform darwin, python 3.13.14-final-0 _______________
+
+Name              Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------
+app/__init__.py       0      0      0      0   100%
+app/config.py        21      0      2      0   100%
+app/db.py            15      4      0      0    73%   25-29
+app/main.py          96      0     10      0   100%
+app/metrics.py        2      0      0      0   100%
+app/models.py        17      0      0      0   100%
+app/schemas.py       31      0      0      0   100%
+-------------------------------------------------------------
+TOTAL               182      4     12      0    98%
+Required test coverage of 80% reached. Total coverage: 97.94%
+============================== 24 passed in 0.30s ==============================
+
+# Frontend unit tests (node:test) + production build
+$ node --version
+v26.5.0
+
+$ npm test
+
+> taskboard-frontend@2.0.0 test
+> node --test "src/**/*.test.js"
+
+✔ nextStatus cycles TODO -> IN_PROGRESS -> DONE -> TODO (0.317375ms)
+✔ label makes enum values readable (0.121167ms)
+✔ buildQuery skips ALL and empty search (0.158959ms)
+✔ isOverdue ignores done tasks and tasks without a due date (0.466458ms)
+✔ toPayload trims text and defaults the assignee (0.342417ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37.016291
+
+$ npm run build
+
+> taskboard-frontend@2.0.0 build
+> vite build
+
+vite v8.3.3 building client environment for production...
+transforming...
+✓ 23 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.46 kB │ gzip:  0.29 kB
+dist/assets/index-DpkwkP0w.css    7.14 kB │ gzip:  2.34 kB
+dist/assets/index-B7IapO1E.js   230.14 kB │ gzip: 71.98 kB
+
+✓ built in 81ms
+

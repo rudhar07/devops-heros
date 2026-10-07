@@ -1,0 +1,38 @@
+# ArgoCD v3.5.4 (non-HA install manifest), trimmed: no SSO (dex), no notifications, no ApplicationSets.
+$ kubectl create namespace argocd
+namespace/argocd created
+
+$ kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.4/manifests/install.yaml | tail -3
+networkpolicy.networking.k8s.io/argocd-redis-network-policy serverside-applied
+networkpolicy.networking.k8s.io/argocd-repo-server-network-policy serverside-applied
+networkpolicy.networking.k8s.io/argocd-server-network-policy serverside-applied
+
+$ kubectl -n argocd scale deploy argocd-dex-server argocd-notifications-controller argocd-applicationset-controller --replicas=0
+deployment.apps/argocd-dex-server scaled
+deployment.apps/argocd-notifications-controller scaled
+deployment.apps/argocd-applicationset-controller scaled
+
+$ kubectl -n argocd patch svc argocd-server -p '{"spec":{"type":"NodePort","ports":[{"name":"https","port":443,"targetPort":8080,"nodePort":30113}]}}'
+service/argocd-server patched
+
+$ kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
+Waiting for deployment spec update to be observed...
+Waiting for deployment "argocd-server" rollout to finish: 0 of 1 updated replicas are available...
+deployment "argocd-server" successfully rolled out
+
+$ kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=10m
+deployment "argocd-repo-server" successfully rolled out
+
+$ kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=10m
+partitioned roll out complete: 1 new pods have been updated...
+
+$ kubectl -n argocd get pods
+NAME                                 READY   STATUS    RESTARTS   AGE
+argocd-application-controller-0      1/1     Running   0          79s
+argocd-redis-bdbdffcb4-fsfn4         1/1     Running   0          80s
+argocd-repo-server-d89c7967d-kjqsv   1/1     Running   0          80s
+argocd-server-776b7cdd4d-ck4lp       1/1     Running   0          79s
+
+$ docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep hw-f
+hw-f-control-plane 3.666GiB / 7.749GiB
+

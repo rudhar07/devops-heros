@@ -1,0 +1,21 @@
+# Case 4 (routing layer): the same mistake as in the instructor's chart
+# (session21-python/helm/taskboard/templates/ingress.yaml): the Ingress
+# sends /api to Service "taskboard-backend" on port 8080, but that Service
+# listens on 8000. Separate host so the working Ingress is not touched.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: taskboard-broken
+  namespace: taskboard
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: broken.localhost
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: {service: {name: taskboard-backend, port: {number: 8080}}}
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: taskboard-frontend-v2, port: {number: 80}}}

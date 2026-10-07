@@ -1,0 +1,37 @@
+# Single-node kind cluster used for sessions 10, 11 and 12.
+# - node port 80  (ingress-nginx HTTP)  -> localhost:30081 on my Mac
+#   (I first tried host port 8081, but another container on my Docker Desktop already holds it)
+# - node port 443 (ingress-nginx HTTPS) -> localhost:8444
+# - NodePort 30080 (session 11 NodePort demo) -> localhost:30080
+# - leader election is switched off for kube-controller-manager and kube-scheduler: my laptop's
+#   Docker VM was so busy that both kept losing their leader lease and restarting (see
+#   outputs/00b-control-plane-restart.txt). With a single control-plane node there is nobody
+#   to elect anyway.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hw-a
+kubeadmConfigPatchesJSON6902:
+  - group: kubeadm.k8s.io
+    version: v1beta4
+    kind: ClusterConfiguration
+    patch: |
+      - op: add
+        path: /controllerManager/extraArgs/-
+        value: {name: leader-elect, value: "false"}
+      - op: add
+        path: /scheduler/extraArgs
+        value: [{name: leader-elect, value: "false"}]
+nodes:
+  - role: control-plane
+    labels:
+      ingress-ready: "true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 30081
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8444
+        protocol: TCP
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP

@@ -1,0 +1,39 @@
+# Prod = EKS from ../terraform. Images come from GHCR, tagged with the git SHA
+# by CI (helm upgrade --install ... --set backend.image.tag=$GITHUB_SHA ...).
+backend:
+  image:
+    repository: ghcr.io/rudhar07/devops-heros/taskboard-backend
+  replicaCount: 3
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+frontend:
+  image:
+    repository: ghcr.io/rudhar07/devops-heros/taskboard-frontend
+  replicaCount: 2
+config:
+  appEnv: prod
+  logLevel: WARNING
+# Managed PostgreSQL (RDS) instead of the in-cluster one. Placeholder host.
+postgres:
+  enabled: false
+database:
+  host: taskboard-db.example.ap-south-1.rds.amazonaws.com
+  port: 5432
+  name: taskboard
+secret:
+  existingSecret: taskboard-db-credentials   # created by External Secrets, never in Git
+ingress:
+  enabled: true
+  className: nginx
+  host: taskboard.example.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    - secretName: taskboard-tls
+      hosts: [taskboard.example.com]
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60

@@ -1,0 +1,84 @@
+### Rule is loaded by Prometheus
+$ curl -s localhost:8085/api/v1/rules?rule_name[]=PodinfoDown&rule_name[]=PodinfoHighCPU
+  group=podinfo.rules alert=PodinfoDown state=inactive health=ok for=30s
+     expr: sum(up{job="podinfo",namespace="podinfo"}) == 0 or absent(up{job="podinfo",namespace="podinfo"})
+  group=podinfo.rules alert=PodinfoHighCPU state=inactive health=ok for=60s
+     expr: sum by (pod) (rate(container_cpu_usage_seconds_total{container="podinfo",namespace="podinfo"}[2m])) > 0.2
+
+### Baseline (23:46:55)
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+  (no Podinfo alerts active)
+
+$ curl -s localhost:30104/api/v2/alerts?filter=alertname=~"Podinfo.*"
+  (Alertmanager has no Podinfo alerts)
+
+### Break the app: scale podinfo to 0 (23:46:55)
+$ kubectl -n podinfo scale deploy/podinfo --replicas=0
+deployment.apps/podinfo scaled
+
+$ kubectl -n podinfo get deploy podinfo
+NAME      READY   UP-TO-DATE   AVAILABLE   AGE
+podinfo   2/0     2            2           2m50s
+
+--- poll 1 at 23:46:55
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+  (no Podinfo alerts active)
+--- poll 2 at 23:47:06
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+  (no Podinfo alerts active)
+--- poll 3 at 23:47:16
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+  (no Podinfo alerts active)
+--- poll 4 at 23:47:26
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+  (no Podinfo alerts active)
+--- poll 5 at 23:47:36
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+
+   PodinfoDown state=pending activeAt=2026-10-07T18:17:34.271241937Z value=1e+00
+--- poll 6 at 23:47:46
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+
+   PodinfoDown state=pending activeAt=2026-10-07T18:17:34.271241937Z value=1e+00
+--- poll 7 at 23:47:56
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+
+   PodinfoDown state=pending activeAt=2026-10-07T18:17:34.271241937Z value=1e+00
+--- poll 8 at 23:48:06
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+
+   PodinfoDown state=firing activeAt=2026-10-07T18:17:34.271241937Z value=1e+00
+
+### Firing, check Alertmanager (23:48:06)
+$ curl -s localhost:30104/api/v2/alerts?filter=alertname=~"Podinfo.*"
+
+   PodinfoDown severity=critical state=active startsAt=2026-10-07T18:18:04.271Z endsAt=2026-10-07T18:22:04.271Z summary=podinfo has no healthy scrape targets
+
+$ kubectl -n monitoring logs alertmanager-kps-kube-prometheus-stack-alertmanager-0 -c alertmanager --tail=5
+time=2026-10-07T18:12:50.651Z level=INFO source=tls_config.go:418 msg="TLS is disabled." http2=false address=[::]:9093
+time=2026-10-07T18:12:51.131Z level=INFO source=coordinator.go:112 msg="Loading configuration file" component=configuration file=/etc/alertmanager/config_out/alertmanager.env.yaml
+time=2026-10-07T18:12:51.133Z level=INFO source=coordinator.go:125 msg="Completed loading of configuration file" component=configuration file=/etc/alertmanager/config_out/alertmanager.env.yaml
+time=2026-10-07T18:12:51.137Z level=WARN source=reloader.go:213 msg="repeat_interval is greater than the data retention period. It can lead to notifications being repeated more often than expected." component=configuration repeat_interval=12h0m0s retention=2h0m0s route={}
+time=2026-10-07T18:12:51.137Z level=WARN source=reloader.go:213 msg="repeat_interval is greater than the data retention period. It can lead to notifications being repeated more often than expected." component=configuration repeat_interval=12h0m0s retention=2h0m0s route="{}/{alertname=\"Watchdog\"}"
+
+### Fix: scale back to 2 (23:48:07)
+$ kubectl -n podinfo scale deploy/podinfo --replicas=2
+deployment.apps/podinfo scaled
+
+$ kubectl -n podinfo rollout status deploy/podinfo --timeout=10m
+Waiting for deployment "podinfo" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "podinfo" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "podinfo" rollout to finish: 1 of 2 updated replicas are available...
+deployment "podinfo" successfully rolled out
+
+--- poll 1 at 23:48:13
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+
+   PodinfoDown state=firing activeAt=2026-10-07T18:17:34.271241937Z value=1e+00
+--- poll 2 at 23:48:23
+$ curl -s localhost:8085/api/v1/alerts   [filtered to alertname=~Podinfo.*]
+  (no Podinfo alerts active)
+
+### Alertmanager after resolve (23:48:23)
+$ curl -s localhost:30104/api/v2/alerts?filter=alertname=~"Podinfo.*"
+  (Alertmanager has no Podinfo alerts)

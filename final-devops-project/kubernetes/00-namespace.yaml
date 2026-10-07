@@ -1,0 +1,9 @@
+# Namespace used by the Helm release (helm ... -n taskboard).
+# The raw manifests in this folder have no namespace field, so they can be
+# applied into any namespace: kubectl apply -n taskboard-raw -f kubernetes/
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: taskboard
+  labels:
+    app.kubernetes.io/part-of: taskboard

@@ -1,0 +1,146 @@
+### ExternalName Service: a DNS alias (CNAME) to a name outside the cluster - no selector, no pods, no ClusterIP
+$ cat services/04-externalname/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-database-service
+spec:
+  type: ExternalName
+  externalName: nencyravaliya.me
+
+$ kubectl apply -f services/04-externalname/
+pod/dns-test-client unchanged
+service/external-web created
+service/backend-alias created
+service/external-database-service unchanged
+
+$ kubectl wait --for=condition=Ready pod/dns-test-client --timeout=120s
+pod/dns-test-client condition met
+
+$ kubectl apply -f dns-debug-pod.yaml
+pod/dnsutils unchanged
+
+$ kubectl wait --for=condition=Ready pod/dnsutils --timeout=180s
+pod/dnsutils condition met
+
+$ kubectl get svc external-database-service -o wide
+NAME                        TYPE           CLUSTER-IP   EXTERNAL-IP        PORT(S)   AGE     SELECTOR
+external-database-service   ExternalName   <none>       nencyravaliya.me   <none>    4m25s   <none>
+
+$ kubectl describe svc external-database-service
+Name:              external-database-service
+Namespace:         default
+Labels:            <none>
+Annotations:       <none>
+Selector:          <none>
+Type:              ExternalName
+IP Families:       <none>
+IP:                
+IPs:               <none>
+External Name:     nencyravaliya.me
+Session Affinity:  None
+Events:            <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=external-database-service
+No resources found in default namespace.
+
+### Test: the cluster DNS answers with a CNAME to the external name
+$ kubectl exec dnsutils -- dig +noall +answer external-database-service.default.svc.cluster.local
+external-database-service.default.svc.cluster.local. 30	IN CNAME nencyravaliya.me.
+
+$ kubectl exec dns-test-client -- nslookup external-database-service
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+** server can't find external-database-service.cluster.local: NXDOMAIN
+
+** server can't find external-database-service.svc.cluster.local: NXDOMAIN
+
+** server can't find external-database-service.cluster.local: NXDOMAIN
+
+** server can't find external-database-service.svc.cluster.local: NXDOMAIN
+
+external-database-service.default.svc.cluster.local	canonical name = nencyravaliya.me
+
+external-database-service.default.svc.cluster.local	canonical name = nencyravaliya.me
+
+command terminated with exit code 1
+
+$ kubectl exec dnsutils -- dig nencyravaliya.me
+
+; <<>> DiG 9.9.5-9+deb8u15-Debian <<>> nencyravaliya.me
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 21758
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;nencyravaliya.me.		IN	A
+
+;; Query time: 4 msec
+;; SERVER: 10.96.0.10#53(10.96.0.10)
+;; WHEN: Wed Oct 07 17:34:05 UTC 2026
+;; MSG SIZE  rcvd: 45
+
+
+# The instructor's target domain does not exist any more (NXDOMAIN). Kubernetes never checks the externalName -
+# the Service was created fine and the CNAME is served, it just leads nowhere. So I added two working ones:
+$ cat services/04-externalname/service-extra.yaml
+# Two extra ExternalName Services I added, because the instructor's target (nencyravaliya.me)
+# no longer resolves (NXDOMAIN) when I ran this on 2026-10-07.
+# 1) an alias to a public website
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-web
+spec:
+  type: ExternalName
+  externalName: example.com
+---
+# 2) an alias to a Service in another namespace - the most common real use
+#    (apps in "default" keep calling "backend-alias"; the real backend lives elsewhere)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-alias
+spec:
+  type: ExternalName
+  externalName: web-service-clusterip.default.svc.cluster.local
+
+$ kubectl apply -f services/04-externalname/service-extra.yaml
+service/external-web unchanged
+service/backend-alias unchanged
+
+$ kubectl get svc external-web backend-alias
+NAME            TYPE           CLUSTER-IP   EXTERNAL-IP                                       PORT(S)   AGE
+external-web    ExternalName   <none>       example.com                                       <none>    4s
+backend-alias   ExternalName   <none>       web-service-clusterip.default.svc.cluster.local   <none>    4s
+
+### external-web -> example.com
+$ kubectl exec dnsutils -- dig +noall +answer external-web.default.svc.cluster.local
+external-web.default.svc.cluster.local.	30 IN CNAME example.com.
+example.com.		30	IN	A	104.20.23.154
+example.com.		30	IN	A	172.66.147.243
+
+$ kubectl exec dns-test-client -- curl -s -m 10 -o /dev/null -w 'http://external-web -> HTTP %{http_code} from %{remote_ip}\n' http://external-web
+http://external-web -> HTTP 403 from 104.20.23.154
+
+$ kubectl exec dns-test-client -- curl -s -m 10 -o /dev/null -w 'http://external-web with Host: example.com -> HTTP %{http_code} from %{remote_ip}\n' -H 'Host: example.com' http://external-web
+http://external-web with Host: example.com -> HTTP 200 from 104.20.23.154
+
+# Same IP both times. Only the DNS name is aliased; HTTP still sends 'Host: external-web', and the CDN in front of
+# example.com refuses an unknown host (403). With the right Host header it answers 200.
+### backend-alias -> web-service-clusterip.default.svc.cluster.local (in-cluster alias)
+$ kubectl exec dnsutils -- dig +noall +answer backend-alias.default.svc.cluster.local
+backend-alias.default.svc.cluster.local. 30 IN CNAME web-service-clusterip.default.svc.cluster.local.
+web-service-clusterip.default.svc.cluster.local. 30 IN A 10.96.96.222
+
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'http://backend-alias:8080 -> HTTP %{http_code} from %{remote_ip}\n' http://backend-alias:8080
+http://backend-alias:8080 -> HTTP 200 from 10.96.96.222
+
+### No kube-proxy rules exist for an ExternalName Service:
+$ docker exec hw-a-control-plane iptables-save -t nat | grep -c -E 'external-database-service|external-web|backend-alias'
+0
+

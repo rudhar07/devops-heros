@@ -1,0 +1,16 @@
+# DNS debug pod with dig + nslookup (multi-arch e2e test image).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dnsutils
+  labels:
+    app: dnsutils
+spec:
+  containers:
+    - name: dnsutils
+      image: registry.k8s.io/e2e-test-images/jessie-dnsutils:1.7
+      command: ["sleep", "36000"]
+      resources:
+        requests:
+          cpu: "10m"
+          memory: "16Mi"

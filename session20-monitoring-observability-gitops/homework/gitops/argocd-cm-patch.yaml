@@ -1,0 +1,5 @@
+# Lab-only tuning: poll Git every 30s instead of the default 120s (+ up to 60s jitter),
+# so the demo does not wait ~3 minutes per change. In production you would use a Git webhook instead.
+data:
+  timeout.reconciliation: 30s
+  timeout.reconciliation.jitter: 0s

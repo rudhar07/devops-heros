@@ -1,0 +1,30 @@
+# Alerts for the podinfo demo app.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: podinfo-alerts
+  namespace: podinfo
+  labels:
+    app: podinfo
+spec:
+  groups:
+    - name: podinfo.rules
+      rules:
+        # App down: no podinfo target is up. absent() also covers "scaled to 0",
+        # where the targets disappear completely instead of reporting up=0.
+        - alert: PodinfoDown
+          expr: sum(up{namespace="podinfo", job="podinfo"}) == 0 or absent(up{namespace="podinfo", job="podinfo"})
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "podinfo has no healthy scrape targets"
+            description: "No podinfo instance has answered /metrics for more than 30s."
+        # High CPU: any podinfo container above 0.2 cores for 1 minute.
+        - alert: PodinfoHighCPU
+          expr: sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="podinfo", container="podinfo"}[2m])) > 0.2
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "podinfo pod {{ $labels.pod }} uses more than 0.2 CPU cores"

@@ -1,0 +1,104 @@
+### BEFORE: apply session-11-kubernetes-services/troubleshooting/empty-endpoints.yaml
+$ kubectl apply -f /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-11-kubernetes-services/troubleshooting/empty-endpoints.yaml
+service/broken-backend-service created
+
+$ kubectl run tclient --image=curlimages/curl:8.5.0 --restart=Never -- sleep 600
+pod/tclient created
+
+$ kubectl wait --for=condition=Ready pod/tclient --timeout=120s
+pod/tclient condition met
+
+$ kubectl get svc broken-backend-service
+NAME                     TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE
+broken-backend-service   ClusterIP   10.96.14.40   <none>        80/TCP    1s
+
+$ kubectl exec tclient -- curl -s -m 5 -o /dev/null -w 'http://broken-backend-service -> HTTP %{http_code}\n' http://broken-backend-service
+http://broken-backend-service -> HTTP 000
+command terminated with exit code 7
+
+### Investigate
+$ kubectl get endpoints broken-backend-service
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME                     ENDPOINTS   AGE
+broken-backend-service   <none>      1s
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=broken-backend-service
+NAME                           ADDRESSTYPE   PORTS     ENDPOINTS   AGE
+broken-backend-service-csp4v   IPv4          <unset>   <unset>     1s
+
+$ kubectl describe svc broken-backend-service
+Name:                     broken-backend-service
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=wrong-backend-name
+Type:                     ClusterIP
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.14.40
+IPs:                      10.96.14.40
+Port:                     http  80/TCP
+TargetPort:               5000/TCP
+Endpoints:                
+Session Affinity:         None
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+$ kubectl get pods -l app=wrong-backend-name
+No resources found in default namespace.
+
+$ kubectl get pods --show-labels -l 'app in (yatri-backend,yatri-frontend)'
+NAME                             READY   STATUS        RESTARTS   AGE    LABELS
+yatri-backend-6c58cb99c7-2n689   1/1     Running       0          6m6s   app=yatri-backend,pod-template-hash=6c58cb99c7
+yatri-backend-6c58cb99c7-5zm2j   1/1     Running       0          6m6s   app=yatri-backend,pod-template-hash=6c58cb99c7
+yatri-backend-6c58cb99c7-xcpxm   1/1     Terminating   0          74s    app=yatri-backend,pod-template-hash=6c58cb99c7
+yatri-frontend-ddcfc4b5f-8jtxg   1/1     Running       0          6m6s   app=yatri-frontend,pod-template-hash=ddcfc4b5f
+yatri-frontend-ddcfc4b5f-jjzrr   1/1     Running       0          6m6s   app=yatri-frontend,pod-template-hash=ddcfc4b5f
+
+# Root cause: selector app=wrong-backend-name matches no pod -> no endpoints -> kube-proxy has nothing to forward to.
+### Fix: point the selector at the real label app=yatri-backend (targetPort 5000 is already right)
+$ diff /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-11-kubernetes-services/troubleshooting/empty-endpoints.yaml troubleshooting/empty-endpoints-fixed.yaml
+1,6c1,2
+< # ==============================================================================
+< # INTENTIONALLY BROKEN SERVICE FOR ENDPOINT TRIAGE DRILL
+< # Problem: The selector 'app: wrong-backend-name' does not match the backend pods!
+< # Result: 'kubectl get endpoints broken-backend-service' will display: <none>
+< # ==============================================================================
+< 
+---
+> # Fixed copy of session-11-kubernetes-services/troubleshooting/empty-endpoints.yaml:
+> # the selector now matches the running backend pods (label app=yatri-backend, port 5000).
+14,15c10
+<     # BUG: Typo in label selector! Running pods have label app: yatri-backend
+<     app: wrong-backend-name
+---
+>     app: yatri-backend   # FIX: was wrong-backend-name
+
+$ kubectl apply -f troubleshooting/empty-endpoints-fixed.yaml
+service/broken-backend-service configured
+
+### AFTER
+$ kubectl get endpoints broken-backend-service
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME                     ENDPOINTS                           AGE
+broken-backend-service   10.244.0.28:5000,10.244.0.30:5000   1s
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=broken-backend-service
+NAME                           ADDRESSTYPE   PORTS   ENDPOINTS                             AGE
+broken-backend-service-csp4v   IPv4          5000    10.244.0.30,10.244.0.28,10.244.0.47   1s
+
+$ kubectl exec tclient -- curl -s http://broken-backend-service
+Yatri Backend API
+=================
+ENVIRONMENT     : production
+LOG_LEVEL       : INFO
+DEFAULT_CURRENCY: INR
+POSTGRES_USER   : yatri_admin
+POSTGRES_DB     : yatri_production_db
+
+$ kubectl delete svc broken-backend-service
+service "broken-backend-service" deleted from default namespace
+
+$ kubectl delete pod tclient --wait=false
+pod "tclient" deleted from default namespace
+

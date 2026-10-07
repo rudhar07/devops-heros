@@ -1,0 +1,91 @@
+$ kubectl apply -f pod-lifecycle/04-failed.yaml
+pod/lifecycle-failed created
+
+$ kubectl wait '--for=jsonpath={.status.phase}=Failed' pod/lifecycle-failed --timeout=120s
+pod/lifecycle-failed condition met
+
+$ kubectl get pods --field-selector metadata.name=lifecycle-failed -w --output-watch-events    # ran in the background from apply until now
+EVENT      NAME               READY   STATUS    RESTARTS   AGE
+ADDED      lifecycle-failed   0/1     Pending   0          0s
+MODIFIED   lifecycle-failed   0/1     Pending   0          0s
+MODIFIED   lifecycle-failed   0/1     ContainerCreating   0          0s
+MODIFIED   lifecycle-failed   0/1     ContainerCreating   0          1s
+MODIFIED   lifecycle-failed   1/1     Running             0          1s
+MODIFIED   lifecycle-failed   0/1     Error               0          7s
+MODIFIED   lifecycle-failed   0/1     Error               0          8s
+
+$ kubectl get pod lifecycle-failed
+NAME               READY   STATUS   RESTARTS   AGE
+lifecycle-failed   0/1     Error    0          9s
+
+$ kubectl describe pod lifecycle-failed
+Name:             lifecycle-failed
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-a-control-plane/172.18.0.3
+Start Time:       Wed, 07 Oct 2026 22:47:26 +0530
+Labels:           <none>
+Annotations:      <none>
+Status:           Failed
+IP:               10.244.0.183
+IPs:
+  IP:  10.244.0.183
+Containers:
+  task:
+    Container ID:  containerd://1eb7511a178e8c7f94892ef09bd117383dbbf7e845e5158d38f5487ab824f6dd
+    Image:         busybox:1.36
+    Image ID:      docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo 'Task started'; sleep 5; echo 'Task failed'; exit 1
+    State:          Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 07 Oct 2026 22:47:27 +0530
+      Finished:     Wed, 07 Oct 2026 22:47:32 +0530
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-zvtjz (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   False 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-zvtjz:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  8s    default-scheduler  Successfully assigned default/lifecycle-failed to hw-a-control-plane
+  Normal  Pulled     9s    kubelet            spec.containers{task}: Container image "busybox:1.36" already present on machine and can be accessed by the pod
+  Normal  Created    8s    kubelet            spec.containers{task}: Container created
+  Normal  Started    8s    kubelet            spec.containers{task}: Container started
+
+$ kubectl logs lifecycle-failed
+Task started
+Task failed
+
+$ kubectl get pod lifecycle-failed -o 'jsonpath={.status.containerStatuses[0].state}{"\n"}'
+{"terminated":{"containerID":"containerd://1eb7511a178e8c7f94892ef09bd117383dbbf7e845e5158d38f5487ab824f6dd","exitCode":1,"finishedAt":"2026-10-07T17:17:32Z","reason":"Error","startedAt":"2026-10-07T17:17:27Z"}}
+
+### cleanup
+$ kubectl delete pod lifecycle-failed --wait=false
+pod "lifecycle-failed" deleted from default namespace
+

@@ -1,0 +1,87 @@
+# Two tiny backends (hashicorp/http-echo answers with a fixed text) and one Ingress that routes
+#   blue.local          -> echo-blue
+#   green.local         -> echo-green
+#   apps.local/blue     -> echo-blue    (host + path)
+#   apps.local/green    -> echo-green
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: echo-blue}
+  template:
+    metadata:
+      labels: {app: echo-blue}
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=hello from BLUE backend"]
+          ports: [{containerPort: 5678}]
+          resources: {requests: {cpu: "10m", memory: "8Mi"}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-green
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: echo-green}
+  template:
+    metadata:
+      labels: {app: echo-green}
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=hello from GREEN backend"]
+          ports: [{containerPort: 5678}]
+          resources: {requests: {cpu: "10m", memory: "8Mi"}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-blue
+spec:
+  selector: {app: echo-blue}
+  ports: [{port: 80, targetPort: 5678}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-green
+spec:
+  selector: {app: echo-green}
+  ports: [{port: 80, targetPort: 5678}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echo-hosts
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: blue.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: echo-blue, port: {number: 80}}}
+    - host: green.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: echo-green, port: {number: 80}}}
+    - host: apps.local
+      http:
+        paths:
+          - path: /blue
+            pathType: Prefix
+            backend: {service: {name: echo-blue, port: {number: 80}}}
+          - path: /green
+            pathType: Prefix
+            backend: {service: {name: echo-green, port: {number: 80}}}

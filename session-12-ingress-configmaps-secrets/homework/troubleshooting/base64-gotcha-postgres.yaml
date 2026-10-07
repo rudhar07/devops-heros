@@ -1,0 +1,49 @@
+# Reproduction of troubleshooting/secret-base64-gotcha.md with a real PostgreSQL.
+# The DB server gets its password from "postgres-server-secret" (encoded correctly).
+# All values are FAKE demo values.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-server-secret
+type: Opaque
+data:
+  POSTGRES_PASSWORD: bXlwYXNzd29yZA==        # echo -n "mypassword" | base64
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: yatri-postgres
+  labels:
+    app: yatri-postgres
+spec:
+  containers:
+    - name: postgres
+      image: postgres:16-alpine
+      env:
+        - name: POSTGRES_USER
+          value: yatri_admin
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-server-secret
+              key: POSTGRES_PASSWORD
+      ports:
+        - containerPort: 5432
+      readinessProbe:
+        exec:
+          command: ["pg_isready", "-U", "yatri_admin"]
+        periodSeconds: 3
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: yatri-postgres
+spec:
+  selector:
+    app: yatri-postgres
+  ports:
+    - port: 5432

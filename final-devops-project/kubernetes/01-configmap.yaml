@@ -1,0 +1,12 @@
+# Non-secret settings, injected into the backend with envFrom.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskboard-config
+  labels: {app.kubernetes.io/name: taskboard, app.kubernetes.io/part-of: taskboard}
+data:
+  APP_ENV: "raw-manifests"
+  LOG_LEVEL: "INFO"
+  DB_HOST: "taskboard-postgres"   # the postgres Service below
+  DB_PORT: "5432"
+  DB_NAME: "taskboard"

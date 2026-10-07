@@ -1,0 +1,148 @@
+### Create the ConfigMap
+$ cat configmap/app-config.yaml
+# ConfigMap for the Yatri app. Same keys as the instructor's 01-configmap/app-config.yaml,
+# plus one file-style key (app.properties) that I mount as a file.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yatri-app-config
+  labels:
+    app: yatri-backend
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  PORT: "5000"
+  DEFAULT_CURRENCY: "INR"
+  MAX_BOOKING_DAYS: "30"
+  app.properties: |
+    feature.seat-map=enabled
+    feature.upi-payments=enabled
+    cache.ttl.seconds=120
+
+$ kubectl apply -f configmap/app-config.yaml
+configmap/yatri-app-config created
+
+$ kubectl get configmap yatri-app-config
+NAME               DATA   AGE
+yatri-app-config   6      1s
+
+$ kubectl describe configmap yatri-app-config
+Name:         yatri-app-config
+Namespace:    default
+Labels:       app=yatri-backend
+Annotations:  <none>
+
+Data
+====
+DEFAULT_CURRENCY:
+----
+INR
+
+ENVIRONMENT:
+----
+production
+
+LOG_LEVEL:
+----
+INFO
+
+MAX_BOOKING_DAYS:
+----
+30
+
+PORT:
+----
+5000
+
+app.properties:
+----
+feature.seat-map=enabled
+feature.upi-payments=enabled
+cache.ttl.seconds=120
+
+
+
+BinaryData
+====
+
+Events:  <none>
+
+### (the same can be done imperatively)
+$ kubectl create configmap quick-config --from-literal=THEME=dark --from-literal=TIMEOUT_SECONDS=15 --dry-run=client -o yaml
+apiVersion: v1
+data:
+  THEME: dark
+  TIMEOUT_SECONDS: "15"
+kind: ConfigMap
+metadata:
+  name: quick-config
+
+### Inject it into a Pod (env + volume)
+$ kubectl apply -f configmap/configmap-demo-pod.yaml
+pod/configmap-demo created
+
+$ kubectl wait --for=condition=Ready pod/configmap-demo --timeout=120s
+pod/configmap-demo condition met
+
+### Verify inside the container
+$ kubectl exec configmap-demo -- sh -c 'env | grep -E "^(ENVIRONMENT|LOG_LEVEL|PORT|DEFAULT_CURRENCY|MAX_BOOKING_DAYS|APP_LOG_LEVEL)=" | sort'
+APP_LOG_LEVEL=INFO
+DEFAULT_CURRENCY=INR
+ENVIRONMENT=production
+LOG_LEVEL=INFO
+MAX_BOOKING_DAYS=30
+PORT=5000
+
+$ kubectl exec configmap-demo -- ls -la /etc/yatri
+total 12
+drwxrwxrwx    3 root     root          4096 Oct  7 17:54 .
+drwxr-xr-x    1 root     root          4096 Oct  7 17:54 ..
+drwxr-xr-x    2 root     root          4096 Oct  7 17:54 ..2026_10_07_17_54_54.2401834985
+lrwxrwxrwx    1 root     root            32 Oct  7 17:54 ..data -> ..2026_10_07_17_54_54.2401834985
+lrwxrwxrwx    1 root     root            23 Oct  7 17:54 DEFAULT_CURRENCY -> ..data/DEFAULT_CURRENCY
+lrwxrwxrwx    1 root     root            18 Oct  7 17:54 ENVIRONMENT -> ..data/ENVIRONMENT
+lrwxrwxrwx    1 root     root            16 Oct  7 17:54 LOG_LEVEL -> ..data/LOG_LEVEL
+lrwxrwxrwx    1 root     root            23 Oct  7 17:54 MAX_BOOKING_DAYS -> ..data/MAX_BOOKING_DAYS
+lrwxrwxrwx    1 root     root            11 Oct  7 17:54 PORT -> ..data/PORT
+lrwxrwxrwx    1 root     root            21 Oct  7 17:54 app.properties -> ..data/app.properties
+
+$ kubectl exec configmap-demo -- cat /etc/yatri/app.properties
+feature.seat-map=enabled
+feature.upi-payments=enabled
+cache.ttl.seconds=120
+
+$ kubectl exec configmap-demo -- cat /etc/yatri/DEFAULT_CURRENCY
+INR
+
+### Change a value: the mounted file follows, the env var does not (env is read only at container start)
+$ kubectl patch configmap yatri-app-config --type merge -p '{"data":{"LOG_LEVEL":"DEBUG"}}'
+configmap/yatri-app-config patched
+
+# (polled the file until it changed: took about 88s - the kubelet syncs ConfigMap volumes periodically)
+
+$ kubectl exec configmap-demo -- cat /etc/yatri/LOG_LEVEL
+DEBUG
+
+$ kubectl exec configmap-demo -- sh -c 'echo "env LOG_LEVEL=$LOG_LEVEL  APP_LOG_LEVEL=$APP_LOG_LEVEL"'
+env LOG_LEVEL=INFO  APP_LOG_LEVEL=INFO
+
+# to pick up the new env value the pod has to be recreated (for a Deployment: kubectl rollout restart)
+$ kubectl delete pod configmap-demo
+pod "configmap-demo" deleted from default namespace
+
+$ kubectl apply -f configmap/configmap-demo-pod.yaml
+pod/configmap-demo created
+
+$ kubectl wait --for=condition=Ready pod/configmap-demo --timeout=120s
+pod/configmap-demo condition met
+
+$ kubectl exec configmap-demo -- sh -c 'echo "env LOG_LEVEL=$LOG_LEVEL  APP_LOG_LEVEL=$APP_LOG_LEVEL"'
+env LOG_LEVEL=DEBUG  APP_LOG_LEVEL=DEBUG
+
+### put LOG_LEVEL back to INFO
+$ kubectl apply -f configmap/app-config.yaml
+configmap/yatri-app-config configured
+
+$ kubectl delete pod configmap-demo
+pod "configmap-demo" deleted from default namespace
+

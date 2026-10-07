@@ -1,0 +1,23 @@
+# Throwaway Git server: git daemon in a container on the docker network 'kind', so ArgoCD's repo-server pod can reach it by container name.
+# Earlier attempts (not shown in full): alpine/git has no git-daemon binary ("git: 'daemon' is not a git command"), and one apk fetch hit a
+# transient 'temporary error' from dl-cdn.alpinelinux.org, so the container below retries apk before starting the daemon.
+$ docker run -d --name hw-e-gitd --network kind -v /private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad:/srv/git alpine:3.20 sh -c for i in 1 2 3 4 5; do apk add --no-cache git git-daemon >/dev/null && break; sleep 3; done; exec git -c safe.directory='*' daemon --verbose --reuseaddr --export-all --enable=receive-pack --base-path=/srv/git /srv/git
+49853375451ef8a82d2361a4da2ba5d46649641575636015df4574bfa883a3e5
+
+$ docker logs hw-e-gitd
+[13] Ready to rumble
+
+$ docker ps --filter name=hw-e-gitd --format {{.Names}} {{.Image}} {{.Status}} {{.Networks}}
+hw-e-gitd alpine:3.20 Up 6 seconds kind
+
+$ docker exec hw-e-control-plane getent hosts hw-e-gitd
+fc00:f853:ccd:e793::2 hw-e-gitd
+
+# Reachability check from inside the cluster (throwaway pod doing git ls-remote):
+$ kubectl run git-check --rm -i --restart=Never --image=alpine/git:latest --command -- git ls-remote git://hw-e-gitd/gitops-demo-repo
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+c404e4b5b5c5da0bb99fa7d294aacc423459bb4d	HEAD
+c404e4b5b5c5da0bb99fa7d294aacc423459bb4d	refs/heads/main
+pod "git-check" deleted from default namespace
+

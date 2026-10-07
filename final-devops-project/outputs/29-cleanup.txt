@@ -1,0 +1,23 @@
+# Cleanup at the end of the session
+$ kind delete cluster --name hw-f --kubeconfig $KUBECONFIG
+Deleting cluster "hw-f" ...
+Deleted nodes: ["hw-f-control-plane"]
+
+$ docker rm -f hw-f-gitd
+hw-f-gitd
+
+$ docker ps -a --format '{{.Names}}' | grep -E '^hw-f|^taskboard' || echo 'no hw-f / taskboard containers left'
+no hw-f / taskboard containers left
+
+$ docker image rm taskboard-backend:local taskboard-frontend:local
+Untagged: taskboard-backend:local
+Deleted: sha256:e228e9e6fa878f9a3204a906392ec79a147ea47d8f1e6b11f34f32bb06ad5576
+Untagged: taskboard-frontend:local
+Deleted: sha256:2adafd64aa8cb95754251fbfc08e3051e58ffaf32258d2acdde74aac0e171f3a
+
+$ docker volume ls --format '{{.Name}}' | grep -i taskboard || echo 'no taskboard volumes left'
+no taskboard volumes left
+
+$ kind get clusters
+No kind clusters found.
+

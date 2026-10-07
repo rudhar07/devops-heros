@@ -1,0 +1,80 @@
+# CASE 2 - image tag that does not exist (image/registry layer)
+# BREAK
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml -f troubleshooting/case2-bad-image-tag.values.yaml --timeout 60s | grep -E 'STATUS|REVISION|Backend image'
+STATUS: deployed
+REVISION: 7
+Backend image:  taskboard-backend:v2.0.1-typo
+
+$ kubectl -n taskboard wait --for=condition=Ready pod -l app.kubernetes.io/component=backend --timeout=45s 2>&1 | tail -1
+error: timed out waiting for the condition on pods/taskboard-backend-846c6d8b6d-p77rw
+
+# IDENTIFY
+$ kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS                  RESTARTS   AGE
+taskboard-backend-59d5dcc795-4r2g9   1/1     Running                 0          33m
+taskboard-backend-59d5dcc795-865pz   1/1     Running                 0          33m
+taskboard-backend-846c6d8b6d-p77rw   0/1     Init:ImagePullBackOff   0          45s
+
+# INVESTIGATE
+$ NEW=$(kubectl -n taskboard get pods -l app.kubernetes.io/component=backend --sort-by=.metadata.creationTimestamp -o name | tail -1); kubectl -n taskboard describe $NEW | grep -E 'Image:|Failed|BackOff|ErrImage' | head -8
+    Image:         postgres:17.11-alpine
+    Image:         taskboard-backend:v2.0.1-typo
+      Reason:       ImagePullBackOff
+    Image:          taskboard-backend:v2.0.1-typo
+  Warning  Failed     29s (x2 over 42s)  kubelet            spec.initContainers{migrate}: Failed to pull image "taskboard-backend:v2.0.1-typo": failed to pull and unpack image "docker.io/library/taskboard-backend:v2.0.1-typo": failed to resolve reference "docker.io/library/taskboard-backend:v2.0.1-typo": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+  Warning  Failed     29s (x2 over 42s)  kubelet            spec.initContainers{migrate}: Error: ErrImagePull
+  Normal   BackOff    15s (x2 over 41s)  kubelet            spec.initContainers{migrate}: Back-off pulling image "taskboard-backend:v2.0.1-typo"
+  Warning  Failed     15s (x2 over 41s)  kubelet            spec.initContainers{migrate}: Error: ImagePullBackOff
+
+$ kubectl -n taskboard get events --sort-by=.lastTimestamp --field-selector reason=Failed | tail -3
+29s         Warning   Failed   pod/taskboard-backend-846c6d8b6d-p77rw   Failed to pull image "taskboard-backend:v2.0.1-typo": failed to pull and unpack image "docker.io/library/taskboard-backend:v2.0.1-typo": failed to resolve reference "docker.io/library/taskboard-backend:v2.0.1-typo": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+29s         Warning   Failed   pod/taskboard-backend-846c6d8b6d-p77rw   Error: ErrImagePull
+15s         Warning   Failed   pod/taskboard-backend-846c6d8b6d-p77rw   Error: ImagePullBackOff
+
+$ docker exec hw-f-control-plane crictl images | grep -E 'IMAGE|taskboard-backend'
+IMAGE                                                    TAG                  IMAGE ID            SIZE
+docker.io/library/taskboard-backend                      local                ae87e1dd05590       65.6MB
+
+# ROOT CAUSE: backend.image.tag=v2.0.1-typo. The image taskboard-backend:v2.0.1-typo was never built/loaded, so the kubelet tries docker.io/library/taskboard-backend:v2.0.1-typo, which does not exist (pull access denied) -> ErrImagePull -> ImagePullBackOff. Old pods keep running (rolling update).
+$ curl -s -o /dev/null -w 'API during the incident: HTTP %{http_code}
+' http://taskboard.localhost:30110/api/tasks
+API during the incident: HTTP 200
+
+# FIX
+$ helm rollback taskboard 0 -n taskboard --wait --timeout 3m
+Rollback was a success! Happy Helming!
+
+# VERIFY
+$ kubectl -n taskboard get deploy taskboard-backend -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
+taskboard-backend:local
+
+$ kubectl -n taskboard rollout status deploy/taskboard-backend --timeout=120s
+deployment "taskboard-backend" successfully rolled out
+
+$ kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS        RESTARTS   AGE
+taskboard-backend-59d5dcc795-4r2g9   1/1     Running       0          33m
+taskboard-backend-59d5dcc795-865pz   1/1     Running       0          33m
+taskboard-backend-846c6d8b6d-p77rw   0/1     Terminating   0          46s
+
+
+# ---- the instructor's troubleshooting/broken-image.yaml (same class of failure, different cause) ----
+$ kubectl apply -f troubleshooting/instructor-broken-image.yaml
+deployment.apps/taskboard-broken-image created
+
+$ kubectl -n taskboard wait --for=condition=Ready pod -l app=broken-image --timeout=40s 2>&1 | tail -1
+error: timed out waiting for the condition on pods/taskboard-broken-image-6669966b5b-76ppk
+
+$ kubectl -n taskboard get pods -l app=broken-image
+NAME                                      READY   STATUS         RESTARTS   AGE
+taskboard-broken-image-6669966b5b-76ppk   0/1     ErrImagePull   0          40s
+
+$ kubectl -n taskboard get events --sort-by=.lastTimestamp | grep broken-image | grep -iE 'fail|back' | tail -3
+15s         Warning   Failed                         pod/taskboard-broken-image-6669966b5b-76ppk     Failed to pull image "ghcr.io/example/taskboard-backend:does-not-exist": failed to pull and unpack image "ghcr.io/example/taskboard-backend:does-not-exist": failed to resolve reference "ghcr.io/example/taskboard-backend:does-not-exist": failed to authorize: failed to fetch anonymous token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Aexample%2Ftaskboard-backend%3Apull&service=ghcr.io: 403 Forbidden
+3s          Normal    BackOff                        pod/taskboard-broken-image-6669966b5b-76ppk     Back-off pulling image "ghcr.io/example/taskboard-backend:does-not-exist"
+3s          Warning   Failed                         pod/taskboard-broken-image-6669966b5b-76ppk     Error: ImagePullBackOff
+
+# Here the tag does-not-exist under ghcr.io/example is the cause. Nothing depends on this Deployment, so the fix is to delete it (or point it at a real image).
+$ kubectl delete -f troubleshooting/instructor-broken-image.yaml
+deployment.apps "taskboard-broken-image" deleted from taskboard namespace
+

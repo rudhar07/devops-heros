@@ -1,0 +1,67 @@
+# Scrape pickup took ~2.5 min after the ServiceMonitor was created (operator writes the config Secret, kubelet syncs the mounted Secret, config-reloader reloads Prometheus).
+# Traffic for the queries: in-cluster load (2 workers, 120 s) + 404s and creates through the Ingress
+$ DURATION=120 WORKERS=2 scripts/load-test.sh
+pod/loadgen created
+loadgen pod started: 2 workers x 120s against http://taskboard-backend.taskboard.svc:8000
+
+$ for i in $(seq 1 30); do curl -s -o /dev/null http://taskboard.localhost:30110/api/tasks/999; curl -s -o /dev/null -X POST http://taskboard.localhost:30110/api/tasks -H 'Content-Type: application/json' -d "{\"title\":\"metrics demo $i\",\"priority\":\"LOW\"}"; done; echo sent 30 x 404 + 30 x POST
+sent 30 x 404 + 30 x POST
+
+$ kubectl -n taskboard wait --for=jsonpath='{.status.phase}'=Succeeded pod/loadgen --timeout=200s
+pod/loadgen condition met
+
+# Prometheus (NodePort 30112): the backend targets from the ServiceMonitor
+$ curl -s 'http://localhost:30112/api/v1/targets?state=active' | jq -r '.data.activeTargets[] | select(.labels.namespace=="taskboard") | "\(.scrapePool)  \(.labels.pod)  \(.scrapeUrl)  health=\(.health)  lastError=\(.lastError)"'
+serviceMonitor/taskboard/taskboard-backend/0  taskboard-backend-59d5dcc795-4r2g9  http://10.244.0.16:8000/metrics  health=up  lastError=
+serviceMonitor/taskboard/taskboard-backend/0  taskboard-backend-59d5dcc795-865pz  http://10.244.0.17:8000/metrics  health=up  lastError=
+serviceMonitor/taskboard/taskboard-backend/0  taskboard-backend-59d5dcc795-hjxm7  http://10.244.0.49:8000/metrics  health=up  lastError=
+serviceMonitor/taskboard/taskboard-backend/0  taskboard-backend-59d5dcc795-wsgk6  http://10.244.0.50:8000/metrics  health=up  lastError=
+
+# PromQL results via the HTTP API (label noise removed with jq):
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=up{namespace="taskboard"}' | jq ...
+{"pod":"taskboard-backend-59d5dcc795-4r2g9"}  =>  1
+{"pod":"taskboard-backend-59d5dcc795-865pz"}  =>  1
+{"pod":"taskboard-backend-59d5dcc795-wsgk6"}  =>  1
+{"pod":"taskboard-backend-59d5dcc795-hjxm7"}  =>  1
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=sum by (handler, method, status) (increase(http_requests_total{namespace="taskboard"}[10m]))' | jq ...
+{"handler":"/api/tasks","method":"POST","status":"201"}  =>  33.066413095443856
+{"handler":"/api/tasks/{task_id}","method":"PUT","status":"200"}  =>  0
+{"handler":"/api/tasks/stats","method":"GET","status":"200"}  =>  17573.505662419884
+{"handler":"/api/info","method":"GET","status":"200"}  =>  0
+{"handler":"/api/tasks","method":"GET","status":"200"}  =>  35179.906546548125
+{"handler":"/api/tasks/{task_id}","method":"GET","status":"404"}  =>  33.47113324565288
+{"handler":"/api/tasks/{task_id}","method":"DELETE","status":"204"}  =>  0
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=sum(rate(http_requests_total{namespace="taskboard"}[2m]))' | jq ...
+{}  =>  370.1193055456919
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=sum by (status) (rate(http_requests_total{namespace="taskboard"}[5m]))' | jq ...
+{"status":"201"}  =>  0.11023693247123362
+{"status":"200"}  =>  175.87487692182725
+{"status":"404"}  =>  0.11158599953873569
+{"status":"204"}  =>  0
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="taskboard"}[5m])))' | jq ...
+{}  =>  0.09501197788149326
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=sum by (action) (taskboard_task_events_total{namespace="taskboard"})' | jq ...
+{"action":"created"}  =>  73
+{"action":"updated"}  =>  1
+{"action":"deleted"}  =>  1
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="taskboard", container="backend"}[2m]))' | jq ...
+{"pod":"taskboard-backend-59d5dcc795-4r2g9"}  =>  0.24901113302435654
+{"pod":"taskboard-backend-59d5dcc795-865pz"}  =>  0.23904053884186713
+{"pod":"taskboard-backend-59d5dcc795-hjxm7"}  =>  0.13452065354776427
+{"pod":"taskboard-backend-59d5dcc795-wsgk6"}  =>  0.1272077975
+
+$ curl -s http://localhost:30112/api/v1/query --data-urlencode 'query=kube_horizontalpodautoscaler_status_current_replicas{namespace="taskboard"}' | jq ...
+{"horizontalpodautoscaler":"taskboard-backend","pod":"kps-kube-state-metrics-5f69fb89b6-th6fj"}  =>  4
+
+# Alert rules loaded from the PrometheusRule:
+$ curl -s http://localhost:30112/api/v1/rules | jq -r '.data.groups[] | select(.name=="taskboard.rules") | .rules[] | "\(.name)  state=\(.state)  health=\(.health)"'
+TaskboardBackendDown  state=inactive  health=ok
+TaskboardHighErrorRate  state=inactive  health=ok
+TaskboardHighLatencyP95  state=inactive  health=ok
+

@@ -1,0 +1,12 @@
+$ kubectl apply -f monitoring/loadgen.yaml
+pod/loadgen created
+
+$ kubectl -n podinfo wait --for=condition=Ready pod/loadgen --timeout=5m
+pod/loadgen condition met
+
+$ kubectl -n podinfo get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+loadgen                  1/1     Running   0          33s
+podinfo-ff5c6b4f-bjffk   1/1     Running   0          85s
+podinfo-ff5c6b4f-mgzg6   1/1     Running   0          85s
+

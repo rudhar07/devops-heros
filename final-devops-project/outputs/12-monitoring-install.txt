@@ -1,0 +1,63 @@
+# Monitoring: trimmed kube-prometheus-stack (chart 92.1.0, OCI from ghcr.io) - Prometheus Operator, Prometheus, Alertmanager, Grafana, kube-state-metrics, node-exporter.
+$ docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E 'hw-|NAME'
+hw-f-control-plane 1.496GiB / 7.749GiB
+
+$ helm upgrade --install kps oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack --version 92.1.0 -n monitoring --create-namespace -f monitoring/kube-prometheus-stack-values.yaml --wait --timeout 10m | head -12
+Release "kps" does not exist. Installing it now.
+Pulled: ghcr.io/prometheus-community/charts/kube-prometheus-stack:92.1.0
+Digest: sha256:1d18af4218d0295656dee4d01f4a839d75639703e5f9c01d6beebbb8821ee5d1
+NAME: kps
+LAST DEPLOYED: Thu Oct  8 00:33:44 2026
+NAMESPACE: monitoring
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+NOTES:
+kube-prometheus-stack has been installed. Check its status by running:
+  kubectl --namespace monitoring get pods -l "release=kps"
+
+$ kubectl -n monitoring get pods,svc
+NAME                                                        READY   STATUS            RESTARTS   AGE
+pod/alertmanager-kps-kube-prometheus-stack-alertmanager-0   0/2     PodInitializing   0          80s
+pod/kps-grafana-d468c645b-q4t57                             3/3     Running           0          107s
+pod/kps-kube-prometheus-stack-operator-7cbcc744b6-hwmrz     1/1     Running           0          107s
+pod/kps-kube-state-metrics-5f69fb89b6-th6fj                 1/1     Running           0          107s
+pod/kps-prometheus-node-exporter-52jgn                      1/1     Running           0          107s
+pod/prometheus-kps-kube-prometheus-stack-prometheus-0       0/2     PodInitializing   0          79s
+
+NAME                                             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                         AGE
+service/alertmanager-operated                    ClusterIP   None            <none>        9093/TCP,9094/TCP,9094/UDP      80s
+service/kps-grafana                              NodePort    10.96.229.49    <none>        80:30111/TCP                    107s
+service/kps-kube-prometheus-stack-alertmanager   ClusterIP   10.96.104.87    <none>        9093/TCP,8080/TCP               107s
+service/kps-kube-prometheus-stack-operator       ClusterIP   10.96.86.154    <none>        443/TCP                         107s
+service/kps-kube-prometheus-stack-prometheus     NodePort    10.96.114.126   <none>        9090:30112/TCP,8080:31374/TCP   107s
+service/kps-kube-state-metrics                   ClusterIP   10.96.214.31    <none>        8080/TCP                        107s
+service/kps-prometheus-node-exporter             ClusterIP   10.96.246.171   <none>        9100/TCP                        107s
+service/prometheus-operated                      ClusterIP   None            <none>        9090/TCP                        80s
+
+$ kubectl -n monitoring rollout status statefulset/prometheus-kps-kube-prometheus-stack-prometheus --timeout=5m
+Waiting for 1 pods to be ready...
+statefulset rolling update complete 1 pods at revision prometheus-kps-kube-prometheus-stack-prometheus-7fbfc54dc...
+
+$ kubectl -n monitoring rollout status statefulset/alertmanager-kps-kube-prometheus-stack-alertmanager --timeout=5m
+statefulset rolling update complete 1 pods at revision alertmanager-kps-kube-prometheus-stack-alertmanager-6947df655b...
+
+# The chart only renders ServiceMonitor/PrometheusRule when the monitoring.coreos.com/v1 API exists. It exists now, so upgrade the release:
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml --wait --timeout 5m | grep -E 'STATUS|REVISION'
+STATUS: deployed
+REVISION: 4
+
+$ kubectl -n taskboard get servicemonitor,prometheusrule
+NAME                                                     AGE
+servicemonitor.monitoring.coreos.com/taskboard-backend   0s
+
+NAME                                                    AGE
+prometheusrule.monitoring.coreos.com/taskboard-alerts   0s
+
+# Grafana dashboard as a ConfigMap; the Grafana sidecar loads every ConfigMap labelled grafana_dashboard=1
+$ kubectl -n monitoring create configmap taskboard-dashboard --from-file=monitoring/grafana-dashboard-taskboard.json --dry-run=client -o yaml | kubectl label --local -f - grafana_dashboard=1 -o yaml | kubectl apply -f -
+configmap/taskboard-dashboard created
+
+$ docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep -E 'hw-'
+hw-f-control-plane 2.918GiB / 7.749GiB
+

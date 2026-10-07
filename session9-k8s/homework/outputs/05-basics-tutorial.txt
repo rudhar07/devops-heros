@@ -1,0 +1,341 @@
+# Kubernetes Basics tutorial (kubernetes.io/docs/tutorials/kubernetes-basics), modules 2-6, on minikube profile hw-minikube.
+# The tutorial image gcr.io/google-samples/kubernetes-bootcamp is amd64-only, so I use agnhost (multi-arch), whose
+# 'netexec' mode serves /hostname, which plays the role of the bootcamp app's 'Running on: <pod>' reply.
+
+### Module 2: Create a Deployment
+$ kubectl create deployment kubernetes-bootcamp --image=registry.k8s.io/e2e-test-images/agnhost:2.39 -- /agnhost netexec --http-port=8080
+deployment.apps/kubernetes-bootcamp created
+
+$ kubectl rollout status deployment/kubernetes-bootcamp --timeout=180s
+Waiting for deployment spec update to be observed...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 0 of 1 updated replicas are available...
+deployment "kubernetes-bootcamp" successfully rolled out
+
+$ kubectl get deployments
+NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+kubernetes-bootcamp   1/1     1            1           1s
+
+### Module 3: Explore the app
+$ kubectl get pods -o wide
+NAME                                  READY   STATUS    RESTARTS   AGE   IP            NODE          NOMINATED NODE   READINESS GATES
+kubernetes-bootcamp-99dc48984-nm6vc   1/1     Running   0          1s    10.244.0.39   hw-minikube   <none>           <none>
+
+$ kubectl describe pod kubernetes-bootcamp-99dc48984-nm6vc
+Name:             kubernetes-bootcamp-99dc48984-nm6vc
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-minikube/192.168.49.2
+Start Time:       Wed, 07 Oct 2026 22:03:20 +0530
+Labels:           app=kubernetes-bootcamp
+                  pod-template-hash=99dc48984
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.39
+IPs:
+  IP:           10.244.0.39
+Controlled By:  ReplicaSet/kubernetes-bootcamp-99dc48984
+Containers:
+  agnhost:
+    Container ID:  containerd://1f9b29bf3c05cf490738c4c9f0a4030cc0b18c55270666ccfc0ecd2f4706a963
+    Image:         registry.k8s.io/e2e-test-images/agnhost:2.39
+    Image ID:      registry.k8s.io/e2e-test-images/agnhost@sha256:7e8bdd271312fd25fc5ff5a8f04727be84044eb3d7d8d03611972a6752e2e11e
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /agnhost
+      netexec
+      --http-port=8080
+    State:          Running
+      Started:      Wed, 07 Oct 2026 22:03:21 +0530
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-q2hd6 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-q2hd6:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  1s    default-scheduler  Successfully assigned default/kubernetes-bootcamp-99dc48984-nm6vc to hw-minikube
+  Normal  Pulled     0s    kubelet            spec.containers{agnhost}: Container image "registry.k8s.io/e2e-test-images/agnhost:2.39" already present on machine and can be accessed by the pod
+  Normal  Created    0s    kubelet            spec.containers{agnhost}: Container created
+  Normal  Started    0s    kubelet            spec.containers{agnhost}: Container started
+
+# kubectl proxy --port=8099 is now running in the background
+$ curl -s http://localhost:8099/version
+{
+  "major": "1",
+  "minor": "37",
+  "emulationMajor": "1",
+  "emulationMinor": "37",
+  "minCompatibilityMajor": "1",
+  "minCompatibilityMinor": "36",
+  "gitVersion": "v1.37.0",
+  "gitCommit": "f54c212e3a2f75d674b717a9b29052b20b60aefc",
+  "gitTreeState": "clean",
+  "buildDate": "2026-08-26T10:44:25Z",
+  "goVersion": "go1.26.6",
+  "compiler": "gc",
+  "platform": "linux/arm64"
+}
+$ curl -s http://localhost:8099/api/v1/namespaces/default/pods/kubernetes-bootcamp-99dc48984-nm6vc:8080/proxy/hostname
+kubernetes-bootcamp-99dc48984-nm6vc
+
+$ kubectl logs kubernetes-bootcamp-99dc48984-nm6vc --tail=5
+I1007 16:33:21.350750       1 log.go:195] Started HTTP server on port 8080
+I1007 16:33:21.352287       1 log.go:195] Started UDP server on port  8081
+I1007 16:33:22.237329       1 log.go:195] GET /hostname
+
+$ kubectl exec kubernetes-bootcamp-99dc48984-nm6vc -- env
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOSTNAME=kubernetes-bootcamp-99dc48984-nm6vc
+KUBERNETES_PORT=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1
+KUBERNETES_SERVICE_HOST=10.96.0.1
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_SERVICE_PORT_HTTPS=443
+HOME=/root
+
+$ kubectl exec kubernetes-bootcamp-99dc48984-nm6vc -- sh -c 'cat /etc/os-release | head -2; hostname'
+NAME="Alpine Linux"
+ID=alpine
+kubernetes-bootcamp-99dc48984-nm6vc
+
+### Module 4: Expose the app (NodePort Service) and use labels
+$ kubectl get services
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   10m
+
+$ kubectl expose deployment/kubernetes-bootcamp --type=NodePort --port 8080
+service/kubernetes-bootcamp exposed
+
+$ kubectl get services
+NAME                  TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes            ClusterIP   10.96.0.1       <none>        443/TCP          10m
+kubernetes-bootcamp   NodePort    10.100.25.184   <none>        8080:30448/TCP   0s
+
+$ kubectl describe services/kubernetes-bootcamp
+Name:                     kubernetes-bootcamp
+Namespace:                default
+Labels:                   app=kubernetes-bootcamp
+Annotations:              <none>
+Selector:                 app=kubernetes-bootcamp
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.100.25.184
+IPs:                      10.100.25.184
+Port:                     <unset>  8080/TCP
+TargetPort:               8080/TCP
+NodePort:                 <unset>  30448/TCP
+Endpoints:                10.244.0.39:8080
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+$ minikube -p hw-minikube ip
+192.168.49.2
+
+# On macOS with the docker driver, 192.168.49.2 is inside Docker Desktop's VM and not routable from the Mac.
+# So I reach the NodePort from a throwaway container attached to minikube's docker network (= 'outside the cluster'):
+$ docker run --rm --network hw-minikube curlimages/curl:8.5.0 -sS http://192.168.49.2:30448/hostname
+curl: (7) Failed to connect to 192.168.49.2 port 30448 after 0 ms: Couldn't connect to server
+
+
+$ kubectl get pods -l app=kubernetes-bootcamp
+NAME                                  READY   STATUS    RESTARTS   AGE
+kubernetes-bootcamp-99dc48984-nm6vc   1/1     Running   0          5s
+
+$ kubectl get services -l app=kubernetes-bootcamp
+NAME                  TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes-bootcamp   NodePort   10.100.25.184   <none>        8080:30448/TCP   3s
+
+$ kubectl label pods kubernetes-bootcamp-99dc48984-nm6vc version=v1
+pod/kubernetes-bootcamp-99dc48984-nm6vc labeled
+
+$ kubectl get pod kubernetes-bootcamp-99dc48984-nm6vc --show-labels
+NAME                                  READY   STATUS    RESTARTS   AGE   LABELS
+kubernetes-bootcamp-99dc48984-nm6vc   1/1     Running   0          5s    app=kubernetes-bootcamp,pod-template-hash=99dc48984,version=v1
+
+$ kubectl get pods -l version=v1
+NAME                                  READY   STATUS    RESTARTS   AGE
+kubernetes-bootcamp-99dc48984-nm6vc   1/1     Running   0          5s
+
+### Module 5: Scale the app
+$ kubectl get rs
+NAME                            DESIRED   CURRENT   READY   AGE
+kubernetes-bootcamp-99dc48984   1         1         1       5s
+
+$ kubectl scale deployments/kubernetes-bootcamp --replicas=4
+deployment.apps/kubernetes-bootcamp scaled
+
+$ kubectl rollout status deployment/kubernetes-bootcamp --timeout=180s
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 out of 4 new replicas have been updated...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 of 4 updated replicas are available...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 3 of 4 updated replicas are available...
+deployment "kubernetes-bootcamp" successfully rolled out
+
+$ kubectl get deployments
+NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+kubernetes-bootcamp   4/4     4            4           7s
+
+$ kubectl get pods -o wide
+NAME                                  READY   STATUS    RESTARTS   AGE   IP            NODE          NOMINATED NODE   READINESS GATES
+kubernetes-bootcamp-99dc48984-l7k8b   1/1     Running   0          2s    10.244.0.40   hw-minikube   <none>           <none>
+kubernetes-bootcamp-99dc48984-nm6vc   1/1     Running   0          7s    10.244.0.39   hw-minikube   <none>           <none>
+kubernetes-bootcamp-99dc48984-p6rwh   1/1     Running   0          2s    10.244.0.41   hw-minikube   <none>           <none>
+kubernetes-bootcamp-99dc48984-r2pc2   1/1     Running   0          2s    10.244.0.42   hw-minikube   <none>           <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=kubernetes-bootcamp -o wide
+NAME                        ADDRESSTYPE   PORTS   ENDPOINTS                             AGE
+kubernetes-bootcamp-vhzcl   IPv4          8080    10.244.0.39,10.244.0.42,10.244.0.41   5s
+
+# 20 requests through the NodePort - the Service spreads them over the 4 pods:
+$ docker run -d --name hw-a-mk-client --network hw-minikube curlimages/curl:8.5.0 sleep 300
+03e7dc1f22380deb43f55b2d12663c057de4eff94dfbdbb03e0c286aa2137234
+
+$ docker exec hw-a-mk-client sh -c 'for i in $(seq 1 20); do curl -sS http://192.168.49.2:30448/hostname; echo; done | sort | uniq -c'
+      4 kubernetes-bootcamp-99dc48984-l7k8b
+      7 kubernetes-bootcamp-99dc48984-nm6vc
+      9 kubernetes-bootcamp-99dc48984-p6rwh
+
+$ docker rm -f hw-a-mk-client
+hw-a-mk-client
+
+$ kubectl scale deployments/kubernetes-bootcamp --replicas=2
+deployment.apps/kubernetes-bootcamp scaled
+
+# (polled until only 2 pods were left)
+$ kubectl get deployments
+NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+kubernetes-bootcamp   2/2     2            2           12s
+
+$ kubectl get pods -o wide
+NAME                                  READY   STATUS    RESTARTS   AGE   IP            NODE          NOMINATED NODE   READINESS GATES
+kubernetes-bootcamp-99dc48984-nm6vc   1/1     Running   0          13s   10.244.0.39   hw-minikube   <none>           <none>
+kubernetes-bootcamp-99dc48984-r2pc2   1/1     Running   0          8s    10.244.0.42   hw-minikube   <none>           <none>
+
+### Module 6: Rolling update and rollback
+$ kubectl get pods -o 'custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[0].image'
+NAME                                  IMAGE
+kubernetes-bootcamp-99dc48984-nm6vc   registry.k8s.io/e2e-test-images/agnhost:2.39
+kubernetes-bootcamp-99dc48984-r2pc2   registry.k8s.io/e2e-test-images/agnhost:2.39
+
+$ kubectl set image deployments/kubernetes-bootcamp agnhost=registry.k8s.io/e2e-test-images/agnhost:2.40
+deployment.apps/kubernetes-bootcamp image updated
+
+$ kubectl rollout status deployments/kubernetes-bootcamp --timeout=180s
+Waiting for deployment spec update to be observed...
+Waiting for deployment spec update to be observed...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 old replicas are pending termination...
+deployment "kubernetes-bootcamp" successfully rolled out
+
+$ kubectl get pods -o 'custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[0].image,PHASE:.status.phase'
+NAME                                   IMAGE                                          PHASE
+kubernetes-bootcamp-6f598bcf4d-tsdrf   registry.k8s.io/e2e-test-images/agnhost:2.40   Running
+kubernetes-bootcamp-6f598bcf4d-xtll8   registry.k8s.io/e2e-test-images/agnhost:2.40   Running
+
+$ kubectl get rs
+NAME                             DESIRED   CURRENT   READY   AGE
+kubernetes-bootcamp-6f598bcf4d   2         2         2       7s
+kubernetes-bootcamp-99dc48984    0         0         0       20s
+
+$ docker run --rm --network hw-minikube curlimages/curl:8.5.0 -sS http://192.168.49.2:30448/hostname
+kubernetes-bootcamp-6f598bcf4d-xtll8
+
+$ kubectl rollout history deployment/kubernetes-bootcamp
+deployment.apps/kubernetes-bootcamp 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+
+
+# now push a tag that does not exist (the tutorial uses v10) and roll back
+$ kubectl set image deployments/kubernetes-bootcamp agnhost=registry.k8s.io/e2e-test-images/agnhost:v10
+deployment.apps/kubernetes-bootcamp image updated
+
+$ kubectl rollout status deployments/kubernetes-bootcamp --timeout=45s
+Waiting for deployment spec update to be observed...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 out of 2 new replicas have been updated...
+error: timed out waiting for the condition
+
+$ kubectl get deployments
+NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+kubernetes-bootcamp   2/2     1            2           67s
+
+$ kubectl get pods
+NAME                                   READY   STATUS             RESTARTS   AGE
+kubernetes-bootcamp-6f598bcf4d-tsdrf   1/1     Running            0          52s
+kubernetes-bootcamp-6f598bcf4d-xtll8   1/1     Running            0          54s
+kubernetes-bootcamp-7c4fc9cb49-6hlwv   0/1     ImagePullBackOff   0          45s
+
+$ kubectl describe pod kubernetes-bootcamp-7c4fc9cb49-6hlwv | sed -n '/^Events/,$p'
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  46s                default-scheduler  Successfully assigned default/kubernetes-bootcamp-7c4fc9cb49-6hlwv to hw-minikube
+  Normal   BackOff    17s (x2 over 43s)  kubelet            spec.containers{agnhost}: Back-off pulling image "registry.k8s.io/e2e-test-images/agnhost:v10"
+  Warning  Failed     17s (x2 over 43s)  kubelet            spec.containers{agnhost}: Error: ImagePullBackOff
+  Normal   Pulling    2s (x3 over 45s)   kubelet            spec.containers{agnhost}: Pulling image "registry.k8s.io/e2e-test-images/agnhost:v10"
+  Warning  Failed     1s (x3 over 43s)   kubelet            spec.containers{agnhost}: Failed to pull image "registry.k8s.io/e2e-test-images/agnhost:v10": rpc error: code = NotFound desc = failed to pull and unpack image "registry.k8s.io/e2e-test-images/agnhost:v10": failed to resolve reference "registry.k8s.io/e2e-test-images/agnhost:v10": registry.k8s.io/e2e-test-images/agnhost:v10: not found
+  Warning  Failed     1s (x3 over 43s)   kubelet            spec.containers{agnhost}: Error: ErrImagePull
+
+$ kubectl rollout undo deployments/kubernetes-bootcamp
+deployment.apps/kubernetes-bootcamp rolled back
+
+$ kubectl rollout status deployments/kubernetes-bootcamp --timeout=180s
+Waiting for deployment spec update to be observed...
+Waiting for deployment spec update to be observed...
+Waiting for deployment "kubernetes-bootcamp" rollout to finish: 1 old replicas are pending termination...
+deployment "kubernetes-bootcamp" successfully rolled out
+
+$ kubectl get pods -o 'custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[0].image,PHASE:.status.phase'
+NAME                                   IMAGE                                          PHASE
+kubernetes-bootcamp-6f598bcf4d-tsdrf   registry.k8s.io/e2e-test-images/agnhost:2.40   Running
+kubernetes-bootcamp-6f598bcf4d-xtll8   registry.k8s.io/e2e-test-images/agnhost:2.40   Running
+
+$ kubectl rollout history deployment/kubernetes-bootcamp
+deployment.apps/kubernetes-bootcamp 
+REVISION  CHANGE-CAUSE
+1         <none>
+3         <none>
+4         <none>
+
+
+### Cleanup
+$ kubectl delete service kubernetes-bootcamp
+service "kubernetes-bootcamp" deleted from default namespace
+
+$ kubectl delete deployment kubernetes-bootcamp
+deployment.apps "kubernetes-bootcamp" deleted from default namespace
+

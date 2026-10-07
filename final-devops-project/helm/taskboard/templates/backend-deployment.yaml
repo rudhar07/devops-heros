@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "taskboard.fullname" . }}-backend
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "taskboard.selectorLabels" (dict "ctx" . "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "taskboard.labels" . | nindent 8 }}
+        {{- include "taskboard.selectorLabels" (dict "ctx" . "component" "backend") | nindent 8 }}
+      annotations:
+        # Roll the pods when config or credentials change
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      {{- if .Values.backend.migrations.enabled }}
+      initContainers:
+        # 1) wait until PostgreSQL accepts connections (max ~2 minutes).
+        #    "-U probe": without a user name pg_isready looks up the OS user
+        #    of UID 10001, which has no passwd entry -> "no attempt".
+        - name: wait-for-db
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          command: ["sh", "-c", "for i in $(seq 1 60); do pg_isready -h \"$DB_HOST\" -p \"$DB_PORT\" -U probe -t 2 && exit 0; echo \"waiting for $DB_HOST:$DB_PORT ($i)\"; sleep 2; done; echo \"database $DB_HOST not reachable\"; exit 1"]
+          envFrom:
+            - configMapRef: {name: {{ include "taskboard.fullname" . }}-config}
+          securityContext:
+            {{- include "taskboard.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+        # 2) apply Alembic migrations (advisory lock serialises parallel pods)
+        - name: migrate
+          image: {{ include "taskboard.backendImage" . | quote }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: {name: {{ include "taskboard.fullname" . }}-config}
+            - secretRef: {name: {{ include "taskboard.secretName" . }}}
+          securityContext:
+            {{- include "taskboard.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "taskboard.backendImage" . | quote }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.port }}
+          envFrom:
+            - configMapRef: {name: {{ include "taskboard.fullname" . }}-config}
+            - secretRef: {name: {{ include "taskboard.secretName" . }}}
+          env:
+            - name: GIT_SHA
+              value: {{ .Values.backend.image.tag | default .Chart.AppVersion | quote }}
+          livenessProbe:
+            httpGet: {path: {{ .Values.backend.probes.liveness.path }}, port: http}
+            initialDelaySeconds: {{ .Values.backend.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet: {path: {{ .Values.backend.probes.readiness.path }}, port: http}
+            initialDelaySeconds: {{ .Values.backend.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          securityContext:
+            {{- include "taskboard.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}

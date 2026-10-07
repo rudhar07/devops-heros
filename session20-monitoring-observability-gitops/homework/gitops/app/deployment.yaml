@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: gitops-demo
+  labels:
+    app: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          env:
+            - name: APP_MESSAGE
+              value: "hello from git, version 1"
+          ports:
+            - containerPort: 80
+          resources:
+            requests: {cpu: 5m, memory: 8Mi}
+            limits: {memory: 32Mi}

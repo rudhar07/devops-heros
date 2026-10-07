@@ -1,0 +1,153 @@
+### Host-based routing to two backends (my ingress/host-based.yaml)
+$ cat ingress/host-based.yaml
+# Two tiny backends (hashicorp/http-echo answers with a fixed text) and one Ingress that routes
+#   blue.local          -> echo-blue
+#   green.local         -> echo-green
+#   apps.local/blue     -> echo-blue    (host + path)
+#   apps.local/green    -> echo-green
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: echo-blue}
+  template:
+    metadata:
+      labels: {app: echo-blue}
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=hello from BLUE backend"]
+          ports: [{containerPort: 5678}]
+          resources: {requests: {cpu: "10m", memory: "8Mi"}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-green
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: echo-green}
+  template:
+    metadata:
+      labels: {app: echo-green}
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=hello from GREEN backend"]
+          ports: [{containerPort: 5678}]
+          resources: {requests: {cpu: "10m", memory: "8Mi"}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-blue
+spec:
+  selector: {app: echo-blue}
+  ports: [{port: 80, targetPort: 5678}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-green
+spec:
+  selector: {app: echo-green}
+  ports: [{port: 80, targetPort: 5678}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echo-hosts
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: blue.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: echo-blue, port: {number: 80}}}
+    - host: green.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: echo-green, port: {number: 80}}}
+    - host: apps.local
+      http:
+        paths:
+          - path: /blue
+            pathType: Prefix
+            backend: {service: {name: echo-blue, port: {number: 80}}}
+          - path: /green
+            pathType: Prefix
+            backend: {service: {name: echo-green, port: {number: 80}}}
+
+$ kubectl apply -f ingress/host-based.yaml
+deployment.apps/echo-blue created
+deployment.apps/echo-green created
+service/echo-blue created
+service/echo-green created
+ingress.networking.k8s.io/echo-hosts created
+
+$ kubectl rollout status deployment/echo-blue --timeout=180s
+Waiting for deployment "echo-blue" rollout to finish: 0 of 1 updated replicas are available...
+deployment "echo-blue" successfully rolled out
+
+$ kubectl rollout status deployment/echo-green --timeout=180s
+deployment "echo-green" successfully rolled out
+
+$ kubectl get ingress
+NAME            CLASS   HOSTS                               ADDRESS     PORTS   AGE
+echo-hosts      nginx   blue.local,green.local,apps.local   localhost   80      42s
+yatri-ingress   nginx   yatri.local                         localhost   80      96s
+
+$ kubectl describe ingress echo-hosts
+Name:             echo-hosts
+Labels:           <none>
+Namespace:        default
+Address:          localhost
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host         Path  Backends
+  ----         ----  --------
+  blue.local   
+               /   echo-blue:80 (10.244.0.35:5678)
+  green.local  
+               /   echo-green:80 (10.244.0.36:5678)
+  apps.local   
+               /blue    echo-blue:80 (10.244.0.35:5678)
+               /green   echo-green:80 (10.244.0.36:5678)
+Annotations:   <none>
+Events:
+  Type    Reason  Age               From                      Message
+  ----    ------  ----              ----                      -------
+  Normal  Sync    2s (x2 over 43s)  nginx-ingress-controller  Scheduled for sync
+
+$ curl -s -H 'Host: blue.local' http://localhost:30081/
+hello from BLUE backend
+
+$ curl -s -H 'Host: green.local' http://localhost:30081/
+hello from GREEN backend
+
+### Host + path on one hostname (apps.local/blue, apps.local/green)
+$ curl -s -H 'Host: apps.local' http://localhost:30081/blue
+hello from BLUE backend
+
+$ curl -s -H 'Host: apps.local' http://localhost:30081/green
+hello from GREEN backend
+
+$ curl -s -o /dev/null -w 'apps.local/purple -> HTTP %{http_code}\n' -H 'Host: apps.local' http://localhost:30081/purple
+apps.local/purple -> HTTP 404
+
+### 10 requests per host - each host always lands on its own backend
+$ sh -c 'for h in blue.local green.local; do for i in $(seq 1 10); do curl -s -H "Host: $h" http://localhost:30081/; done; done | sort | uniq -c'
+  10 hello from BLUE backend
+  10 hello from GREEN backend
+

@@ -1,0 +1,4 @@
+# Case 2 (image/registry layer): a tag that was never built/pushed.
+backend:
+  image:
+    tag: v2.0.1-typo

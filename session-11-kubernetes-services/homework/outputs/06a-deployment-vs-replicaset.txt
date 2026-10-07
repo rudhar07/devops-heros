@@ -1,0 +1,135 @@
+### Deployment -> ReplicaSet -> Pod: the ownerReferences chain (web-app-clusterip from 01-clusterip)
+$ kubectl get deploy,rs,pods -l app=web-clusterip
+NAME                                READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/web-app-clusterip   3/3     3            3           3s
+
+NAME                                           DESIRED   CURRENT   READY   AGE
+replicaset.apps/web-app-clusterip-66865d4855   3         3         3       3s
+
+NAME                                     READY   STATUS    RESTARTS   AGE
+pod/web-app-clusterip-66865d4855-jjklg   1/1     Running   0          3s
+pod/web-app-clusterip-66865d4855-nsqbc   1/1     Running   0          3s
+pod/web-app-clusterip-66865d4855-px8zm   1/1     Running   0          3s
+
+$ kubectl get pod web-app-clusterip-66865d4855-jjklg -o 'jsonpath={.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name} (controller={.metadata.ownerReferences[0].controller}){"\n"}'
+ReplicaSet/web-app-clusterip-66865d4855 (controller=true)
+
+$ kubectl get rs web-app-clusterip-66865d4855 -o 'jsonpath={.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name} (controller={.metadata.ownerReferences[0].controller}){"\n"}'
+Deployment/web-app-clusterip (controller=true)
+
+$ kubectl get deploy web-app-clusterip -o 'jsonpath=ownerReferences={.metadata.ownerReferences}{"\n"}'
+ownerReferences=
+
+$ kubectl get rs web-app-clusterip-66865d4855 -o 'jsonpath=selector={.spec.selector.matchLabels}{"\n"}'
+selector={"app":"web-clusterip","pod-template-hash":"66865d4855"}
+
+$ kubectl get pod web-app-clusterip-66865d4855-jjklg --show-labels
+NAME                                 READY   STATUS    RESTARTS   AGE   LABELS
+web-app-clusterip-66865d4855-jjklg   1/1     Running   0          4s    app=web-clusterip,pod-template-hash=66865d4855
+
+### Pod management: the ReplicaSet replaces a deleted pod
+$ kubectl delete pod web-app-clusterip-66865d4855-jjklg --wait=false
+pod "web-app-clusterip-66865d4855-jjklg" deleted from default namespace
+
+$ kubectl get pods -l app=web-clusterip
+NAME                                 READY   STATUS        RESTARTS   AGE
+web-app-clusterip-66865d4855-hf6rp   0/1     Pending       0          0s
+web-app-clusterip-66865d4855-jjklg   1/1     Terminating   0          4s
+web-app-clusterip-66865d4855-nsqbc   1/1     Running       0          4s
+web-app-clusterip-66865d4855-px8zm   1/1     Running       0          4s
+
+$ kubectl get pods -l app=web-clusterip
+NAME                                 READY   STATUS    RESTARTS   AGE
+web-app-clusterip-66865d4855-hf6rp   1/1     Running   0          5s
+web-app-clusterip-66865d4855-nsqbc   1/1     Running   0          9s
+web-app-clusterip-66865d4855-px8zm   1/1     Running   0          9s
+
+### Scaling: I scale the Deployment, the Deployment changes the ReplicaSet's replicas
+$ kubectl scale deployment web-app-clusterip --replicas=4
+deployment.apps/web-app-clusterip scaled
+
+$ kubectl rollout status deployment/web-app-clusterip --timeout=120s
+Waiting for deployment "web-app-clusterip" rollout to finish: 3 of 4 updated replicas are available...
+deployment "web-app-clusterip" successfully rolled out
+
+$ kubectl get rs -l app=web-clusterip
+NAME                           DESIRED   CURRENT   READY   AGE
+web-app-clusterip-66865d4855   4         4         4       10s
+
+### Scaling the ReplicaSet directly does not stick - the Deployment owns it and puts it back
+$ kubectl scale rs web-app-clusterip-66865d4855 --replicas=1
+replicaset.apps/web-app-clusterip-66865d4855 scaled
+
+$ kubectl get rs -l app=web-clusterip
+NAME                           DESIRED   CURRENT   READY   AGE
+web-app-clusterip-66865d4855   4         4         4       13s
+
+### Rolling update: a template change creates a NEW ReplicaSet; the old one is kept at 0 for rollback
+$ kubectl set image deployment/web-app-clusterip nginx-web=nginx:1.27-alpine
+deployment.apps/web-app-clusterip image updated
+
+$ kubectl rollout status deployment/web-app-clusterip --timeout=180s
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 2 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 2 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 2 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 2 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 2 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 3 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 3 out of 4 new replicas have been updated...
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-app-clusterip" rollout to finish: 3 of 4 updated replicas are available...
+deployment "web-app-clusterip" successfully rolled out
+
+$ kubectl get rs -l app=web-clusterip -o wide
+NAME                           DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES              SELECTOR
+web-app-clusterip-66865d4855   0         0         0       14s   nginx-web    nginx:1.25-alpine   app=web-clusterip,pod-template-hash=66865d4855
+web-app-clusterip-695dddddd5   4         4         4       1s    nginx-web    nginx:1.27-alpine   app=web-clusterip,pod-template-hash=695dddddd5
+
+$ kubectl rollout history deployment/web-app-clusterip
+deployment.apps/web-app-clusterip 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+
+
+### A bare ReplicaSet has no rollout at all: changing its template does not touch running pods
+$ kubectl apply -f /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/replicaset/backend-rs.yaml
+replicaset.apps/yatri-backend-rs created
+
+$ kubectl wait --for=condition=Ready pod -l app=yatri-backend --timeout=180s
+pod/yatri-backend-rs-5cjv9 condition met
+pod/yatri-backend-rs-8hz2r condition met
+pod/yatri-backend-rs-g84vq condition met
+
+$ kubectl get rs yatri-backend-rs -o wide
+NAME               DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES               SELECTOR
+yatri-backend-rs   3         3         3       0s    backend      python:3.11-alpine   app=yatri-backend
+
+$ kubectl set image rs/yatri-backend-rs backend=python:3.12-alpine
+replicaset.apps/yatri-backend-rs image updated
+
+$ kubectl get rs yatri-backend-rs -o wide
+NAME               DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES               SELECTOR
+yatri-backend-rs   3         3         3       4s    backend      python:3.12-alpine   app=yatri-backend
+
+$ kubectl get pods -l app=yatri-backend -o 'custom-columns=POD:.metadata.name,IMAGE:.spec.containers[0].image'
+POD                      IMAGE
+yatri-backend-rs-5cjv9   python:3.11-alpine
+yatri-backend-rs-8hz2r   python:3.11-alpine
+yatri-backend-rs-g84vq   python:3.11-alpine
+
+$ kubectl rollout history rs/yatri-backend-rs
+error: no history viewer has been implemented for "ReplicaSet.apps"
+
+$ kubectl delete rs yatri-backend-rs
+replicaset.apps "yatri-backend-rs" deleted from default namespace
+
+$ kubectl scale deployment web-app-clusterip --replicas=3
+deployment.apps/web-app-clusterip scaled
+

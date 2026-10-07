@@ -1,0 +1,158 @@
+# Raw manifests (kubernetes/[0-9]*.yaml) applied into a separate namespace, so they do not collide with the Helm release.
+$ kubectl create namespace taskboard-raw
+namespace/taskboard-raw created
+
+# 1) server-side dry run: the API server validates every object (schema, admission), nothing is stored
+$ kubectl apply -n taskboard-raw --dry-run=server -f kubernetes/00-namespace.yaml -f kubernetes/01-configmap.yaml -f kubernetes/02-secret.example.yaml -f kubernetes/10-postgres.yaml -f kubernetes/20-backend.yaml -f kubernetes/30-frontend.yaml -f kubernetes/40-ingress.yaml -f kubernetes/50-hpa.yaml 
+Warning: resource namespaces/taskboard is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+namespace/taskboard configured (server dry run)
+configmap/taskboard-config created (server dry run)
+secret/taskboard-db created (server dry run)
+persistentvolumeclaim/taskboard-postgres-data created (server dry run)
+service/taskboard-postgres created (server dry run)
+deployment.apps/taskboard-postgres created (server dry run)
+deployment.apps/taskboard-backend created (server dry run)
+service/taskboard-backend created (server dry run)
+deployment.apps/taskboard-frontend created (server dry run)
+service/taskboard-frontend created (server dry run)
+ingress.networking.k8s.io/taskboard created (server dry run)
+horizontalpodautoscaler.autoscaling/taskboard-backend created (server dry run)
+
+# 2) real apply
+$ kubectl apply -n taskboard-raw -f kubernetes/00-namespace.yaml -f kubernetes/01-configmap.yaml -f kubernetes/02-secret.example.yaml -f kubernetes/10-postgres.yaml -f kubernetes/20-backend.yaml -f kubernetes/30-frontend.yaml -f kubernetes/40-ingress.yaml -f kubernetes/50-hpa.yaml 
+Warning: resource namespaces/taskboard is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+namespace/taskboard configured
+configmap/taskboard-config created
+secret/taskboard-db created
+persistentvolumeclaim/taskboard-postgres-data created
+service/taskboard-postgres created
+deployment.apps/taskboard-postgres created
+deployment.apps/taskboard-backend created
+service/taskboard-backend created
+deployment.apps/taskboard-frontend created
+service/taskboard-frontend created
+ingress.networking.k8s.io/taskboard created
+horizontalpodautoscaler.autoscaling/taskboard-backend created
+
+$ kubectl -n taskboard-raw wait --for=condition=Available deploy --all --timeout=300s
+deployment.apps/taskboard-backend condition met
+deployment.apps/taskboard-frontend condition met
+deployment.apps/taskboard-postgres condition met
+
+$ kubectl -n taskboard-raw get deploy,pods,svc,ingress,hpa,pvc,cm,secret
+NAME                                 READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/taskboard-backend    2/2     2            2           26s
+deployment.apps/taskboard-frontend   2/2     2            2           26s
+deployment.apps/taskboard-postgres   1/1     1            1           26s
+
+NAME                                      READY   STATUS    RESTARTS   AGE
+pod/taskboard-backend-95f4c7bd6-d87kv     1/1     Running   0          26s
+pod/taskboard-backend-95f4c7bd6-lhwq4     1/1     Running   0          26s
+pod/taskboard-frontend-847494b967-dhfz5   1/1     Running   0          26s
+pod/taskboard-frontend-847494b967-jkqwc   1/1     Running   0          26s
+pod/taskboard-postgres-7997658c4c-f5t8j   1/1     Running   0          26s
+
+NAME                         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/taskboard-backend    ClusterIP   10.96.165.69    <none>        8000/TCP   26s
+service/taskboard-frontend   ClusterIP   10.96.83.253    <none>        80/TCP     26s
+service/taskboard-postgres   ClusterIP   10.96.193.241   <none>        5432/TCP   26s
+
+NAME                                  CLASS   HOSTS                     ADDRESS     PORTS   AGE
+ingress.networking.k8s.io/taskboard   nginx   taskboard-raw.localhost   localhost   80      26s
+
+NAME                                                    REFERENCE                      TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/taskboard-backend   Deployment/taskboard-backend   cpu: <unknown>/50%   2         4         2          26s
+
+NAME                                            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/taskboard-postgres-data   Bound    pvc-9ea1efa1-a7f1-48e3-b678-03a4bdf064fa   1Gi        RWO            standard       <unset>                 26s
+
+NAME                         DATA   AGE
+configmap/kube-root-ca.crt   1      26s
+configmap/taskboard-config   5      26s
+
+NAME                  TYPE     DATA   AGE
+secret/taskboard-db   Opaque   2      26s
+
+$ curl -s http://taskboard-raw.localhost:30110/api/info
+<html>
+<head><title>503 Service Temporarily Unavailable</title></head>
+<body>
+<center><h1>503 Service Temporarily Unavailable</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+$ curl -s -X POST http://taskboard-raw.localhost:30110/api/tasks -H 'Content-Type: application/json' -d '{"title":"created via raw manifests"}'
+<html>
+<head><title>503 Service Temporarily Unavailable</title></head>
+<body>
+<center><h1>503 Service Temporarily Unavailable</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+
+$ curl -s -o /dev/null -w 'UI: HTTP %{http_code}
+' http://taskboard-raw.localhost:30110/
+UI: HTTP 200
+
+# 3) idempotent: applying again changes nothing
+$ kubectl apply -n taskboard-raw -f kubernetes/00-namespace.yaml -f kubernetes/01-configmap.yaml -f kubernetes/02-secret.example.yaml -f kubernetes/10-postgres.yaml -f kubernetes/20-backend.yaml -f kubernetes/30-frontend.yaml -f kubernetes/40-ingress.yaml -f kubernetes/50-hpa.yaml 
+namespace/taskboard unchanged
+configmap/taskboard-config unchanged
+secret/taskboard-db configured
+persistentvolumeclaim/taskboard-postgres-data unchanged
+service/taskboard-postgres unchanged
+deployment.apps/taskboard-postgres unchanged
+deployment.apps/taskboard-backend unchanged
+service/taskboard-backend unchanged
+deployment.apps/taskboard-frontend unchanged
+service/taskboard-frontend unchanged
+ingress.networking.k8s.io/taskboard unchanged
+horizontalpodautoscaler.autoscaling/taskboard-backend unchanged
+
+# 4) remove the raw copy again (keeps the cluster small)
+$ kubectl delete namespace taskboard-raw --wait=true
+namespace "taskboard-raw" deleted
+
+
+# ================ second run: investigate the 503 on /api ================
+$ kubectl create namespace taskboard-raw
+namespace/taskboard-raw created
+
+$ kubectl apply -n taskboard-raw -f kubernetes/00-namespace.yaml -f kubernetes/01-configmap.yaml -f kubernetes/02-secret.example.yaml -f kubernetes/10-postgres.yaml -f kubernetes/20-backend.yaml -f kubernetes/30-frontend.yaml -f kubernetes/40-ingress.yaml -f kubernetes/50-hpa.yaml  | tail -3
+service/taskboard-frontend created
+ingress.networking.k8s.io/taskboard created
+horizontalpodautoscaler.autoscaling/taskboard-backend created
+
+$ kubectl -n taskboard-raw wait --for=condition=Available deploy --all --timeout=300s
+deployment.apps/taskboard-backend condition met
+deployment.apps/taskboard-frontend condition met
+deployment.apps/taskboard-postgres condition met
+
+$ for i in $(seq 1 30); do code=$(curl -s -o /dev/null -w '%{http_code}' http://taskboard-raw.localhost:30110/api/info); echo "$(date +%H:%M:%S) /api/info -> $code"; [ $code = 200 ] && break; sleep 2; done
+00:32:20 /api/info -> 503
+00:32:22 /api/info -> 200
+
+$ kubectl -n taskboard-raw get endpointslices
+NAME                       ADDRESSTYPE   PORTS   ENDPOINTS                 AGE
+taskboard-backend-n9bt8    IPv4          8000    10.244.0.32,10.244.0.33   28s
+taskboard-frontend-5kf5c   IPv4          8080    10.244.0.31,10.244.0.35   28s
+taskboard-postgres-jt5wd   IPv4          5432    10.244.0.36               28s
+
+$ kubectl -n ingress-nginx logs deploy/ingress-nginx-controller --since=2m | grep -iE 'taskboard-raw|reload|endpoints' | tail -8
+W1007 19:02:01.507723      11 controller.go:1241] Service "taskboard-raw/taskboard-backend" does not have any active Endpoint.
+W1007 19:02:04.838943      11 controller.go:1241] Service "taskboard-raw/taskboard-backend" does not have any active Endpoint.
+W1007 19:02:10.210994      11 controller.go:1241] Service "taskboard-raw/taskboard-backend" does not have any active Endpoint.
+I1007 19:02:17.174788      11 status.go:311] "updating Ingress status" namespace="taskboard-raw" ingress="taskboard" currentValue=null newValue=[{"hostname":"localhost"}]
+I1007 19:02:17.180197      11 event.go:377] Event(v1.ObjectReference{Kind:"Ingress", Namespace:"taskboard-raw", Name:"taskboard", UID:"74eadbde-f056-4fbe-9d1b-a01056c5d2f5", APIVersion:"networking.k8s.io/v1", ResourceVersion:"3985", FieldPath:""}): type: 'Normal' reason: 'Sync' Scheduled for sync
+W1007 19:02:17.181575      11 controller.go:1241] Service "taskboard-raw/taskboard-backend" does not have any active Endpoint.
+192.168.65.1 - - [07/Oct/2026:19:02:20 +0000] "GET /api/info HTTP/1.1" 503 190 "-" "curl/8.7.1" 100 0.000 [taskboard-raw-taskboard-backend-http] [] - - - - ffa88e34f7c5122aa1d0878779592f2a
+192.168.65.1 - - [07/Oct/2026:19:02:22 +0000] "GET /api/info HTTP/1.1" 200 107 "-" "curl/8.7.1" 100 0.006 [taskboard-raw-taskboard-backend-http] [] 10.244.0.33:8000 107 0.007 200 589e7f3d121fa169f6e8cb408ff18bc1
+
+$ curl -s http://taskboard-raw.localhost:30110/api/info
+{"service":"TaskBoard API","version":"2.0.0","environment":"raw-manifests","commit":"local","docs":"/docs"}
+$ curl -s -X POST http://taskboard-raw.localhost:30110/api/tasks -H 'Content-Type: application/json' -d '{"title":"created via raw manifests"}'
+{"title":"created via raw manifests","description":"","priority":"MEDIUM","status":"TODO","assignee":"Unassigned","due_date":null,"id":1,"created_at":"2026-10-07T19:02:22.736061Z","updated_at":"2026-10-07T19:02:22.736067Z"}
+$ kubectl delete namespace taskboard-raw --wait=true
+namespace "taskboard-raw" deleted
+

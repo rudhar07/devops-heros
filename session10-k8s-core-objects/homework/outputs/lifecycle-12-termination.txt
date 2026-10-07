@@ -1,0 +1,32 @@
+$ kubectl apply -f pod-lifecycle/12-termination.yaml
+pod/lifecycle-termination created
+
+$ kubectl wait --for=condition=Ready pod/lifecycle-termination --timeout=120s
+pod/lifecycle-termination condition met
+
+$ time kubectl delete pod lifecycle-termination
+pod "lifecycle-termination" deleted from default namespace
+# kubectl delete returned after 12 s
+
+$ kubectl get pods --field-selector metadata.name=lifecycle-termination -w --output-watch-events    # ran in the background from apply until now
+EVENT      NAME                    READY   STATUS    RESTARTS   AGE
+ADDED      lifecycle-termination   1/1     Running   0          1s
+MODIFIED   lifecycle-termination   1/1     Terminating   0          2s
+MODIFIED   lifecycle-termination   1/1     Terminating   0          3s
+MODIFIED   lifecycle-termination   0/1     Completed     0          13s
+MODIFIED   lifecycle-termination   0/1     Completed     0          14s
+DELETED    lifecycle-termination   0/1     Completed     0          14s
+
+$ kubectl logs -f lifecycle-termination    # followed in the background while the pod was being deleted
+Application running
+SIGTERM received; cleaning up...
+Cleanup complete
+
+$ kubectl get events --field-selector involvedObject.name=lifecycle-termination --sort-by=.lastTimestamp
+LAST SEEN   TYPE     REASON      OBJECT                      MESSAGE
+14s         Normal   Scheduled   pod/lifecycle-termination   Successfully assigned default/lifecycle-termination to hw-a-control-plane
+14s         Normal   Pulled      pod/lifecycle-termination   Container image "busybox:1.36" already present on machine and can be accessed by the pod
+14s         Normal   Created     pod/lifecycle-termination   Container created
+14s         Normal   Started     pod/lifecycle-termination   Container started
+12s         Normal   Killing     pod/lifecycle-termination   Stopping container graceful-app
+

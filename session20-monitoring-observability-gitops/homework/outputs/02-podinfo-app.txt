@@ -1,0 +1,60 @@
+$ kubectl apply -f monitoring/podinfo-app.yaml
+namespace/podinfo created
+deployment.apps/podinfo created
+service/podinfo created
+
+$ kubectl apply -f monitoring/podinfo-servicemonitor.yaml
+servicemonitor.monitoring.coreos.com/podinfo created
+
+$ kubectl apply -f monitoring/podinfo-prometheusrule.yaml
+prometheusrule.monitoring.coreos.com/podinfo-alerts created
+
+$ kubectl -n podinfo rollout status deploy/podinfo --timeout=10m
+Waiting for deployment "podinfo" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "podinfo" rollout to finish: 1 of 2 updated replicas are available...
+deployment "podinfo" successfully rolled out
+
+$ kubectl -n podinfo get deploy,pods,svc,endpoints -o wide
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                               SELECTOR
+deployment.apps/podinfo   2/2     2            2           33s   podinfo      ghcr.io/stefanprodan/podinfo:6.7.1   app=podinfo
+
+NAME                         READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/podinfo-ff5c6b4f-bjffk   1/1     Running   0          32s   10.244.0.13   hw-e-control-plane   <none>           <none>
+pod/podinfo-ff5c6b4f-mgzg6   1/1     Running   0          32s   10.244.0.12   hw-e-control-plane   <none>           <none>
+
+NAME              TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE   SELECTOR
+service/podinfo   NodePort   10.96.145.27   <none>        9898:30103/TCP   32s   app=podinfo
+
+NAME                ENDPOINTS                           AGE
+endpoints/podinfo   10.244.0.12:9898,10.244.0.13:9898   32s
+
+$ kubectl -n podinfo get servicemonitor,prometheusrule
+NAME                                           AGE
+servicemonitor.monitoring.coreos.com/podinfo   32s
+
+NAME                                                  AGE
+prometheusrule.monitoring.coreos.com/podinfo-alerts   32s
+
+$ curl -s http://localhost:8087/
+{
+  "hostname": "podinfo-ff5c6b4f-mgzg6",
+  "version": "6.7.1",
+  "revision": "6b7aab8a10d6ee8b895b0a5048f4ab0966ed29ff",
+  "color": "#34577c",
+  "logo": "https://raw.githubusercontent.com/stefanprodan/podinfo/gh-pages/cuddle_clap.gif",
+  "message": "greetings from podinfo v6.7.1",
+  "goos": "linux",
+  "goarch": "arm64",
+  "runtime": "go1.23.2",
+  "num_goroutine": "6",
+  "num_cpu": "15"
+}
+$ curl -s -o /dev/null -w GET /healthz -> HTTP %{http_code}
+ http://localhost:8087/healthz
+GET /healthz -> HTTP 200
+
+$ curl -s -o /dev/null -w GET /readyz  -> HTTP %{http_code}
+ http://localhost:8087/readyz
+GET /readyz  -> HTTP 200
+

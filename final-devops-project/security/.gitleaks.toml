@@ -1,0 +1,25 @@
+# Gitleaks configuration for the final project.
+#
+# The repository also contains session-12 homework with deliberately fake
+# secrets (to teach secret scanning). Those are out of scope here, so CI scans
+# only final-devops-project/ (gitleaks dir final-devops-project, and
+# gitleaks git with --log-opts "-- final-devops-project ..."). Inside this
+# folder there is no allowlist for real-looking keys: anything found fails.
+title = "taskboard final project"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated or third-party files that cannot contain our secrets"
+paths = [
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)\.terraform/''',
+]
+
+[[allowlists]]
+description = "Known FAKE demo credential of the local kind Grafana (monitoring/kube-prometheus-stack-values.yaml), used in curl -u commands in outputs/ and README. Exact value only."
+regexTarget = "secret"
+regexes = ['''demo-admin-123''']

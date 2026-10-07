@@ -1,0 +1,80 @@
+### Deploy the app (3 nginx replicas), the ClusterIP Service and a curl client pod
+$ kubectl apply -f services/01-clusterip/
+deployment.apps/web-app-clusterip created
+pod/curl-client created
+service/web-service-clusterip created
+
+$ kubectl rollout status deployment/web-app-clusterip --timeout=180s
+Waiting for deployment "web-app-clusterip" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "web-app-clusterip" rollout to finish: 1 of 3 updated replicas are available...
+Waiting for deployment "web-app-clusterip" rollout to finish: 2 of 3 updated replicas are available...
+deployment "web-app-clusterip" successfully rolled out
+
+$ kubectl wait --for=condition=Ready pod/curl-client --timeout=120s
+pod/curl-client condition met
+
+# (polled until http://web-service-clusterip:8080 answered 200 from the client pod - about 1s; kube-proxy on this busy node needs a moment to program new Services)
+
+### Verify the Service
+$ kubectl get svc web-service-clusterip -o wide
+NAME                    TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE   SELECTOR
+web-service-clusterip   ClusterIP   10.96.96.222   <none>        8080/TCP   3s    app=web-clusterip
+
+$ kubectl describe svc web-service-clusterip
+Name:                     web-service-clusterip
+Namespace:                default
+Labels:                   app=web-clusterip
+Annotations:              <none>
+Selector:                 app=web-clusterip
+Type:                     ClusterIP
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.96.222
+IPs:                      10.96.96.222
+Port:                     http  8080/TCP
+TargetPort:               80/TCP
+Endpoints:                10.244.0.206:80,10.244.0.207:80,10.244.0.208:80
+Session Affinity:         None
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+$ kubectl get pods -l app=web-clusterip -o wide
+NAME                                 READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+web-app-clusterip-66865d4855-2w84d   1/1     Running   0          4s    10.244.0.206   hw-a-control-plane   <none>           <none>
+web-app-clusterip-66865d4855-fb4sc   1/1     Running   0          4s    10.244.0.207   hw-a-control-plane   <none>           <none>
+web-app-clusterip-66865d4855-j24pn   1/1     Running   0          4s    10.244.0.208   hw-a-control-plane   <none>           <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=web-service-clusterip -o wide
+NAME                          ADDRESSTYPE   PORTS   ENDPOINTS                                AGE
+web-service-clusterip-69bvq   IPv4          80      10.244.0.206,10.244.0.207,10.244.0.208   4s
+
+### Test connectivity from inside the cluster (short name, FQDN, ClusterIP)
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'short name -> HTTP %{http_code} from %{remote_ip}:%{remote_port}\n' http://web-service-clusterip:8080
+short name -> HTTP 200 from 10.96.96.222:8080
+
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'FQDN       -> HTTP %{http_code} from %{remote_ip}:%{remote_port}\n' http://web-service-clusterip.default.svc.cluster.local:8080
+FQDN       -> HTTP 200 from 10.96.96.222:8080
+
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'ClusterIP  -> HTTP %{http_code} from %{remote_ip}:%{remote_port}\n' http://10.96.96.222:8080
+ClusterIP  -> HTTP 200 from 10.96.96.222:8080
+
+$ kubectl exec curl-client -- sh -c 'curl -s http://web-service-clusterip:8080 | grep -o "<title>.*</title>"'
+<title>Welcome to nginx!</title>
+
+### Load balancing: 30 requests, then count access-log lines per pod
+$ kubectl exec curl-client -- sh -c 'for i in $(seq 1 30); do curl -s -o /dev/null http://web-service-clusterip:8080/lb-test; done; echo sent 30'
+sent 30
+
+$ for p in $(kubectl get pods -l app=web-clusterip -o name); do echo "$p $(kubectl logs $p | grep -c "GET /lb-test HTTP/1.1\" 404")"; done    # access-log lines only
+pod/web-app-clusterip-66865d4855-2w84d 10
+pod/web-app-clusterip-66865d4855-fb4sc 11
+pod/web-app-clusterip-66865d4855-j24pn 9
+
+### The ClusterIP is virtual - it only exists as iptables rules on the node (kube-proxy):
+$ docker exec hw-a-control-plane iptables -t nat -S KUBE-SERVICES | grep web-service-clusterip
+-A KUBE-SERVICES -d 10.96.96.222/32 -p tcp -m comment --comment "default/web-service-clusterip:http cluster IP" -m tcp --dport 8080 -j KUBE-SVC-TIXQXGX7DUC52XEM
+
+### ...and it is not reachable from my Mac:
+$ curl -s -m 3 -o /dev/null -w '%{http_code}\n' http://10.96.96.222:8080
+000
+

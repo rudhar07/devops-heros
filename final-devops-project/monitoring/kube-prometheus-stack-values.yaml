@@ -1,0 +1,86 @@
+# kube-prometheus-stack (chart 92.1.0) trimmed for a single-node kind cluster
+# that shares Docker Desktop's ~8 GB with other things.
+#
+#   helm upgrade --install kps oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack \
+#     --version 92.1.0 -n monitoring --create-namespace -f monitoring/kube-prometheus-stack-values.yaml
+#
+# Prometheus: http://localhost:30112   Grafana: http://localhost:30111 (admin / demo-admin-123, FAKE)
+
+# kind runs these control-plane parts bound to 127.0.0.1, so they cannot be
+# scraped without changing kubeadm flags. Disabled instead of showing "down".
+kubeEtcd: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeProxy: {enabled: false}
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30112
+  prometheusSpec:
+    retention: 6h
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    # Pick up ServiceMonitors / PrometheusRules from every namespace and
+    # without requiring the "release: kps" label (the chart sets it anyway).
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    ruleNamespaceSelector: {}
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 768Mi}
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    retention: 6h
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 64Mi}
+
+grafana:
+  enabled: true
+  adminPassword: demo-admin-123   # FAKE demo value, local kind only
+  service:
+    type: NodePort
+    nodePort: 30111
+  persistence: {enabled: false}
+  # 256Mi was OOMKilled (exit 137) as soon as a browser opened the dashboard
+  # (login + first dashboard load). 512Mi has been stable since.
+  resources:
+    requests: {cpu: 50m, memory: 192Mi}
+    limits: {memory: 512Mi}
+  # Only my TaskBoard dashboard (ConfigMap with label grafana_dashboard=1),
+  # none of the ~25 default Kubernetes dashboards.
+  defaultDashboardsEnabled: false
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+
+kube-state-metrics:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {memory: 64Mi}
+
+prometheusOperator:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 192Mi}

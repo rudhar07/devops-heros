@@ -1,0 +1,114 @@
+### Starting point: yatri-backend (from the Ingress demo) is healthy and serving /api through the Ingress
+$ kubectl get deploy yatri-backend
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+yatri-backend   2/2     2            2           4m51s
+
+$ kubectl get pods -l app=yatri-backend
+NAME                             READY   STATUS    RESTARTS   AGE
+yatri-backend-6c58cb99c7-2n689   1/1     Running   0          4m51s
+yatri-backend-6c58cb99c7-5zm2j   1/1     Running   0          4m51s
+
+$ curl -s -o /dev/null -w 'yatri.local/api/ -> HTTP %{http_code}\n' -H 'Host: yatri.local' http://localhost:30081/api/
+yatri.local/api/ -> HTTP 200
+
+### BEFORE: apply the instructor's broken manifest (session10-k8s-core-objects/troubleshooting/broken-image.yaml)
+$ kubectl apply -f /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/troubleshooting/broken-image.yaml
+deployment.apps/yatri-backend configured
+
+$ kubectl rollout status deployment/yatri-backend --timeout=60s
+Waiting for deployment spec update to be observed...
+Waiting for deployment "yatri-backend" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "yatri-backend" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "yatri-backend" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "yatri-backend" rollout to finish: 1 out of 3 new replicas have been updated...
+error: timed out waiting for the condition
+
+$ kubectl get deploy yatri-backend
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+yatri-backend   3/3     1            3           5m54s
+
+$ kubectl get rs -l app=yatri-backend -o wide
+NAME                       DESIRED   CURRENT   READY   AGE     CONTAINERS   IMAGES                                SELECTOR
+yatri-backend-6c58cb99c7   3         3         3       5m54s   backend      python:3.11-alpine3.19                app=yatri-backend,pod-template-hash=6c58cb99c7
+yatri-backend-77dbb657cd   1         1         0       62s     backend      yatri-backend:non-existent-tag-v999   app=yatri-backend,pod-template-hash=77dbb657cd
+
+$ kubectl get pods -l app=yatri-backend -L version
+NAME                             READY   STATUS             RESTARTS   AGE     VERSION
+yatri-backend-6c58cb99c7-2n689   1/1     Running            0          5m54s   
+yatri-backend-6c58cb99c7-5zm2j   1/1     Running            0          5m54s   
+yatri-backend-6c58cb99c7-xcpxm   1/1     Running            0          62s     
+yatri-backend-77dbb657cd-rk7kb   0/1     ImagePullBackOff   0          62s     broken-v3
+
+# users are still served by the old pods (maxUnavailable: 0 keeps them alive):
+$ curl -s -o /dev/null -w 'yatri.local/api/ -> HTTP %{http_code}\n' -H 'Host: yatri.local' http://localhost:30081/api/
+yatri.local/api/ -> HTTP 200
+
+### Investigate
+$ kubectl describe pod yatri-backend-77dbb657cd-rk7kb | sed -n '/^Events/,$p'
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  63s                default-scheduler  Successfully assigned default/yatri-backend-77dbb657cd-rk7kb to hw-a-control-plane
+  Normal   BackOff    27s (x2 over 54s)  kubelet            spec.containers{backend}: Back-off pulling image "yatri-backend:non-existent-tag-v999"
+  Warning  Failed     27s (x2 over 54s)  kubelet            spec.containers{backend}: Error: ImagePullBackOff
+  Normal   Pulling    12s (x3 over 63s)  kubelet            spec.containers{backend}: Pulling image "yatri-backend:non-existent-tag-v999"
+  Warning  Failed     9s (x3 over 54s)   kubelet            spec.containers{backend}: Failed to pull image "yatri-backend:non-existent-tag-v999": failed to pull and unpack image "docker.io/library/yatri-backend:non-existent-tag-v999": failed to resolve reference "docker.io/library/yatri-backend:non-existent-tag-v999": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+  Warning  Failed     9s (x3 over 54s)   kubelet            spec.containers{backend}: Error: ErrImagePull
+
+$ kubectl get deploy yatri-backend -o 'jsonpath={range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
+Available=True MinimumReplicasAvailable: Deployment has minimum availability.
+Progressing=True ReplicaSetUpdated: ReplicaSet "yatri-backend-77dbb657cd" is progressing.
+
+$ kubectl rollout history deployment/yatri-backend
+deployment.apps/yatri-backend 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+
+
+# Root cause: image yatri-backend:non-existent-tag-v999 does not exist (docker.io/library/yatri-backend is not a repo).
+### Fix: roll back to the last good revision
+$ kubectl rollout undo deployment/yatri-backend
+Warning: resource deployments/yatri-backend was previously managed with 'kubectl apply'. Rolling back will not update the kubectl.kubernetes.io/last-applied-configuration annotation, which may cause unexpected behavior on future 'kubectl apply' operations. Consider using 'kubectl apply' with your previous configuration file instead.
+deployment.apps/yatri-backend rolled back
+
+$ kubectl rollout status deployment/yatri-backend --timeout=180s
+Waiting for deployment spec update to be observed...
+Waiting for deployment spec update to be observed...
+Waiting for deployment "yatri-backend" rollout to finish: 1 old replicas are pending termination...
+deployment "yatri-backend" successfully rolled out
+
+### AFTER
+$ kubectl get rs -l app=yatri-backend -o wide
+NAME                       DESIRED   CURRENT   READY   AGE     CONTAINERS   IMAGES                                SELECTOR
+yatri-backend-6c58cb99c7   3         3         3       5m56s   backend      python:3.11-alpine3.19                app=yatri-backend,pod-template-hash=6c58cb99c7
+yatri-backend-77dbb657cd   0         0         0       64s     backend      yatri-backend:non-existent-tag-v999   app=yatri-backend,pod-template-hash=77dbb657cd
+
+$ kubectl get pods -l app=yatri-backend -L version
+NAME                             READY   STATUS        RESTARTS   AGE     VERSION
+yatri-backend-6c58cb99c7-2n689   1/1     Running       0          5m56s   
+yatri-backend-6c58cb99c7-5zm2j   1/1     Running       0          5m56s   
+yatri-backend-6c58cb99c7-xcpxm   1/1     Running       0          64s     
+yatri-backend-77dbb657cd-rk7kb   0/1     Terminating   0          64s     broken-v3
+
+$ curl -s -H 'Host: yatri.local' http://localhost:30081/api/
+Yatri Backend API
+=================
+ENVIRONMENT     : production
+LOG_LEVEL       : INFO
+DEFAULT_CURRENCY: INR
+POSTGRES_USER   : yatri_admin
+POSTGRES_DB     : yatri_production_db
+
+# note: rollout undo restores the pod template only; replicas stayed at 3 from the broken manifest. Back to 2:
+$ kubectl apply -f ingress/full-demo/backend.yaml
+deployment.apps/yatri-backend configured
+service/yatri-backend-service unchanged
+
+$ kubectl rollout status deployment/yatri-backend --timeout=180s
+deployment "yatri-backend" successfully rolled out
+
+$ kubectl get deploy yatri-backend
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+yatri-backend   2/2     2            2           5m57s
+

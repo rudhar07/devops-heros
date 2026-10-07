@@ -1,0 +1,25 @@
+# Dev = local kind cluster. Images are built locally and loaded with
+# "kind load docker-image", so no registry is needed.
+backend:
+  image:
+    repository: taskboard-backend
+    tag: local
+    pullPolicy: IfNotPresent
+frontend:
+  image:
+    repository: taskboard-frontend
+    tag: local
+    pullPolicy: IfNotPresent
+config:
+  appEnv: dev
+  logLevel: INFO
+ingress:
+  enabled: true
+  # *.localhost resolves to 127.0.0.1 in curl and in browsers without any
+  # /etc/hosts edit. kind maps the ingress controller to host port 30110.
+  host: taskboard.localhost
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 50

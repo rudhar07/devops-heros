@@ -1,0 +1,85 @@
+$ kubectl apply -f pod-lifecycle/01-running.yaml
+pod/lifecycle-running created
+
+$ kubectl wait --for=condition=Ready pod/lifecycle-running --timeout=120s
+pod/lifecycle-running condition met
+
+$ kubectl get pods --field-selector metadata.name=lifecycle-running -w --output-watch-events    # ran in the background from apply until now
+EVENT      NAME                READY   STATUS    RESTARTS   AGE
+ADDED      lifecycle-running   0/1     Pending   0          0s
+MODIFIED   lifecycle-running   0/1     Pending   0          0s
+MODIFIED   lifecycle-running   0/1     ContainerCreating   0          0s
+MODIFIED   lifecycle-running   0/1     ContainerCreating   0          1s
+MODIFIED   lifecycle-running   1/1     Running             0          1s
+
+$ kubectl get pod lifecycle-running -o wide
+NAME                READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+lifecycle-running   1/1     Running   0          1s    10.244.0.182   hw-a-control-plane   <none>           <none>
+
+$ kubectl get pod lifecycle-running -o 'jsonpath={.status.phase}{"  "}{.status.conditions[*].type}{"\n"}'
+Running  PodReadyToStartContainers Initialized Ready ContainersReady PodScheduled
+
+$ kubectl describe pod lifecycle-running
+Name:             lifecycle-running
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-a-control-plane/172.18.0.3
+Start Time:       Wed, 07 Oct 2026 22:47:26 +0530
+Labels:           <none>
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.182
+IPs:
+  IP:  10.244.0.182
+Containers:
+  nginx:
+    Container ID:   containerd://b1d0217b88108e57ff73d5a136bfecdf8990cabe1770ac4bfdeb955c2e25f039
+    Image:          nginx:1.27
+    Image ID:       docker.io/library/nginx@sha256:6784fb0834aa7dbbe12e3d7471e69c290df3e6ba810dc38b34ae33d3c1c05f7d
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Wed, 07 Oct 2026 22:47:27 +0530
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-vkmsw (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-vkmsw:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  0s    default-scheduler  Successfully assigned default/lifecycle-running to hw-a-control-plane
+  Normal  Pulled     0s    kubelet            spec.containers{nginx}: Container image "nginx:1.27" already present on machine and can be accessed by the pod
+  Normal  Created    0s    kubelet            spec.containers{nginx}: Container created
+  Normal  Started    0s    kubelet            spec.containers{nginx}: Container started
+
+$ kubectl logs lifecycle-running --tail=5
+2026/10/07 17:17:27 [notice] 1#1: start worker process 43
+2026/10/07 17:17:27 [notice] 1#1: start worker process 44
+2026/10/07 17:17:27 [notice] 1#1: start worker process 45
+2026/10/07 17:17:27 [notice] 1#1: start worker process 46
+2026/10/07 17:17:27 [notice] 1#1: start worker process 47
+
+### cleanup
+$ kubectl delete pod lifecycle-running --wait=false
+pod "lifecycle-running" deleted from default namespace
+

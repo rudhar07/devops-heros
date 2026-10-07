@@ -1,0 +1,78 @@
+# Full local stack: PostgreSQL + one-shot Alembic migration + FastAPI + React/nginx.
+#
+#   docker compose -f docker/docker-compose.yml up --build -d     (from final-devops-project/)
+#   UI + API through nginx:  http://localhost:18090
+#   API directly:            http://localhost:18091/docs
+#
+# The Dockerfiles live next to the code they build (application/backend,
+# application/frontend); this folder only holds the Compose definition.
+# The database password is a FAKE demo value; override with POSTGRES_PASSWORD.
+name: taskboard
+
+x-db-env: &db-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: taskboard
+  DB_USER: taskboard
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-demo-password-123}
+
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: taskboard
+      POSTGRES_USER: taskboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-password-123}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskboard -d taskboard"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+
+  # Runs "alembic upgrade head" once, then exits 0. The backend waits for it.
+  migrate:
+    image: taskboard-backend:local
+    build:
+      context: ../application/backend
+    command: ["alembic", "upgrade", "head"]
+    environment: *db-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    image: taskboard-backend:local
+    build:
+      context: ../application/backend
+    environment:
+      <<: *db-env
+      APP_ENV: compose
+      LOG_LEVEL: INFO
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "18091:8000"
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 256m
+
+  frontend:
+    image: taskboard-frontend:local
+    build:
+      context: ../application/frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "18090:8080"
+    mem_limit: 128m
+
+volumes:
+  postgres-data:

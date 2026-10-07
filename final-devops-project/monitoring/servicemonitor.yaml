@@ -1,0 +1,23 @@
+# Standalone copy of the ServiceMonitor the Helm chart renders
+# (helm/taskboard/templates/servicemonitor.yaml) for release "taskboard".
+# Tells the Prometheus Operator: scrape port "http" path /metrics of every
+# Service with these labels, every 15s.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: taskboard-backend
+  namespace: taskboard
+  labels:
+    release: kps
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taskboard
+      app.kubernetes.io/instance: taskboard
+      app.kubernetes.io/component: backend
+  namespaceSelector:
+    matchNames: [taskboard]
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

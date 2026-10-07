@@ -1,0 +1,36 @@
+# "helm test <release>" runs this pod: it calls the backend Service and the
+# frontend's /api proxy, so it checks DNS, Services, the proxy and the DB.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "taskboard.fullname" . }}-test-api
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: curl
+      image: {{ .Values.tests.image }}
+      command: ["sh", "-c"]
+      args:
+        - |
+          set -e
+          curl -fsS http://{{ include "taskboard.fullname" . }}-backend:{{ .Values.backend.port }}/health
+          curl -fsS http://{{ include "taskboard.fullname" . }}-backend:{{ .Values.backend.port }}/ready
+          curl -fsS http://{{ include "taskboard.fullname" . }}-frontend/api/tasks/stats
+          echo; echo "helm test: OK"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: ["ALL"]}
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 32Mi}

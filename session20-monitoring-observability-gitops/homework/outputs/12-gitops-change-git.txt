@@ -1,0 +1,113 @@
+### Before (00:03:40)
+$ kubectl -n gitops-demo get deploy web -o wide
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES              SELECTOR
+web    2/2     2            2           6m31s   nginx        nginx:1.27-alpine   app=web
+
+### Change Git only: replicas 2 -> 4, image nginx:1.27-alpine -> nginx:1.28-alpine, APP_MESSAGE version 1 -> version 2
+$ git diff      # (in gitops-demo-repo)
+diff --git a/app/deployment.yaml b/app/deployment.yaml
+index d2237a7..5c03aa4 100644
+--- a/app/deployment.yaml
++++ b/app/deployment.yaml
+@@ -6,7 +6,7 @@ metadata:
+   labels:
+     app: web
+ spec:
+-  replicas: 2
++  replicas: 4
+   selector:
+     matchLabels:
+       app: web
+@@ -17,10 +17,10 @@ spec:
+     spec:
+       containers:
+         - name: nginx
+-          image: nginx:1.27-alpine
++          image: nginx:1.28-alpine
+           env:
+             - name: APP_MESSAGE
+-              value: "hello from git, version 1"
++              value: "hello from git, version 2"
+           ports:
+             - containerPort: 80
+           resources:
+
+$ git commit -am "Scale web to 4 replicas, bump nginx to 1.28, message v2"      # (in gitops-demo-repo)
+[main 22f6509] Scale web to 4 replicas, bump nginx to 1.28, message v2
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+$ git log --oneline      # (in gitops-demo-repo)
+22f6509 Scale web to 4 replicas, bump nginx to 1.28, message v2
+c404e4b Initial desired state: web app (2 replicas) + mini project
+
+### Committed at 00:03:40. From here I only watch - no kubectl apply/scale/set image.
+  00:03:40 +0s  deploy[spec ready image]=[2 2 nginx:1.27-alpine]  app=Synced/Healthy rev=c404e4b5b5c5da0bb99fa
+  00:03:45 +5s  deploy[spec ready image]=[2 2 nginx:1.27-alpine]  app=Synced/Healthy rev=c404e4b5b5c5da0bb99fa
+  00:03:51 +11s  deploy[spec ready image]=[2 2 nginx:1.27-alpine]  app=Synced/Healthy rev=c404e4b5b5c5da0bb99fa
+  00:03:56 +16s  deploy[spec ready image]=[2 2 nginx:1.27-alpine]  app=Synced/Healthy rev=c404e4b5b5c5da0bb99fa
+  00:04:01 +21s  deploy[spec ready image]=[2 2 nginx:1.27-alpine]  app=Synced/Healthy rev=c404e4b5b5c5da0bb99fa
+  00:04:06 +26s  deploy[spec ready image]=[2 2 nginx:1.27-alpine]  app=Synced/Healthy rev=c404e4b5b5c5da0bb99fa
+  00:04:11 +31s  deploy[spec ready image]=[4 3 nginx:1.28-alpine]  app=Synced/Progressing rev=22f6509f0044216f2
+  00:04:16 +36s  deploy[spec ready image]=[4 3 nginx:1.28-alpine]  app=Synced/Progressing rev=22f6509f0044216f2
+  00:04:21 +41s  deploy[spec ready image]=[4 3 nginx:1.28-alpine]  app=Synced/Progressing rev=22f6509f0044216f2
+  00:04:26 +46s  deploy[spec ready image]=[4 3 nginx:1.28-alpine]  app=Synced/Progressing rev=22f6509f0044216f2
+  00:04:31 +51s  deploy[spec ready image]=[4 4 nginx:1.28-alpine]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+
+$ kubectl -n gitops-demo get deploy,rs,pods -o wide
+NAME                  READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES              SELECTOR
+deployment.apps/web   4/4     4            4           7m22s   nginx        nginx:1.28-alpine   app=web
+
+NAME                             DESIRED   CURRENT   READY   AGE     CONTAINERS   IMAGES              SELECTOR
+replicaset.apps/web-666699f9d5   4         4         4       24s     nginx        nginx:1.28-alpine   app=web,pod-template-hash=666699f9d5
+replicaset.apps/web-7fb865489c   0         0         0       7m22s   nginx        nginx:1.27-alpine   app=web,pod-template-hash=7fb865489c
+
+NAME                       READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/web-666699f9d5-42mzh   1/1     Running   0          3s    10.244.0.37   hw-e-control-plane   <none>           <none>
+pod/web-666699f9d5-5rv8l   1/1     Running   0          3s    10.244.0.38   hw-e-control-plane   <none>           <none>
+pod/web-666699f9d5-kcrxt   1/1     Running   0          24s   10.244.0.36   hw-e-control-plane   <none>           <none>
+pod/web-666699f9d5-lppvr   1/1     Running   0          24s   10.244.0.35   hw-e-control-plane   <none>           <none>
+
+$ kubectl -n gitops-demo get deploy web -o jsonpath={.spec.template.spec.containers[0].env}{"\n"}
+[{"name":"APP_MESSAGE","value":"hello from git, version 2"}]
+
+$ kubectl -n gitops-demo get events --field-selector involvedObject.kind=Deployment
+LAST SEEN   TYPE     REASON              OBJECT           MESSAGE
+7m23s       Normal   ScalingReplicaSet   deployment/web   Scaled up replica set web-7fb865489c from 0 to 2
+25s         Normal   ScalingReplicaSet   deployment/web   Scaled up replica set web-7fb865489c from 2 to 4
+25s         Normal   ScalingReplicaSet   deployment/web   Scaled up replica set web-666699f9d5 from 0 to 1
+25s         Normal   ScalingReplicaSet   deployment/web   Scaled down replica set web-7fb865489c from 4 to 3
+25s         Normal   ScalingReplicaSet   deployment/web   Scaled up replica set web-666699f9d5 from 1 to 2
+4s          Normal   ScalingReplicaSet   deployment/web   Scaled down replica set web-7fb865489c from 3 to 2
+4s          Normal   ScalingReplicaSet   deployment/web   Scaled up replica set web-666699f9d5 from 2 to 3
+4s          Normal   ScalingReplicaSet   deployment/web   Scaled down replica set web-7fb865489c from 2 to 1
+4s          Normal   ScalingReplicaSet   deployment/web   Scaled up replica set web-666699f9d5 from 3 to 4
+3s          Normal   ScalingReplicaSet   deployment/web   (combined from similar events): Scaled down replica set web-7fb865489c from 1 to 0
+
+$ argocd app get gitops-demo-web
+Name:               argocd/gitops-demo-web
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          gitops-demo
+URL:                https://localhost:8086/applications/gitops-demo-web
+Source:
+- Repo:             git://hw-e-gitd/gitops-demo-repo
+  Target:           main
+  Path:             app
+SyncWindow:         Sync Allowed
+Sync Policy:        Automated (Prune)
+Sync Status:        Synced to main (22f6509)
+Health Status:      Healthy
+
+GROUP  KIND        NAMESPACE    NAME              STATUS   HEALTH   HOOK  MESSAGE
+       Namespace   gitops-demo  gitops-demo       Running  Synced         namespace/gitops-demo unchanged
+       ConfigMap   gitops-demo  web-extra-config  Synced                  configmap/web-extra-config unchanged
+       Service     gitops-demo  web               Synced   Healthy        service/web unchanged
+apps   Deployment  gitops-demo  web               Synced   Healthy        deployment.apps/web configured
+       Namespace                gitops-demo       Synced                  
+
+$ argocd app history gitops-demo-web
+SOURCE  git://hw-e-gitd/gitops-demo-repo
+ID      DATE                           REVISION
+0       2026-10-07 23:57:09 +0530 IST  main (c404e4b)
+1       2026-10-08 00:04:07 +0530 IST  main (22f6509)
+

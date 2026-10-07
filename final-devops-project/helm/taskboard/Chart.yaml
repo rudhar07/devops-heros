@@ -1,0 +1,12 @@
+apiVersion: v2
+name: taskboard
+description: TaskBoard - FastAPI + React + PostgreSQL (DevOps final project)
+type: application
+version: 2.0.0
+# Default image tag when image.tag is empty. CI overrides it with the commit SHA.
+appVersion: "2.0.0"
+keywords: [fastapi, react, postgresql, devops]
+maintainers:
+  - name: Rudhar Bajaj
+sources:
+  - https://github.com/rudhar07/devops-heros/tree/main/final-devops-project

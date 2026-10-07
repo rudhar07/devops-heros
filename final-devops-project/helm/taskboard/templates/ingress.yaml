@@ -1,0 +1,36 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "taskboard.fullname" . }}
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # /api/* -> FastAPI. The backend serves /api/... itself, so no rewrite.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "taskboard.fullname" . }}-backend
+                port: {name: http}
+          # everything else -> React app (nginx)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "taskboard.fullname" . }}-frontend
+                port: {name: http}
+{{- end }}

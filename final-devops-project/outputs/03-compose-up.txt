@@ -1,0 +1,41 @@
+# Full stack with Docker Compose (run from final-devops-project/). Host ports 18090 (UI+API via nginx) and 18091 (API direct).
+$ docker compose -f docker/docker-compose.yml up --build -d --wait 2>&1 | grep -vE '^#|^ *$' | tail -25
+ Container taskboard-backend-1 Created 
+ Container taskboard-frontend-1 Creating 
+ Container taskboard-frontend-1 Created 
+ Container taskboard-postgres-1 Starting 
+ Container taskboard-postgres-1 Started 
+ Container taskboard-postgres-1 Waiting 
+ Container taskboard-postgres-1 Healthy 
+ Container taskboard-migrate-1 Starting 
+ Container taskboard-migrate-1 Started 
+ Container taskboard-migrate-1 Waiting 
+ Container taskboard-migrate-1 Exited 
+ Container taskboard-backend-1 Starting 
+ Container taskboard-backend-1 Started 
+ Container taskboard-backend-1 Waiting 
+ Container taskboard-backend-1 Healthy 
+ Container taskboard-frontend-1 Starting 
+ Container taskboard-frontend-1 Started 
+ Container taskboard-frontend-1 Waiting 
+ Container taskboard-postgres-1 Waiting 
+ Container taskboard-migrate-1 Waiting 
+ Container taskboard-backend-1 Waiting 
+ Container taskboard-migrate-1 Exited 
+ Container taskboard-postgres-1 Healthy 
+ Container taskboard-backend-1 Healthy 
+ Container taskboard-frontend-1 Healthy 
+
+$ docker compose -f docker/docker-compose.yml ps -a --format 'table {{.Service}}	{{.Image}}	{{.Status}}	{{.Ports}}'
+SERVICE    IMAGE                      STATUS                      PORTS
+backend    taskboard-backend:local    Up 11 seconds (healthy)     0.0.0.0:18091->8000/tcp, [::]:18091->8000/tcp
+frontend   taskboard-frontend:local   Up 5 seconds (healthy)      0.0.0.0:18090->8080/tcp, [::]:18090->8080/tcp
+migrate    taskboard-backend:local    Exited (0) 11 seconds ago   
+postgres   postgres:17.11-alpine      Up 16 seconds (healthy)     5432/tcp
+
+$ docker compose -f docker/docker-compose.yml logs migrate
+migrate-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+migrate-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
+migrate-1  | INFO  [alembic.runtime.migration] Running upgrade  -> 0001_create_tasks, create tasks table
+migrate-1  | INFO  [alembic.runtime.migration] Running upgrade 0001_create_tasks -> 0002_due_date_updated_at, add due_date, updated_at and indexes for the list filters
+

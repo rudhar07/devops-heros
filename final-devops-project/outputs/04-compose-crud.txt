@@ -1,0 +1,143 @@
+# End-to-end CRUD through the frontend nginx (port 18090): browser -> nginx -> /api proxy -> FastAPI -> PostgreSQL
+$ curl -s -o /dev/null -w 'GET / -> HTTP %{http_code}, %{size_download} bytes, %{content_type}
+' http://localhost:18090/
+GET / -> HTTP 200, 469 bytes, text/html
+
+$ curl -s http://localhost:18090/ | grep -o '<title>.*</title>'
+<title>TaskBoard</title>
+
+$ curl -s http://localhost:18090/healthz
+ok
+
+$ curl -s http://localhost:18090/api/info
+{"service":"TaskBoard API","version":"2.0.0","environment":"compose","commit":"local","docs":"/docs"}
+# CREATE
+$ curl -s -X POST http://localhost:18090/api/tasks -H 'Content-Type: application/json' -d '{"title":"Write Helm chart","description":"values-dev and values-prod","priority":"HIGH","assignee":"Rudhar","due_date":"2026-10-10"}'
+{"title":"Write Helm chart","description":"values-dev and values-prod","priority":"HIGH","status":"TODO","assignee":"Rudhar","due_date":"2026-10-10","id":1,"created_at":"2026-10-07T18:34:44.521176Z","updated_at":"2026-10-07T18:34:44.521196Z"}
+$ curl -s -X POST http://localhost:18090/api/tasks -H 'Content-Type: application/json' -d '{"title":"Add Trivy gate","priority":"MEDIUM","status":"IN_PROGRESS"}'
+{"title":"Add Trivy gate","description":"","priority":"MEDIUM","status":"IN_PROGRESS","assignee":"Unassigned","due_date":null,"id":2,"created_at":"2026-10-07T18:34:44.541524Z","updated_at":"2026-10-07T18:34:44.541527Z"}
+$ curl -s -X POST http://localhost:18090/api/tasks -H 'Content-Type: application/json' -d '{"title":"Rotate demo secret","priority":"LOW","due_date":"2026-10-01"}'
+{"title":"Rotate demo secret","description":"","priority":"LOW","status":"TODO","assignee":"Unassigned","due_date":"2026-10-01","id":3,"created_at":"2026-10-07T18:34:44.554334Z","updated_at":"2026-10-07T18:34:44.554337Z"}
+# READ (list, one, filter, search)
+$ curl -s http://localhost:18090/api/tasks | python3 -m json.tool
+[
+    {
+        "title": "Rotate demo secret",
+        "description": "",
+        "priority": "LOW",
+        "status": "TODO",
+        "assignee": "Unassigned",
+        "due_date": "2026-10-01",
+        "id": 3,
+        "created_at": "2026-10-07T18:34:44.554334Z",
+        "updated_at": "2026-10-07T18:34:44.554337Z"
+    },
+    {
+        "title": "Add Trivy gate",
+        "description": "",
+        "priority": "MEDIUM",
+        "status": "IN_PROGRESS",
+        "assignee": "Unassigned",
+        "due_date": null,
+        "id": 2,
+        "created_at": "2026-10-07T18:34:44.541524Z",
+        "updated_at": "2026-10-07T18:34:44.541527Z"
+    },
+    {
+        "title": "Write Helm chart",
+        "description": "values-dev and values-prod",
+        "priority": "HIGH",
+        "status": "TODO",
+        "assignee": "Rudhar",
+        "due_date": "2026-10-10",
+        "id": 1,
+        "created_at": "2026-10-07T18:34:44.521176Z",
+        "updated_at": "2026-10-07T18:34:44.521196Z"
+    }
+]
+
+$ curl -s http://localhost:18090/api/tasks/1
+{"title":"Write Helm chart","description":"values-dev and values-prod","priority":"HIGH","status":"TODO","assignee":"Rudhar","due_date":"2026-10-10","id":1,"created_at":"2026-10-07T18:34:44.521176Z","updated_at":"2026-10-07T18:34:44.521196Z"}
+$ curl -s 'http://localhost:18090/api/tasks?status=IN_PROGRESS' | python3 -c 'import sys,json; print([t["title"] for t in json.load(sys.stdin)])'
+['Add Trivy gate']
+
+$ curl -s 'http://localhost:18090/api/tasks?q=helm' | python3 -c 'import sys,json; print([t["title"] for t in json.load(sys.stdin)])'
+['Write Helm chart']
+
+$ curl -s http://localhost:18090/api/tasks/stats
+{"total":3,"todo":2,"inProgress":1,"done":0,"highPriorityOpen":1,"overdue":1}
+# UPDATE
+$ curl -s -X PUT http://localhost:18090/api/tasks/1 -H 'Content-Type: application/json' -d '{"status":"DONE"}'
+{"title":"Write Helm chart","description":"values-dev and values-prod","priority":"HIGH","status":"DONE","assignee":"Rudhar","due_date":"2026-10-10","id":1,"created_at":"2026-10-07T18:34:44.521176Z","updated_at":"2026-10-07T18:34:44.663387Z"}
+# DELETE
+$ curl -s -o /dev/null -w 'DELETE /api/tasks/3 -> HTTP %{http_code}
+' -X DELETE http://localhost:18090/api/tasks/3
+DELETE /api/tasks/3 -> HTTP 204
+
+$ curl -s -w '
+HTTP %{http_code}
+' http://localhost:18090/api/tasks/3
+{"detail":"Task not found"}
+HTTP 404
+
+# validation errors
+$ curl -s -w '
+HTTP %{http_code}
+' -X POST http://localhost:18090/api/tasks -H 'Content-Type: application/json' -d '{"title":""}'
+{"detail":[{"type":"string_too_short","loc":["body","title"],"msg":"String should have at least 1 character","input":"","ctx":{"min_length":1}}]}
+HTTP 422
+
+$ curl -s http://localhost:18090/api/tasks/stats
+{"total":2,"todo":0,"inProgress":1,"done":1,"highPriorityOpen":0,"overdue":0}
+# The rows really are in PostgreSQL:
+$ docker compose -f docker/docker-compose.yml exec -T postgres psql -U taskboard -d taskboard -c 'SELECT id, title, status, priority, due_date FROM tasks ORDER BY id;' -c 'SELECT version_num FROM alembic_version;'
+ id |      title       |   status    | priority |  due_date  
+----+------------------+-------------+----------+------------
+  1 | Write Helm chart | DONE        | HIGH     | 2026-10-10
+  2 | Add Trivy gate   | IN_PROGRESS | MEDIUM   | 
+(2 rows)
+
+       version_num        
+--------------------------
+ 0002_due_date_updated_at
+(1 row)
+
+
+# Backend directly (port 18091): health, readiness, metrics
+$ curl -s http://localhost:18091/health; echo; curl -s http://localhost:18091/ready
+{"status":"UP"}
+{"status":"READY"}
+$ curl -s http://localhost:18091/metrics | grep -E '^(taskboard_task_events_total|http_requests_total)' | head -12
+taskboard_task_events_total{action="created"} 3.0
+taskboard_task_events_total{action="updated"} 1.0
+taskboard_task_events_total{action="deleted"} 1.0
+http_requests_total{handler="/api/info",method="GET",status="200"} 1.0
+http_requests_total{handler="/api/tasks",method="POST",status="201"} 3.0
+http_requests_total{handler="/api/tasks",method="GET",status="200"} 3.0
+http_requests_total{handler="/api/tasks/{task_id}",method="GET",status="200"} 1.0
+http_requests_total{handler="/api/tasks/stats",method="GET",status="200"} 2.0
+http_requests_total{handler="/api/tasks/{task_id}",method="PUT",status="200"} 1.0
+http_requests_total{handler="/api/tasks/{task_id}",method="DELETE",status="204"} 1.0
+http_requests_total{handler="/api/tasks/{task_id}",method="GET",status="404"} 1.0
+http_requests_total{handler="/api/tasks",method="POST",status="422"} 1.0
+
+$ curl -s -I http://localhost:18090/ | grep -iE '^(HTTP|x-content|x-frame|server)'
+HTTP/1.1 200 OK
+Server: nginx
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+
+$ docker compose -f docker/docker-compose.yml logs backend --tail 12
+backend-1  | INFO:     192.168.65.1:0 - "GET /api/tasks?q=helm HTTP/1.1" 200 OK
+backend-1  | INFO:     192.168.65.1:0 - "GET /api/tasks/stats HTTP/1.1" 200 OK
+backend-1  | 2026-10-07 18:34:44,664 INFO taskboard task updated id=1 status=DONE
+backend-1  | INFO:     192.168.65.1:0 - "PUT /api/tasks/1 HTTP/1.1" 200 OK
+backend-1  | 2026-10-07 18:34:44,683 INFO taskboard task deleted id=3
+backend-1  | INFO:     192.168.65.1:0 - "DELETE /api/tasks/3 HTTP/1.1" 204 No Content
+backend-1  | INFO:     192.168.65.1:0 - "GET /api/tasks/3 HTTP/1.1" 404 Not Found
+backend-1  | INFO:     192.168.65.1:0 - "POST /api/tasks HTTP/1.1" 422 Unprocessable Content
+backend-1  | INFO:     192.168.65.1:0 - "GET /api/tasks/stats HTTP/1.1" 200 OK
+backend-1  | INFO:     192.168.65.1:37558 - "GET /health HTTP/1.1" 200 OK
+backend-1  | INFO:     192.168.65.1:49436 - "GET /ready HTTP/1.1" 200 OK
+backend-1  | INFO:     192.168.65.1:31940 - "GET /metrics HTTP/1.1" 200 OK
+

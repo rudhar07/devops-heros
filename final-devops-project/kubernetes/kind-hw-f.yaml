@@ -1,0 +1,23 @@
+# Single-node kind cluster used for the final project demo.
+# Host ports (all on localhost):
+#   30110 -> ingress-nginx HTTP (hostPort 80 inside the node)  http://taskboard.local:30110
+#   30111 -> Grafana NodePort
+#   30112 -> Prometheus NodePort
+#   30113 -> ArgoCD server NodePort (https)
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hw-f
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.37.0
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - {containerPort: 80, hostPort: 30110, protocol: TCP}
+      - {containerPort: 30111, hostPort: 30111, protocol: TCP}
+      - {containerPort: 30112, hostPort: 30112, protocol: TCP}
+      - {containerPort: 30113, hostPort: 30113, protocol: TCP}

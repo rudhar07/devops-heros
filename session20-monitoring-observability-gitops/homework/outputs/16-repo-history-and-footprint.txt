@@ -1,0 +1,73 @@
+### Full history of the throwaway GitOps repo (this is the 'audit log' GitOps gives you)
+$ git log --format=%h %ad %an <%ae>%n    %s --date=iso --stat      # (in gitops-demo-repo)
+a6fa12c 2026-10-08 00:06:05 +0530 Rudhar Bajaj <rudharbajaj@gmail.com>
+    Scale application to three replicas
+
+ mini/deployment.yaml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+3cbdbbc 2026-10-08 00:05:04 +0530 Rudhar Bajaj <rudharbajaj@gmail.com>
+    Remove web-extra-config ConfigMap
+
+ app/configmap.yaml | 8 --------
+ 1 file changed, 8 deletions(-)
+22f6509 2026-10-08 00:03:40 +0530 Rudhar Bajaj <rudharbajaj@gmail.com>
+    Scale web to 4 replicas, bump nginx to 1.28, message v2
+
+ app/deployment.yaml | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+c404e4b 2026-10-07 23:51:54 +0530 Rudhar Bajaj <rudharbajaj@gmail.com>
+    Initial desired state: web app (2 replicas) + mini project
+
+ README.md            |  6 ++++++
+ app/configmap.yaml   |  8 ++++++++
+ app/deployment.yaml  | 28 ++++++++++++++++++++++++++++
+ app/namespace.yaml   |  4 ++++
+ app/service.yaml     | 11 +++++++++++
+ mini/deployment.yaml | 22 ++++++++++++++++++++++
+ mini/namespace.yaml  |  4 ++++
+ mini/service.yaml    | 11 +++++++++++
+ 8 files changed, 94 insertions(+)
+
+### Memory footprint per namespace at the end (Prometheus, container_memory_working_set_bytes, MiB)
+$ curl -s http://localhost:8085/api/v1/query --data-urlencode 'query=round(sum by (namespace) (container_memory_working_set_bytes{container!=""}) / 1048576)'
+status: success | resultType: vector | series: 6
+   {"namespace":"monitoring"} => 895
+   {"namespace":"kube-system"} => 1207
+   {"namespace":"local-path-storage"} => 22
+   {"namespace":"podinfo"} => 47
+   {"namespace":"argocd"} => 350
+   {"namespace":"gitops-demo"} => 46
+
+$ docker stats --no-stream --format {{.Name}} {{.MemUsage}} {{.CPUPerc}} hw-e-control-plane hw-e-gitd
+hw-e-control-plane 3.066GiB / 7.749GiB 890.60%
+hw-e-gitd 16.43MiB / 7.749GiB 0.00%
+
+$ kubectl get pods -A
+NAMESPACE            NAME                                                    READY   STATUS      RESTARTS      AGE
+argocd               argocd-application-controller-0                         1/1     Running     0             10m
+argocd               argocd-redis-bdbdffcb4-9tjwz                            1/1     Running     0             18m
+argocd               argocd-repo-server-74b5bcbdbc-nj2nd                     1/1     Running     0             10m
+argocd               argocd-server-776b7cdd4d-tspbj                          1/1     Running     0             17m
+gitops-demo          web-666699f9d5-9m9pc                                    1/1     Running     0             2m22s
+gitops-demo          web-666699f9d5-dpl4c                                    1/1     Running     0             2m21s
+gitops-demo          web-666699f9d5-q87s8                                    1/1     Running     0             2m22s
+gitops-demo          web-666699f9d5-qblbr                                    1/1     Running     0             2m21s
+kube-system          coredns-559f6c778d-g7gwr                                1/1     Running     0             27m
+kube-system          coredns-559f6c778d-sfb26                                1/1     Running     0             27m
+kube-system          etcd-hw-e-control-plane                                 1/1     Running     0             27m
+kube-system          kindnet-szw2j                                           1/1     Running     0             27m
+kube-system          kube-apiserver-hw-e-control-plane                       1/1     Running     0             27m
+kube-system          kube-controller-manager-hw-e-control-plane              1/1     Running     1 (15m ago)   27m
+kube-system          kube-proxy-j48r5                                        1/1     Running     0             27m
+kube-system          kube-scheduler-hw-e-control-plane                       1/1     Running     1 (15m ago)   27m
+local-path-storage   local-path-provisioner-75f7fc7dc5-rnknj                 1/1     Running     0             27m
+monitoring           alertmanager-kps-kube-prometheus-stack-alertmanager-0   2/2     Running     0             26m
+monitoring           kps-grafana-5487f66dbc-bt8gw                            3/3     Running     2 (15m ago)   26m
+monitoring           kps-kube-prometheus-stack-operator-7cbcc744b6-56g74     1/1     Running     0             26m
+monitoring           kps-kube-state-metrics-5f69fb89b6-cr5bt                 1/1     Running     0             26m
+monitoring           kps-prometheus-node-exporter-kj8lw                      1/1     Running     0             26m
+monitoring           prometheus-kps-kube-prometheus-stack-prometheus-0       2/2     Running     0             26m
+podinfo              loadgen                                                 0/1     Completed   0             22m
+podinfo              podinfo-8bc664d66-hxbzl                                 1/1     Running     0             19m
+podinfo              podinfo-8bc664d66-xdfqb                                 1/1     Running     0             19m
+

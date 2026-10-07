@@ -1,0 +1,23 @@
+# Tiny load generator: ~10 requests/second to podinfo for 10 minutes, then exits.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: loadgen
+  namespace: podinfo
+spec:
+  restartPolicy: Never
+  containers:
+    - name: loadgen
+      image: busybox:1.36
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          end=$(( $(date +%s) + 600 ))
+          while [ $(date +%s) -lt $end ]; do
+            wget -q -O /dev/null http://podinfo.podinfo:9898/ ;
+            wget -q -O /dev/null http://podinfo.podinfo:9898/api/info ;
+            sleep 0.2
+          done
+      resources:
+        requests: {cpu: 10m, memory: 8Mi}
+        limits: {memory: 32Mi}

@@ -1,0 +1,20 @@
+# MetalLB = the "cloud load balancer" for my kind cluster.
+# The pool is a small slice of the docker "kind" network (172.18.0.0/16), far away from the
+# addresses Docker hands out to node containers (172.18.0.x), so it cannot collide with them.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: hw-a-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 172.18.203.200-172.18.203.210
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: hw-a-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - hw-a-pool

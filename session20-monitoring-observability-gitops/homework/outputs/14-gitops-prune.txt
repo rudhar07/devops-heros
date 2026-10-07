@@ -1,0 +1,81 @@
+### The Application's sync policy (prune + selfHeal are both on):
+$ kubectl -n argocd get application gitops-demo-web -o jsonpath={.spec.syncPolicy}{"\n"}
+{"automated":{"prune":true,"selfHeal":true},"syncOptions":["CreateNamespace=true"]}
+
+### Before (00:05:04)
+$ kubectl -n gitops-demo get configmap web-extra-config
+NAME               DATA   AGE
+web-extra-config   1      7m56s
+
+### Delete the manifest from Git
+$ git rm -q app/configmap.yaml      # (in gitops-demo-repo)
+
+$ git commit -m "Remove web-extra-config ConfigMap"      # (in gitops-demo-repo)
+[main 3cbdbbc] Remove web-extra-config ConfigMap
+ 1 file changed, 8 deletions(-)
+ delete mode 100644 app/configmap.yaml
+
+$ git log --oneline --stat -1      # (in gitops-demo-repo)
+3cbdbbc Remove web-extra-config ConfigMap
+ app/configmap.yaml | 8 --------
+ 1 file changed, 8 deletions(-)
+
+### Committed at 00:05:04. Watching (no kubectl delete):
+  00:05:04 +0s  configmap=[configmap/web-extra-config]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:05:09 +5s  configmap=[configmap/web-extra-config]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:05:14 +10s  configmap=[configmap/web-extra-config]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:05:19 +15s  configmap=[configmap/web-extra-config]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:05:24 +20s  configmap=[configmap/web-extra-config]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:05:30 +26s  configmap=[configmap/web-extra-config]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:05:35 +31s  configmap=[configmap/web-extra-config]  app=Synced/Healthy rev=22f6509f0044216f2b61d
+  00:05:40 +36s  configmap=[Error from server (NotFound): configmaps "web-extra-config" not found]  app=Synced/Healthy rev=3cbdbbc65bc6a8a8118d0
+
+$ kubectl -n gitops-demo get configmap
+NAME               DATA   AGE
+kube-root-ca.crt   1      8m32s
+
+$ kubectl -n argocd get application gitops-demo-web -o jsonpath={range .status.operationState.syncResult.resources[*]}{.kind}/{.name}: {.status} {.message}{"\n"}{end}
+ConfigMap/web-extra-config: Pruned pruned
+Namespace/gitops-demo: Synced namespace/gitops-demo unchanged
+Service/web: Synced service/web unchanged
+Deployment/web: Synced deployment.apps/web unchanged
+
+$ argocd app get gitops-demo-web
+Name:               argocd/gitops-demo-web
+Project:            default
+Server:             https://kubernetes.default.svc
+Namespace:          gitops-demo
+URL:                https://localhost:8086/applications/gitops-demo-web
+Source:
+- Repo:             git://hw-e-gitd/gitops-demo-repo
+  Target:           main
+  Path:             app
+SyncWindow:         Sync Allowed
+Sync Policy:        Automated (Prune)
+Sync Status:        Synced to main (3cbdbbc)
+Health Status:      Healthy
+
+GROUP  KIND        NAMESPACE    NAME              STATUS     HEALTH   HOOK  MESSAGE
+       ConfigMap   gitops-demo  web-extra-config  Succeeded  Pruned         pruned
+       Namespace   gitops-demo  gitops-demo       Running    Synced         namespace/gitops-demo unchanged
+       Service     gitops-demo  web               Synced     Healthy        service/web unchanged
+apps   Deployment  gitops-demo  web               Synced     Healthy        deployment.apps/web unchanged
+       Namespace                gitops-demo       Synced                    
+
+$ argocd app history gitops-demo-web
+SOURCE  git://hw-e-gitd/gitops-demo-repo
+ID      DATE                           REVISION
+0       2026-10-07 23:57:09 +0530 IST  main (c404e4b)
+1       2026-10-08 00:04:07 +0530 IST  main (22f6509)
+2       2026-10-08 00:05:37 +0530 IST  main (3cbdbbc)
+
+### Full status of the Application object (trimmed to the interesting fields with python):
+$ kubectl -n argocd get application gitops-demo-web -o json | python3 -c "<print sync/health/history/operationState>"
+sync: {"status": "Synced", "revision": "3cbdbbc65bc6a8a8118d032232c1438219af3702"}
+health: Healthy
+reconciledAt: 2026-10-07T18:35:37Z
+history:
+  - {"id": 0, "revision": "c404e4b", "deployedAt": "2026-10-07T18:27:09Z", "initiatedBy": {"automated": true}}
+  - {"id": 1, "revision": "22f6509", "deployedAt": "2026-10-07T18:34:07Z", "initiatedBy": {"automated": true}}
+  - {"id": 2, "revision": "3cbdbbc", "deployedAt": "2026-10-07T18:35:37Z", "initiatedBy": {"automated": true}}
+last operation: {"phase": "Succeeded", "message": "successfully synced (all tasks run)", "initiatedBy": {"automated": true}, "prune": true, "finishedAt": "2026-10-07T18:35:37Z"}

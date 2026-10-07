@@ -1,0 +1,71 @@
+# Final state of the hw-f cluster before cleanup
+$ helm list -A
+NAME     	NAMESPACE 	REVISION	UPDATED                             	STATUS  	CHART                       	APP VERSION
+kps      	monitoring	2       	2026-10-08 00:42:31.942864 +0530 IST	deployed	kube-prometheus-stack-92.1.0	v0.94.1    
+taskboard	taskboard 	13      	2026-10-08 01:19:27.767523 +0530 IST	deployed	taskboard-2.0.0             	2.0.0      
+
+$ argocd app list --grpc-web
+NAME                     CLUSTER                         NAMESPACE         PROJECT  STATUS  HEALTH   SYNCPOLICY  CONDITIONS  REPO                               PATH                                 TARGET
+argocd/taskboard-gitops  https://kubernetes.default.svc  taskboard-gitops  default  Synced  Healthy  Auto-Prune  <none>      git://hw-f-gitd/final-gitops-repo  final-devops-project/helm/taskboard  main
+
+$ kubectl get pods -A -o wide | awk '{print $1, $2, $3, $4, $5}' | column -t
+NAMESPACE           NAME                                                   READY  STATUS   RESTARTS
+argocd              argocd-application-controller-0                        1/1    Running  0
+argocd              argocd-redis-bdbdffcb4-fsfn4                           1/1    Running  0
+argocd              argocd-repo-server-d89c7967d-kjqsv                     1/1    Running  0
+argocd              argocd-server-776b7cdd4d-ck4lp                         1/1    Running  0
+ingress-nginx       ingress-nginx-controller-596f5b6bcf-szmpt              1/1    Running  0
+kube-system         coredns-559f6c778d-h2fmv                               1/1    Running  0
+kube-system         coredns-559f6c778d-hmc26                               1/1    Running  0
+kube-system         etcd-hw-f-control-plane                                1/1    Running  0
+kube-system         kindnet-z6zcc                                          1/1    Running  0
+kube-system         kube-apiserver-hw-f-control-plane                      1/1    Running  0
+kube-system         kube-controller-manager-hw-f-control-plane             1/1    Running  0
+kube-system         kube-proxy-64vmm                                       1/1    Running  0
+kube-system         kube-scheduler-hw-f-control-plane                      1/1    Running  0
+kube-system         metrics-server-84c99cb944-ds64l                        1/1    Running  0
+local-path-storage  local-path-provisioner-75f7fc7dc5-7zrb9                1/1    Running  0
+monitoring          alertmanager-kps-kube-prometheus-stack-alertmanager-0  2/2    Running  0
+monitoring          kps-grafana-8c46578-jfbdm                              3/3    Running  0
+monitoring          kps-kube-prometheus-stack-operator-7cbcc744b6-hwmrz    1/1    Running  0
+monitoring          kps-kube-state-metrics-5f69fb89b6-th6fj                1/1    Running  0
+monitoring          kps-prometheus-node-exporter-52jgn                     1/1    Running  0
+monitoring          prometheus-kps-kube-prometheus-stack-prometheus-0      2/2    Running  0
+taskboard-gitops    taskboard-gitops-backend-d8fdc78bb-v7g6k               1/1    Running  0
+taskboard-gitops    taskboard-gitops-frontend-578568f8b8-6sp2g             1/1    Running  0
+taskboard-gitops    taskboard-gitops-frontend-578568f8b8-sptjg             1/1    Running  0
+taskboard-gitops    taskboard-gitops-postgres-7c8d9b5f86-f9bhh             1/1    Running  0
+taskboard           taskboard-backend-59d5dcc795-dmqvg                     1/1    Running  0
+taskboard           taskboard-backend-59d5dcc795-gk9nx                     1/1    Running  0
+taskboard           taskboard-frontend-667cdcf97d-w2cbs                    1/1    Running  0
+taskboard           taskboard-frontend-667cdcf97d-xspsw                    1/1    Running  0
+taskboard           taskboard-postgres-55ff9cc87-xhmwn                     1/1    Running  0
+
+$ kubectl -n taskboard get deploy,svc,ingress,hpa,pvc
+NAME                                 READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/taskboard-backend    2/2     2            2           73m
+deployment.apps/taskboard-frontend   2/2     2            2           73m
+deployment.apps/taskboard-postgres   1/1     1            1           73m
+
+NAME                         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/taskboard-backend    ClusterIP   10.96.255.59    <none>        8000/TCP   73m
+service/taskboard-frontend   ClusterIP   10.96.219.172   <none>        80/TCP     73m
+service/taskboard-postgres   ClusterIP   10.96.34.134    <none>        5432/TCP   73m
+
+NAME                                  CLASS   HOSTS                 ADDRESS     PORTS   AGE
+ingress.networking.k8s.io/taskboard   nginx   taskboard.localhost   localhost   80      73m
+
+NAME                                                    REFERENCE                      TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/taskboard-backend   Deployment/taskboard-backend   cpu: 6%/50%   2         4         2          73m
+
+NAME                                            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/taskboard-postgres-data   Bound    pvc-a4692c8b-20ad-4a59-9f4e-df2afcf6ce21   1Gi        RWO            standard       <unset>                 73m
+
+$ kubectl top nodes
+NAME                 CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+hw-f-control-plane   516m         3%       3833Mi          48%         
+
+$ docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | grep hw-f
+hw-f-gitd 16.6MiB / 128MiB
+hw-f-control-plane 3.739GiB / 7.749GiB
+

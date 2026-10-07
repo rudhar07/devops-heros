@@ -1,0 +1,206 @@
+### Step 1: deploy the stable version (9 replicas, v1) and the shared Service
+$ kubectl apply -f strategies/03-canary/deployment-stable.yaml -f strategies/03-canary/service.yaml
+deployment.apps/app-stable created
+service/myapp-canary-service created
+
+$ kubectl rollout status deployment/app-stable --timeout=240s
+Waiting for deployment "app-stable" rollout to finish: 0 out of 9 new replicas have been updated...
+Waiting for deployment "app-stable" rollout to finish: 0 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 1 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 2 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 3 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 4 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 5 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 6 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 7 of 9 updated replicas are available...
+deployment "app-stable" successfully rolled out
+
+# (polled until the node's iptables chain KUBE-SVC-FZS5ED5AWZKMK4AC held exactly the 9 ready pod IPs: 10.244.0.152 10.244.0.153 10.244.0.154 10.244.0.155 10.244.0.156 10.244.0.157 10.244.0.158 10.244.0.159 10.244.0.160)
+
+# 100 requests with only stable running:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 100); do code=$(curl -s -m2 -o /tmp/body -w "%{http_code}" myapp-canary-service); rc=$?; grep -o -E "STABLE v1|CANARY v2" /tmp/body || echo "FAILED curl_exit=$rc http=$code"; done | sort | uniq -c'
+    100 STABLE v1
+
+### Step 2: deploy the canary (1 replica, v2) with the same app=myapp-canary label
+$ kubectl apply -f strategies/03-canary/deployment-canary.yaml
+deployment.apps/app-canary created
+
+$ kubectl rollout status deployment/app-canary --timeout=240s
+Waiting for deployment "app-canary" rollout to finish: 0 of 1 updated replicas are available...
+deployment "app-canary" successfully rolled out
+
+$ kubectl get deploy -l app=myapp-canary -L track,version
+NAME         READY   UP-TO-DATE   AVAILABLE   AGE   TRACK    VERSION
+app-canary   1/1     1            1           7s    canary   v2
+app-stable   9/9     9            9           15s   stable   v1
+
+$ kubectl get pods -l app=myapp-canary -L track,version
+NAME                          READY   STATUS    RESTARTS   AGE   TRACK    VERSION
+app-canary-5849994497-td255   1/1     Running   0          7s    canary   v2
+app-stable-6ffb777f9d-2hrb7   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-5d6lc   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-8cdtx   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-dnllh   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-kz6cm   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-nl42r   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-q2vmk   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-vwjnd   1/1     Running   0          15s   stable   v1
+app-stable-6ffb777f9d-w9ng6   1/1     Running   0          15s   stable   v1
+
+$ kubectl get svc myapp-canary-service -o wide
+NAME                   TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE   SELECTOR
+myapp-canary-service   NodePort   10.96.48.173   <none>        80:30030/TCP   15s   app=myapp-canary
+
+$ kubectl describe svc myapp-canary-service
+Name:                     myapp-canary-service
+Namespace:                default
+Labels:                   app=myapp-canary
+Annotations:              <none>
+Selector:                 app=myapp-canary
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.48.173
+IPs:                      10.96.48.173
+Port:                     http  80/TCP
+TargetPort:               80/TCP
+NodePort:                 http  30030/TCP
+Endpoints:                10.244.0.159:80,10.244.0.155:80,10.244.0.154:80 + 7 more...
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+# (polled until the node's iptables chain KUBE-SVC-FZS5ED5AWZKMK4AC held exactly the 10 ready pod IPs: 10.244.0.152 10.244.0.153 10.244.0.154 10.244.0.155 10.244.0.156 10.244.0.157 10.244.0.158 10.244.0.159 10.244.0.160 10.244.0.161)
+
+$ docker exec hw-a-control-plane iptables -t nat -S KUBE-SVC-FZS5ED5AWZKMK4AC    # how kube-proxy implements the split
+-N KUBE-SVC-FZS5ED5AWZKMK4AC
+-A KUBE-SVC-FZS5ED5AWZKMK4AC ! -s 10.244.0.0/16 -d 10.96.48.173/32 -p tcp -m comment --comment "default/myapp-canary-service:http cluster IP" -m tcp --dport 80 -j KUBE-MARK-MASQ
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.152:80" -m statistic --mode random --probability 0.10000000009 -j KUBE-SEP-RYBYQGBHYEJWIQD4
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.153:80" -m statistic --mode random --probability 0.11111111101 -j KUBE-SEP-PBLKFCPXVGHUDZ6D
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.154:80" -m statistic --mode random --probability 0.12500000000 -j KUBE-SEP-DWF5ADWNS5O3LPDG
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.155:80" -m statistic --mode random --probability 0.14285714272 -j KUBE-SEP-I36QPVAVEBLOBJXU
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.156:80" -m statistic --mode random --probability 0.16666666651 -j KUBE-SEP-QNUYBISQP4RYXGRZ
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.157:80" -m statistic --mode random --probability 0.20000000019 -j KUBE-SEP-DVVAFXCQGUDE6DVJ
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.158:80" -m statistic --mode random --probability 0.25000000000 -j KUBE-SEP-Y75ORUUCL5ZPIDGD
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.159:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-PFDCSB45RHEHWU3R
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.160:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-6OYGISEPVNFY7GOU
+-A KUBE-SVC-FZS5ED5AWZKMK4AC -m comment --comment "default/myapp-canary-service:http -> 10.244.0.161:80" -j KUBE-SEP-RUWRIREWJZ5LFZBW
+
+### Step 3: ~10% of traffic to the canary - 100 requests through the one Service:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 100); do code=$(curl -s -m2 -o /tmp/body -w "%{http_code}" myapp-canary-service); rc=$?; grep -o -E "STABLE v1|CANARY v2" /tmp/body || echo "FAILED curl_exit=$rc http=$code"; done | sort | uniq -c'
+      9 CANARY v2
+     91 STABLE v1
+
+# and a second batch of 100, to see how much the split moves around:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 100); do code=$(curl -s -m2 -o /tmp/body -w "%{http_code}" myapp-canary-service); rc=$?; grep -o -E "STABLE v1|CANARY v2" /tmp/body || echo "FAILED curl_exit=$rc http=$code"; done | sort | uniq -c'
+     15 CANARY v2
+     85 STABLE v1
+
+$ docker exec hw-a-control-plane iptables -t nat -L KUBE-SVC-FZS5ED5AWZKMK4AC -v -n | <pkts + endpoint of each KUBE-SEP rule>
+   15 pkts  10.244.0.152:80
+   19 pkts  10.244.0.153:80
+   24 pkts  10.244.0.154:80
+   13 pkts  10.244.0.155:80
+   20 pkts  10.244.0.156:80
+   26 pkts  10.244.0.157:80
+   25 pkts  10.244.0.158:80
+   16 pkts  10.244.0.159:80
+   18 pkts  10.244.0.160:80
+   24 pkts  10.244.0.161:80
+
+### Step 4: canary looks healthy -> shift to 50/50 by changing the replica ratio (5 stable : 5 canary)
+$ kubectl scale deployment app-stable --replicas=5
+deployment.apps/app-stable scaled
+
+$ kubectl scale deployment app-canary --replicas=5
+deployment.apps/app-canary scaled
+
+$ kubectl rollout status deployment/app-stable --timeout=240s
+deployment "app-stable" successfully rolled out
+
+$ kubectl rollout status deployment/app-canary --timeout=240s
+Waiting for deployment "app-canary" rollout to finish: 1 of 5 updated replicas are available...
+Waiting for deployment "app-canary" rollout to finish: 2 of 5 updated replicas are available...
+Waiting for deployment "app-canary" rollout to finish: 3 of 5 updated replicas are available...
+Waiting for deployment "app-canary" rollout to finish: 4 of 5 updated replicas are available...
+deployment "app-canary" successfully rolled out
+
+$ kubectl get pods -l app=myapp-canary -L track
+NAME                          READY   STATUS    RESTARTS   AGE   TRACK
+app-canary-5849994497-8k7bx   1/1     Running   0          7s    canary
+app-canary-5849994497-fmh5r   1/1     Running   0          7s    canary
+app-canary-5849994497-pp6b7   1/1     Running   0          7s    canary
+app-canary-5849994497-rvzvg   1/1     Running   0          7s    canary
+app-canary-5849994497-td255   1/1     Running   0          16s   canary
+app-stable-6ffb777f9d-2hrb7   1/1     Running   0          24s   stable
+app-stable-6ffb777f9d-dnllh   1/1     Running   0          24s   stable
+app-stable-6ffb777f9d-kz6cm   1/1     Running   0          24s   stable
+app-stable-6ffb777f9d-q2vmk   1/1     Running   0          24s   stable
+app-stable-6ffb777f9d-w9ng6   1/1     Running   0          24s   stable
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=myapp-canary-service -o wide
+NAME                         ADDRESSTYPE   PORTS   ENDPOINTS                                            AGE
+myapp-canary-service-sw7qk   IPv4          80      10.244.0.159,10.244.0.154,10.244.0.158 + 7 more...   24s
+
+# 100 requests sent immediately after the rollouts finished:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 100); do code=$(curl -s -m2 -o /tmp/body -w "%{http_code}" myapp-canary-service); rc=$?; grep -o -E "STABLE v1|CANARY v2" /tmp/body || echo "FAILED curl_exit=$rc http=$code"; done | sort | uniq -c'
+     22 CANARY v2
+     78 STABLE v1
+
+$ docker exec hw-a-control-plane iptables -t nat -S KUBE-SVC-FZS5ED5AWZKMK4AC | grep -c KUBE-SEP    # endpoint rules on the node right now
+7
+
+# Now wait until the node's iptables chain has exactly the 10 ready pods before sending traffic again:
+# (polled until the node's iptables chain KUBE-SVC-FZS5ED5AWZKMK4AC held exactly the 10 ready pod IPs: 10.244.0.154 10.244.0.156 10.244.0.158 10.244.0.159 10.244.0.160 10.244.0.161 10.244.0.162 10.244.0.163 10.244.0.164 10.244.0.165)
+
+$ kubectl exec client -- sh -c 'for i in $(seq 1 100); do code=$(curl -s -m2 -o /tmp/body -w "%{http_code}" myapp-canary-service); rc=$?; grep -o -E "STABLE v1|CANARY v2" /tmp/body || echo "FAILED curl_exit=$rc http=$code"; done | sort | uniq -c'
+     46 CANARY v2
+     54 STABLE v1
+
+# second batch of 100:
+$ kubectl exec client -- sh -c 'for i in $(seq 1 100); do code=$(curl -s -m2 -o /tmp/body -w "%{http_code}" myapp-canary-service); rc=$?; grep -o -E "STABLE v1|CANARY v2" /tmp/body || echo "FAILED curl_exit=$rc http=$code"; done | sort | uniq -c'
+     49 CANARY v2
+     51 STABLE v1
+
+$ docker exec hw-a-control-plane iptables -t nat -L KUBE-SVC-FZS5ED5AWZKMK4AC -v -n | <pkts + endpoint of each KUBE-SEP rule>
+   19 pkts  10.244.0.154:80
+   15 pkts  10.244.0.156:80
+   21 pkts  10.244.0.158:80
+   24 pkts  10.244.0.159:80
+   26 pkts  10.244.0.160:80
+   17 pkts  10.244.0.161:80
+   20 pkts  10.244.0.162:80
+   15 pkts  10.244.0.163:80
+   26 pkts  10.244.0.164:80
+   17 pkts  10.244.0.165:80
+
+### Step 5: full promotion would be: canary -> 10, stable -> 0 (or roll stable's image to v2). Abort = scale canary to 0:
+$ kubectl scale deployment app-canary --replicas=0
+deployment.apps/app-canary scaled
+
+$ kubectl scale deployment app-stable --replicas=9
+deployment.apps/app-stable scaled
+
+$ kubectl rollout status deployment/app-stable --timeout=240s
+Waiting for deployment "app-stable" rollout to finish: 5 out of 9 new replicas have been updated...
+Waiting for deployment "app-stable" rollout to finish: 5 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 6 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 7 of 9 updated replicas are available...
+Waiting for deployment "app-stable" rollout to finish: 8 of 9 updated replicas are available...
+deployment "app-stable" successfully rolled out
+
+$ kubectl rollout status deployment/app-canary --timeout=240s
+deployment "app-canary" successfully rolled out
+
+# (polled until the node's iptables chain KUBE-SVC-FZS5ED5AWZKMK4AC held exactly the 9 ready pod IPs: 10.244.0.154 10.244.0.156 10.244.0.158 10.244.0.159 10.244.0.160 10.244.0.166 10.244.0.167 10.244.0.168 10.244.0.169)
+
+$ kubectl exec client -- sh -c 'for i in $(seq 1 100); do code=$(curl -s -m2 -o /tmp/body -w "%{http_code}" myapp-canary-service); rc=$?; grep -o -E "STABLE v1|CANARY v2" /tmp/body || echo "FAILED curl_exit=$rc http=$code"; done | sort | uniq -c'
+    100 STABLE v1
+
+### Cleanup
+$ kubectl delete -f strategies/03-canary/
+deployment.apps "app-canary" deleted from default namespace
+deployment.apps "app-stable" deleted from default namespace
+service "myapp-canary-service" deleted from default namespace
+

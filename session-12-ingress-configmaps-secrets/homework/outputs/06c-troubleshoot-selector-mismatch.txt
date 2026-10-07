@@ -1,0 +1,58 @@
+### BEFORE: apply session10-k8s-core-objects/troubleshooting/selector-mismatch.yaml
+$ kubectl apply -f /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/troubleshooting/selector-mismatch.yaml
+The Deployment "selector-error-demo" is invalid: spec.template.metadata.labels: Invalid value: {"app":"wrong-app-name"}: `selector` does not match template `labels`
+
+$ kubectl get deploy selector-error-demo
+Error from server (NotFound): deployments.apps "selector-error-demo" not found
+
+### Investigate: compare the selector with the template labels
+$ grep -n -A2 -E 'matchLabels|labels:' /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/troubleshooting/selector-mismatch.yaml
+13:    matchLabels:
+14-      app: correct-app-name
+15-  template:
+--
+17:      labels:
+18:        # BUG: Label does not match selector.matchLabels above!
+19-        app: wrong-app-name
+20-    spec:
+
+# Root cause: spec.selector.matchLabels (app=correct-app-name) does not match the template label (app=wrong-app-name).
+# The API server rejects it at admission, so nothing is created at all.
+### Fix: make the template label match (troubleshooting/selector-mismatch-fixed.yaml)
+$ diff /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/troubleshooting/selector-mismatch.yaml troubleshooting/selector-mismatch-fixed.yaml
+1,5c1,2
+< # ==============================================================================
+< # INTENTIONALLY BROKEN MANIFEST FOR IMMUTABLE SELECTOR DRILL
+< # Demonstrates API server validation error when selector labels do not match pod template labels
+< # ==============================================================================
+< 
+---
+> # Fixed copy of session10-k8s-core-objects/troubleshooting/selector-mismatch.yaml:
+> # the template label now matches spec.selector.matchLabels.
+18,19c15
+<         # BUG: Label does not match selector.matchLabels above!
+<         app: wrong-app-name
+---
+>         app: correct-app-name   # FIX: was wrong-app-name
+
+$ kubectl apply -f troubleshooting/selector-mismatch-fixed.yaml
+deployment.apps/selector-error-demo created
+
+$ kubectl rollout status deployment/selector-error-demo --timeout=180s
+Waiting for deployment spec update to be observed...
+Waiting for deployment "selector-error-demo" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "selector-error-demo" rollout to finish: 0 of 1 updated replicas are available...
+deployment "selector-error-demo" successfully rolled out
+
+### AFTER
+$ kubectl get deploy,pods -l app=correct-app-name
+NAME                                       READY   STATUS    RESTARTS   AGE
+pod/selector-error-demo-54996d6787-k5bbc   1/1     Running   0          1s
+
+### Also: a selector is immutable after creation
+$ kubectl patch deployment selector-error-demo --type merge -p '{"spec":{"selector":{"matchLabels":{"app":"something-else"}},"template":{"metadata":{"labels":{"app":"something-else"}}}}}'
+The Deployment "selector-error-demo" is invalid: spec.selector: Invalid value: {"matchLabels":{"app":"something-else"}}: field is immutable
+
+$ kubectl delete -f troubleshooting/selector-mismatch-fixed.yaml
+deployment.apps "selector-error-demo" deleted from default namespace
+

@@ -1,0 +1,30 @@
+# Password read into a shell variable only: GPW=$(kubectl -n monitoring get secret kps-grafana -o jsonpath="{.data.admin-password}" | base64 -d)
+# It is passed with curl -u admin:$GPW and never printed or written to a file.
+
+$ curl -s localhost:8084/api/health
+{
+  "database": "ok",
+  "version": "13.2.3",
+  "commit": "90ffed056f0884267356c12a0eeb72a022af53f1"
+}
+$ curl -s -u admin:$GPW localhost:8084/api/datasources
+   uid=alertmanager name=Alertmanager type=alertmanager url=http://kps-kube-prometheus-stack-alertmanager.monitoring:9093/ isDefault=False
+   uid=prometheus name=Prometheus type=prometheus url=http://kps-kube-prometheus-stack-prometheus.monitoring:9090/ isDefault=True
+
+$ curl -s -u admin:$GPW localhost:8084/api/datasources/uid/prometheus/health
+{"details":{"application":"Prometheus","features":{"rulerApiEnabled":false}},"message":"Successfully queried the Prometheus API.","status":"OK"}
+
+$ curl -s -u admin:$GPW "localhost:8084/api/search?type=dash-db" | count + a few titles
+   dashboards provisioned: 25
+    - Alertmanager / Overview  uid=alertmanager-overview
+    - Kubernetes / Compute Resources / Namespace (Pods)  uid=85a562078cdf77779eaa1add43ccec1e
+    - Kubernetes / Compute Resources / Pod  uid=6581e46e4e5c7ba40a07646395ef7b23
+    - Node Exporter / Nodes  uid=7d57716318ee0dddbac5a7f451fb7753
+
+# A dashboard-style query run THROUGH Grafana (POST /api/ds/query), i.e. Grafana -> Prometheus datasource -> result:
+$ curl -s -u admin:$GPW -H 'Content-Type: application/json' -X POST localhost:8084/api/ds/query -d '{"from":"now-5m","to":"now","queries":[{"refId":"A","datasource":{"uid":"prometheus"},"expr":"sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"podinfo\",container=\"podinfo\"}[2m]))","instant":true,"range":false},{"refId":"B","datasource":{"uid":"prometheus"},"expr":"sum(rate(http_requests_total{namespace=\"podinfo\"}[2m]))","instant":true,"range":false}]}'
+  refId=A status=200
+     labels={"pod": "podinfo-8bc664d66-xdfqb"} value= [0.0017409865479151858]
+     labels={"pod": "podinfo-8bc664d66-hxbzl"} value= [0.0018627608662373015]
+  refId=B status=200
+     labels={} value= [0.1792261620067861]

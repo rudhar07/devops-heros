@@ -1,0 +1,101 @@
+# (ANSI colour codes from gitleaks were stripped from this file afterwards; nothing else was changed.)
+# Final secret scan of the finished project folder (all files incl. outputs/ transcripts), same config as CI. Run last, after node_modules/dist/caches were removed.
+$ gitleaks version
+8.30.1
+
+$ gitleaks dir . --config security/.gitleaks.toml --redact --no-banner -v 2>&1 | sed -E 's/^.*(INF|WRN|ERR) //'
+Finding:     $ curl -s -u REDACTED http://localhost:30...
+Secret:      REDACTED
+RuleID:      curl-auth-user
+Entropy:     3.446439
+File:        outputs/14-grafana.txt
+Line:        8
+Fingerprint: outputs/14-grafana.txt:curl-auth-user:8
+
+Finding:     $ curl -s -u REDACTED http://localhost:30...
+Secret:      REDACTED
+RuleID:      curl-auth-user
+Entropy:     3.446439
+File:        outputs/14-grafana.txt
+Line:        12
+Fingerprint: outputs/14-grafana.txt:curl-auth-user:12
+
+Finding:     $ curl -s -u REDACTED 'http://localhost:3...
+Secret:      REDACTED
+RuleID:      curl-auth-user
+Entropy:     3.446439
+File:        outputs/14-grafana.txt
+Line:        15
+Fingerprint: outputs/14-grafana.txt:curl-auth-user:15
+
+Finding:     $ curl -s -u REDACTED http://localhost:30...
+Secret:      REDACTED
+RuleID:      curl-auth-user
+Entropy:     3.446439
+File:        outputs/14-grafana.txt
+Line:        18
+Fingerprint: outputs/14-grafana.txt:curl-auth-user:18
+
+Finding:     $ curl -s -u REDACTED -X POST http://loca...
+Secret:      REDACTED
+RuleID:      curl-auth-user
+Entropy:     3.446439
+File:        outputs/14-grafana.txt
+Line:        31
+Fingerprint: outputs/14-grafana.txt:curl-auth-user:31
+
+Finding:     $ curl -s http://localhost:30111/api/health     
+{ "database": "ok", "version": "13.2.3", ... }
+$ curl -s -u                                  REDACTED http://localhost:30111/api/datasources/uid/prometheus/health | jq -c .                                        
+{"details":{"application":"Prometheus",...},"message":"Successfully queried the Prometheus API.","status":"OK"}
+$ curl -s -u REDACTED                                                                                           'http://localhost:3...
+Secret:      REDACTED
+RuleID:      curl-auth-user
+Entropy:     3.446439
+File:        README.md
+Line:        712
+Fingerprint: README.md:curl-auth-user:712
+
+Finding:     $ curl -s -u REDACTED -X POST http://loca...
+Secret:      REDACTED
+RuleID:      curl-auth-user
+Entropy:     3.446439
+File:        README.md
+Line:        718
+Fingerprint: README.md:curl-auth-user:718
+
+1:29AM INF scanned ~466304 bytes (466.30 KB) in 54.9ms
+1:29AM WRN leaks found: 7
+
+# Same scan of the root workflow file:
+$ gitleaks dir ../.github/workflows/session21-final.yml --config security/.gitleaks.toml --redact --no-banner 2>&1 | sed -E 's/^.*(INF|WRN|ERR) //'
+1:29AM INF scanned ~23191 bytes (23.19 KB) in 8.5ms
+1:29AM INF no leaks found
+
+# Comparison: the same default rules on the session-12 homework folder find its deliberately fake secrets - the reason CI scopes gitleaks to final-devops-project/:
+$ gitleaks dir ../session-12-ingress-configmaps-secrets --redact --no-banner 2>&1 | sed -E 's/^.*(INF|WRN|ERR) //' | tail -2
+1:29AM INF scanned ~238451 bytes (238.45 KB) in 39.9ms
+1:29AM WRN leaks found: 27
+
+# The history scan (gitleaks git ... --log-opts '-- final-devops-project ...') runs only in CI: I do not run git commands in the student's working copy.
+
+# ================ result: 7 findings, all the same thing ================
+# Rule curl-auth-user matched 'curl -u admin:<password>' in outputs/14-grafana.txt and README.md. The value is the FAKE local Grafana password from monitoring/kube-prometheus-stack-values.yaml (demo-admin-123), not a real secret - but this is exactly what the CI gate would block, so it had to be handled before the push.
+# Fix: an allowlist entry for that exact fake value only (not for the rule, not for the files), added to security/.gitleaks.toml:
+$ sed -n '/Known FAKE/,$p' security/.gitleaks.toml
+description = "Known FAKE demo credential of the local kind Grafana (monitoring/kube-prometheus-stack-values.yaml), used in curl -u commands in outputs/ and README. Exact value only."
+regexTarget = "secret"
+regexes = ['''demo-admin-123''']
+
+$ gitleaks dir . --config security/.gitleaks.toml --redact --no-banner -v 2>&1 | sed -E 's/^.*(INF|WRN|ERR) //'
+1:30AM INF scanned ~470492 bytes (470.49 KB) in 49ms
+1:30AM INF no leaks found
+# Narrowness check: the allowlist must not hide other passwords. The test file is written outside the repo and the made-up password is assembled at run time, so it never appears literally in this transcript (a literal one here would itself be flagged).
+$ mkdir -p $S/gl-check && pw="Zq7$(date +%s)Kx" && printf 'curl -s -u admin:%s http://grafana.example/api
+' "$pw" > $S/gl-check/x.sh && gitleaks dir $S/gl-check --config security/.gitleaks.toml --redact --no-banner --no-color 2>&1 | tail -1
+1:31AM WRN leaks found: 1
+
+# Final scan of the whole project folder (README updated with these results):
+$ gitleaks dir . --config security/.gitleaks.toml --redact --no-banner --no-color 2>&1 | tail -1
+1:31AM INF no leaks found
+

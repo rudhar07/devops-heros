@@ -1,0 +1,71 @@
+### Deploy the app (2 replicas) and the NodePort Service (nodePort 30080)
+$ kubectl apply -f services/02-nodeport/
+deployment.apps/web-app-nodeport created
+service/web-service-nodeport created
+
+$ kubectl rollout status deployment/web-app-nodeport --timeout=180s
+Waiting for deployment "web-app-nodeport" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "web-app-nodeport" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "web-app-nodeport" rollout to finish: 1 of 2 updated replicas are available...
+deployment "web-app-nodeport" successfully rolled out
+
+# (polled until http://web-service-nodeport:80 answered 200 from the client pod - about 2s; kube-proxy on this busy node needs a moment to program new Services)
+
+$ kubectl get svc web-service-nodeport -o wide
+NAME                   TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE   SELECTOR
+web-service-nodeport   NodePort   10.96.81.176   <none>        80:30080/TCP   4s    app=web-nodeport
+
+$ kubectl describe svc web-service-nodeport
+Name:                     web-service-nodeport
+Namespace:                default
+Labels:                   app=web-nodeport
+Annotations:              <none>
+Selector:                 app=web-nodeport
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.81.176
+IPs:                      10.96.81.176
+Port:                     http  80/TCP
+TargetPort:               80/TCP
+NodePort:                 http  30080/TCP
+Endpoints:                10.244.0.204:80,10.244.0.203:80
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=web-service-nodeport
+NAME                         ADDRESSTYPE   PORTS   ENDPOINTS                   AGE
+web-service-nodeport-5j5k2   IPv4          80      10.244.0.204,10.244.0.203   5s
+
+$ kubectl get nodes -o wide
+NAME                 STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION             CONTAINER-RUNTIME
+hw-a-control-plane   Ready    control-plane   36m   v1.37.0   172.18.0.3    <none>        Debian GNU/Linux 13 (trixie)   6.12.76-linuxkit (arm64)   containerd://2.3.4
+
+### Test 1: from inside the cluster via <NodeIP>:<NodePort> and via the ClusterIP part of the same Service
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'node 172.18.0.3:30080 -> HTTP %{http_code}\n' http://172.18.0.3:30080
+node 172.18.0.3:30080 -> HTTP 200
+
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'svc name:80     -> HTTP %{http_code}\n' http://web-service-nodeport:80
+svc name:80     -> HTTP 200
+
+### Test 2: from outside the cluster - a container on the docker 'kind' network (like another machine on the LAN)
+$ docker run --rm --network kind curlimages/curl:8.5.0 -s -o /dev/null -w 'kind network -> 172.18.0.3:30080 -> HTTP %{http_code}\n' http://172.18.0.3:30080
+kind network -> 172.18.0.3:30080 -> HTTP 200
+
+### Test 3: from my Mac's browser/terminal - works because the kind config maps host 30080 -> node 30080
+$ docker port hw-a-control-plane 30080/tcp
+0.0.0.0:30080
+
+$ curl -s -o /dev/null -w 'localhost:30080 -> HTTP %{http_code}\n' http://localhost:30080
+localhost:30080 -> HTTP 200
+
+$ sh -c 'curl -s http://localhost:30080 | grep -o "<title>.*</title>"'
+<title>Welcome to nginx!</title>
+
+### kube-proxy rule that catches the node port:
+$ docker exec hw-a-control-plane iptables -t nat -S KUBE-NODEPORTS | grep web-service-nodeport
+-A KUBE-NODEPORTS -d 127.0.0.0/8 -p tcp -m comment --comment "default/web-service-nodeport:http" -m tcp --dport 30080 -m nfacct --nfacct-name  localhost_nps_accepted_pkts -j KUBE-EXT-542ZUKRJYISRKQCS
+-A KUBE-NODEPORTS -p tcp -m comment --comment "default/web-service-nodeport:http" -m tcp --dport 30080 -j KUBE-EXT-542ZUKRJYISRKQCS
+

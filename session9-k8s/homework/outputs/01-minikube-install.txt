@@ -1,0 +1,22 @@
+$ minikube version
+minikube version: v1.39.0
+commit: 7a9f6a841470a207de8cf4bafcccee0969d8ba10
+
+$ docker version --format Client {{.Client.Version}} / Server {{.Server.Version}} {{.Server.Os}}/{{.Server.Arch}}
+Client 29.6.1 / Server 29.6.1 linux/arm64
+
+$ minikube start -p hw-minikube --driver=docker --memory=2048 --cpus=2
+* [hw-minikube] minikube v1.39.0 on Darwin 26.5.2 (arm64)
+  - KUBECONFIG=/private/tmp/claude-501/-Users-rudhar-Desktop-NIFTY-Devops-hw-1/bb0ee100-b0a3-4716-aa65-ebcf9f6c0442/scratchpad/kube-a.yaml
+* Using the docker driver based on user configuration
+* Using Docker Desktop driver with root privileges
+* Starting "hw-minikube" primary control-plane node in "hw-minikube" cluster
+* Pulling base image v0.0.51 ...
+    [download progress bar trimmed; last frame: 14.24 MiB / 470.53 MiB]
+    [download progress bar trimmed; last frame: 470.53 MiB / 470.53 MiB]
+* Configuring CNI (Container Networking Interface) ...
+* Verifying Kubernetes components...
+  - Using image gcr.io/k8s-minikube/storage-provisioner:v5
+* Enabled addons: storage-provisioner, default-storageclass
+* Done! kubectl is now configured to use "hw-minikube" cluster and "default" namespace by default
+

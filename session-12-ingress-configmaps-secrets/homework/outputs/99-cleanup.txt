@@ -1,0 +1,42 @@
+$ kubectl get pods -A
+NAMESPACE            NAME                                         READY   STATUS      RESTARTS      AGE
+default              dnsutils                                     1/1     Running     0             47m
+default              echo-blue-6d6b8d6f7d-8v4ld                   1/1     Running     0             17m
+default              echo-green-5479b497d6-z6xx8                  1/1     Running     0             17m
+default              yatri-backend-6c58cb99c7-2n689               1/1     Running     0             18m
+default              yatri-backend-6c58cb99c7-5zm2j               1/1     Running     0             18m
+default              yatri-frontend-ddcfc4b5f-8jtxg               1/1     Running     0             18m
+default              yatri-frontend-ddcfc4b5f-jjzrr               1/1     Running     0             18m
+ingress-nginx        ingress-nginx-admission-create-m8jdz         0/1     Completed   0             17m
+ingress-nginx        ingress-nginx-admission-patch-4w6wf          0/1     Completed   1 (17m ago)   17m
+ingress-nginx        ingress-nginx-controller-7c467b649f-6tszt    1/1     Running     0             17m
+kube-system          coredns-559f6c778d-rvd9p                     1/1     Running     0             25m
+kube-system          coredns-559f6c778d-xxggf                     1/1     Running     0             25m
+kube-system          etcd-hw-a-control-plane                      1/1     Running     1 (77m ago)   87m
+kube-system          kindnet-qgpbk                                1/1     Running     0             87m
+kube-system          kube-apiserver-hw-a-control-plane            1/1     Running     1 (77m ago)   87m
+kube-system          kube-controller-manager-hw-a-control-plane   1/1     Running     3 (77m ago)   87m
+kube-system          kube-proxy-554f9                             1/1     Running     0             87m
+kube-system          kube-scheduler-hw-a-control-plane            1/1     Running     1 (77m ago)   87m
+local-path-storage   local-path-provisioner-75f7fc7dc5-jwh2r      1/1     Running     1 (71m ago)   87m
+metallb-system       controller-76f4cf76b7-zfsds                  1/1     Running     0             49m
+metallb-system       speaker-z8nkm                                1/1     Running     0             49m
+
+$ kind delete cluster --name hw-a
+Deleting cluster "hw-a" ...
+Deleted nodes: ["hw-a-control-plane"]
+
+$ kind get clusters
+hw-e
+
+$ docker ps -a --filter name=hw-a --format '{{.Names}}'
+
+$ minikube profile list
+
+* Exiting due to MK_USAGE_NO_PROFILE: No minikube profile was found.
+* Suggestion: 
+
+    You can create one using 'minikube start'.
+    
+
+

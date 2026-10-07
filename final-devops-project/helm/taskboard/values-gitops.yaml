@@ -1,0 +1,23 @@
+# Values used by the ArgoCD Application (gitops/argocd-application.yaml).
+# In GitOps, a commit that changes this file IS the deployment.
+#
+# Images: CI pushes ghcr.io/rudhar07/devops-heros/taskboard-*:<git sha> and
+# :<Chart appVersion>. An empty tag means appVersion (2.0.0). To pin a build,
+# commit its SHA here.
+backend:
+  image:
+    tag: ""
+  replicaCount: 1
+frontend:
+  image:
+    tag: ""
+  replicaCount: 1
+config:
+  appEnv: gitops-v1
+  logLevel: INFO
+ingress:
+  enabled: true
+  host: gitops.localhost
+# Replicas come from Git, not from the HPA, in this environment.
+hpa:
+  enabled: false

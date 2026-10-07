@@ -1,0 +1,67 @@
+# IaC / Kubernetes misconfiguration scan: trivy config (Dockerfiles, raw manifests, Helm chart, Terraform). Gate: HIGH,CRITICAL.
+# BEFORE: my first scan of this project found 9 HIGH/CRITICAL findings. I fixed most of them in place; to show the 'before' state here I re-created the old settings in a scratch copy ($S/iac-before = terraform, helm, kubernetes with: public subnets auto-assign public IPs, EKS API public to 0.0.0.0/0, no EKS secrets encryption, postgres without read-only root FS).
+$ cd $S/iac-before && trivy config --quiet --severity HIGH,CRITICAL . 2>&1 | grep -E '^[A-Z]+-[0-9]+ \(|^[a-z].*\((terraform|helm|kubernetes)\)$'
+helm/taskboard/templates/postgres.yaml (helm)
+KSV-0014 (HIGH): Container 'postgres' of Deployment 'taskboard-postgres' should set 'securityContext.readOnlyRootFilesystem' to true
+kubernetes/10-postgres.yaml (kubernetes)
+KSV-0014 (HIGH): Container 'postgres' of Deployment 'taskboard-postgres' should set 'securityContext.readOnlyRootFilesystem' to true
+terraform/eks.tf (terraform)
+AWS-0039 (HIGH): Cluster does not have secret encryption enabled.
+AWS-0040 (CRITICAL): Public cluster access is enabled.
+AWS-0041 (CRITICAL): Cluster allows access from a public CIDR: 0.0.0.0/0
+terraform/network.tf (terraform)
+AWS-0164 (HIGH): Subnet associates public IP address.
+AWS-0164 (HIGH): Subnet associates public IP address.
+terraform/security.tf (terraform)
+AWS-0104 (CRITICAL): Security group rule allows unrestricted egress to any IP address.
+terraform/storage.tf (terraform)
+AWS-0132 (HIGH): Bucket does not encrypt data with a customer managed key.
+
+# Fixes: map_public_ip_on_launch=false; EKS endpoint private by default (public only with an explicit admin /32); KMS key + encryption_config for Secrets; postgres readOnlyRootFilesystem with emptyDirs for /tmp and the socket dir. Two findings accepted with reasons in security/.trivyignore (node egress, SSE-S3 instead of a CMK).
+$ cat security/.trivyignore | grep -vE '^\s*$'
+# Accepted Trivy misconfiguration findings for "trivy config" (IaC scan).
+# Every entry needs a reason. Reviewed 2026-10-08 by Rudhar Bajaj.
+# AWS-0104 (CRITICAL) unrestricted egress on the EKS node security group.
+# Nodes must reach public registries (ghcr.io, docker.io) and AWS APIs through
+# the NAT gateway; the destination set is not a fixed CIDR list. Ingress is
+# what is locked down (only from the LB SG and from other nodes).
+AWS-0104
+# AWS-0132 (HIGH) S3 bucket not encrypted with a customer managed KMS key.
+# The artifacts bucket uses SSE-S3 (AES256) + versioning + public access
+# block. A CMK adds cost and key management for data that is not sensitive.
+AWS-0132
+
+# AFTER (the CI gate, using security/trivy.yaml):
+$ trivy --config security/trivy.yaml config --quiet . | grep -E 'Target|│ (application|helm|kubernetes|terraform)'; echo gate-exit=${PIPESTATUS[0]}
+│                      Target                       │    Type    │ Misconfigurations │
+│ application/backend/Dockerfile                    │ dockerfile │         0         │
+│ application/frontend/Dockerfile                   │ dockerfile │         0         │
+│ gitops/argocd-application-local-demo.yaml         │ kubernetes │         0         │
+│ gitops/argocd-application.yaml                    │ kubernetes │         0         │
+│ helm/taskboard/templates/backend-deployment.yaml  │    helm    │         0         │
+│ helm/taskboard/templates/backend-service.yaml     │    helm    │         0         │
+│ helm/taskboard/templates/configmap.yaml           │    helm    │         0         │
+│ helm/taskboard/templates/frontend-deployment.yaml │    helm    │         0         │
+│ helm/taskboard/templates/frontend-service.yaml    │    helm    │         0         │
+│ helm/taskboard/templates/hpa.yaml                 │    helm    │         0         │
+│ helm/taskboard/templates/ingress.yaml             │    helm    │         0         │
+│ helm/taskboard/templates/postgres.yaml            │    helm    │         0         │
+│ helm/taskboard/templates/secret.yaml              │    helm    │         0         │
+│ kubernetes/00-namespace.yaml                      │ kubernetes │         0         │
+│ kubernetes/01-configmap.yaml                      │ kubernetes │         0         │
+│ kubernetes/02-secret.example.yaml                 │ kubernetes │         0         │
+│ kubernetes/10-postgres.yaml                       │ kubernetes │         0         │
+│ kubernetes/20-backend.yaml                        │ kubernetes │         0         │
+│ kubernetes/30-frontend.yaml                       │ kubernetes │         0         │
+│ kubernetes/40-ingress.yaml                        │ kubernetes │         0         │
+│ kubernetes/50-hpa.yaml                            │ kubernetes │         0         │
+│ monitoring/alert-rules.yaml                       │ kubernetes │         0         │
+│ monitoring/servicemonitor.yaml                    │ kubernetes │         0         │
+│ terraform                                         │ terraform  │         0         │
+│ terraform/ecr.tf                                  │ terraform  │         0         │
+│ terraform/eks.tf                                  │ terraform  │         0         │
+│ terraform/network.tf                              │ terraform  │         0         │
+│ terraform/security.tf                             │ terraform  │         0         │
+│ terraform/storage.tf                              │ terraform  │         0         │
+gate-exit=0
+

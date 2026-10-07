@@ -1,0 +1,123 @@
+### DaemonSet (instructor's node-logging-agent): one pod per node, no replicas field
+$ kubectl apply -f /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/daemonset/node-agent-ds.yaml
+daemonset.apps/node-logging-agent created
+
+$ kubectl rollout status daemonset/node-logging-agent --timeout=120s
+Waiting for daemon set "node-logging-agent" rollout to finish: 0 of 1 updated pods are available...
+daemon set "node-logging-agent" successfully rolled out
+
+$ kubectl get ds node-logging-agent -o wide
+NAME                 DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE   CONTAINERS      IMAGES         SELECTOR
+node-logging-agent   1         1         1       1            1           <none>          2s    fluent-logger   busybox:1.36   app=node-logging-agent
+
+$ kubectl get pods -l app=node-logging-agent -o wide
+NAME                       READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+node-logging-agent-tr584   1/1     Running   0          2s    10.244.0.12   hw-a-control-plane   <none>           <none>
+
+$ kubectl get pods -l app=node-logging-agent -o 'jsonpath={.items[0].metadata.ownerReferences[0].kind}/{.items[0].metadata.ownerReferences[0].name}{"\n"}'
+DaemonSet/node-logging-agent
+
+$ kubectl logs -l app=node-logging-agent --tail=2
+[Wed Oct  7 17:43:08 UTC 2026] Collecting host system metrics on node-logging-agent-tr584
+
+$ kubectl scale ds node-logging-agent --replicas=3
+Error from server (NotFound): the server could not find the requested resource
+
+# the DaemonSets that every cluster already runs:
+$ kubectl get ds -A
+NAMESPACE        NAME                 DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+default          node-logging-agent   1         1         1       1            1           <none>                   3s
+kube-system      kindnet              1         1         1       1            1           kubernetes.io/os=linux   53m
+kube-system      kube-proxy           1         1         1       1            1           kubernetes.io/os=linux   53m
+metallb-system   speaker              1         1         1       1            1           kubernetes.io/os=linux   15m
+
+### StatefulSet with per-pod storage (workloads/statefulset-with-storage.yaml)
+$ kubectl apply -f workloads/statefulset-with-storage.yaml
+service/web-db created
+statefulset.apps/web-db created
+
+$ kubectl rollout status statefulset/web-db --timeout=240s
+Waiting for 2 pods to be ready...
+Waiting for 2 pods to be ready...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 2 new pods have been updated...
+
+$ kubectl get pods -l app=web-db -w --output-watch-events    # ran during creation - note web-db-1 starts only after web-db-0 is Ready
+EVENT      NAME       READY   STATUS    RESTARTS   AGE
+ADDED      web-db-0   0/1     Pending   0          0s
+MODIFIED   web-db-0   0/1     Pending   0          0s
+MODIFIED   web-db-0   0/1     Pending   0          3s
+MODIFIED   web-db-0   0/1     ContainerCreating   0          3s
+MODIFIED   web-db-0   0/1     ContainerCreating   0          3s
+MODIFIED   web-db-0   1/1     Running             0          3s
+ADDED      web-db-1   0/1     Pending             0          0s
+MODIFIED   web-db-1   0/1     Pending             0          0s
+MODIFIED   web-db-1   0/1     Pending             0          4s
+MODIFIED   web-db-1   0/1     ContainerCreating   0          4s
+MODIFIED   web-db-1   0/1     ContainerCreating   0          5s
+MODIFIED   web-db-1   1/1     Running             0          5s
+
+$ kubectl get sts,pods,pvc -l app=web-db
+NAME           READY   STATUS    RESTARTS   AGE
+pod/web-db-0   1/1     Running   0          10s
+pod/web-db-1   1/1     Running   0          7s
+
+NAME                                  STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/data-web-db-0   Bound    pvc-79b56c10-c6f5-44b6-ad67-63543ec38198   16Mi       RWO            standard       <unset>                 10s
+persistentvolumeclaim/data-web-db-1   Bound    pvc-cfa1f14e-f846-49f7-b8b7-2488856a3a52   16Mi       RWO            standard       <unset>                 7s
+
+$ kubectl get pvc
+NAME            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+data-web-db-0   Bound    pvc-79b56c10-c6f5-44b6-ad67-63543ec38198   16Mi       RWO            standard       <unset>                 10s
+data-web-db-1   Bound    pvc-cfa1f14e-f846-49f7-b8b7-2488856a3a52   16Mi       RWO            standard       <unset>                 7s
+
+$ kubectl get pods -l app=web-db -o 'jsonpath={.items[0].metadata.ownerReferences[0].kind}/{.items[0].metadata.ownerReferences[0].name}{"\n"}'
+StatefulSet/web-db
+
+$ kubectl exec web-db-0 -- cat /data/owner
+web-db-0
+
+$ kubectl exec web-db-1 -- cat /data/owner
+web-db-1
+
+### Delete web-db-0: it comes back with the SAME name and the SAME volume
+$ kubectl delete pod web-db-0
+pod "web-db-0" deleted from default namespace
+
+$ kubectl wait --for=condition=Ready pod/web-db-0 --timeout=180s
+pod/web-db-0 condition met
+
+$ kubectl exec web-db-0 -- cat /data/owner
+web-db-0
+
+$ kubectl get pod web-db-0 -o 'jsonpath={.spec.volumes[0].persistentVolumeClaim.claimName}{"\n"}'
+data-web-db-0
+
+### Networking: per-pod DNS names through the headless Service
+$ kubectl exec dnsutils -- dig +short web-db-0.web-db.default.svc.cluster.local
+10.244.0.17
+
+$ kubectl exec dnsutils -- dig +short web-db.default.svc.cluster.local
+10.244.0.17
+10.244.0.16
+
+### Cleanup (PVCs are NOT deleted with the StatefulSet - data is kept on purpose)
+$ kubectl delete -f workloads/statefulset-with-storage.yaml
+service "web-db" deleted from default namespace
+statefulset.apps "web-db" deleted from default namespace
+
+$ kubectl get pvc
+NAME            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+data-web-db-0   Bound    pvc-79b56c10-c6f5-44b6-ad67-63543ec38198   16Mi       RWO            standard       <unset>                 43s
+data-web-db-1   Bound    pvc-cfa1f14e-f846-49f7-b8b7-2488856a3a52   16Mi       RWO            standard       <unset>                 40s
+
+$ kubectl delete pvc -l app=web-db
+persistentvolumeclaim "data-web-db-0" deleted from default namespace
+persistentvolumeclaim "data-web-db-1" deleted from default namespace
+
+$ kubectl delete pvc data-web-db-0 data-web-db-1 --ignore-not-found
+
+$ kubectl delete ds node-logging-agent
+daemonset.apps "node-logging-agent" deleted from default namespace
+

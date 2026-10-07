@@ -1,0 +1,14 @@
+# Root .gitignore already covers node_modules/, dist/, __pycache__/, *.pyc,
+# .venv/, .pytest_cache/, .terraform/, *.tfstate*, *.tfplan.
+.env
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+# CI/test report folders (the CI uploads them as artifacts instead)
+/reports/
+application/backend/reports/
+# Full Trivy JSON reports are ~1 MB; the summaries are in outputs/06-trivy-image.txt
+security/reports/trivy-*.json
+# Real tfvars may contain account specifics; only the .example is committed
+terraform/terraform.tfvars

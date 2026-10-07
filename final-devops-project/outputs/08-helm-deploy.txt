@@ -1,0 +1,208 @@
+# Load the locally built images into the kind node (dev values use taskboard-*:local, no registry)
+$ kind load docker-image taskboard-backend:local taskboard-frontend:local postgres:17.11-alpine --name hw-f
+Image: "taskboard-backend:local" with ID "sha256:e228e9e6fa878f9a3204a906392ec79a147ea47d8f1e6b11f34f32bb06ad5576" not yet present on node "hw-f-control-plane", loading...
+Image: "taskboard-frontend:local" with ID "sha256:fe4b6913f344b61ca7463541f1f374cf331ec0f51564726ce7675bdc7f7a01cf" not yet present on node "hw-f-control-plane", loading...
+Image: "postgres:17.11-alpine" with ID "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24" not yet present on node "hw-f-control-plane", loading...
+ERROR: failed to load image: command "docker exec --privileged -i hw-f-control-plane ctr --namespace=k8s.io images import --all-platforms --digests --snapshotter=overlayfs -" failed with error: exit status 1
+
+Command Output: ctr: content digest sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3: not found
+[exit code 1]
+
+$ kubectl apply -f kubernetes/00-namespace.yaml 2>/dev/null || kubectl create namespace taskboard
+namespace/taskboard created
+
+# Helm install (dev values)
+$ helm upgrade --install taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml --wait --timeout 5m
+Release "taskboard" does not exist. Installing it now.
+Error: resource Deployment/taskboard/taskboard-backend not ready. status: InProgress, message: Available: 0/2
+resource Deployment/taskboard/taskboard-frontend not ready. status: InProgress, message: Available: 0/2
+context deadline exceeded
+[exit code 1]
+
+$ helm list -n taskboard
+NAME     	NAMESPACE	REVISION	UPDATED                             	STATUS	CHART          	APP VERSION
+taskboard	taskboard	1       	2026-10-08 00:12:34.426381 +0530 IST	failed	taskboard-2.0.0	2.0.0      
+
+$ kubectl -n taskboard get deploy,pods,svc,ingress,hpa,pvc,configmap,secret -o wide
+NAME                                 READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                     SELECTOR
+deployment.apps/taskboard-backend    0/2     2            0           5m    backend      taskboard-backend:local    app.kubernetes.io/component=backend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+deployment.apps/taskboard-frontend   0/2     2            0           5m    frontend     taskboard-frontend:local   app.kubernetes.io/component=frontend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+deployment.apps/taskboard-postgres   1/1     1            1           5m    postgres     postgres:17.11-alpine      app.kubernetes.io/component=postgres,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+
+NAME                                      READY   STATUS             RESTARTS      AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/taskboard-backend-8f44f4655-dq6tp     0/1     Init:0/2           2 (32s ago)   5m    10.244.0.14   hw-f-control-plane   <none>           <none>
+pod/taskboard-backend-8f44f4655-h7cdf     0/1     Init:0/2           2 (30s ago)   5m    10.244.0.11   hw-f-control-plane   <none>           <none>
+pod/taskboard-frontend-ddd478648-d4n8k    0/1     ImagePullBackOff   0             5m    10.244.0.10   hw-f-control-plane   <none>           <none>
+pod/taskboard-frontend-ddd478648-zwtpg    0/1     ImagePullBackOff   0             5m    10.244.0.12   hw-f-control-plane   <none>           <none>
+pod/taskboard-postgres-5b7c9564fd-lgfc8   1/1     Running            0             5m    10.244.0.15   hw-f-control-plane   <none>           <none>
+
+NAME                         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE   SELECTOR
+service/taskboard-backend    ClusterIP   10.96.255.59    <none>        8000/TCP   5m    app.kubernetes.io/component=backend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+service/taskboard-frontend   ClusterIP   10.96.219.172   <none>        80/TCP     5m    app.kubernetes.io/component=frontend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+service/taskboard-postgres   ClusterIP   10.96.34.134    <none>        5432/TCP   5m    app.kubernetes.io/component=postgres,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+
+NAME                                  CLASS   HOSTS             ADDRESS     PORTS   AGE
+ingress.networking.k8s.io/taskboard   nginx   taskboard.local   localhost   80      5m
+
+NAME                                                    REFERENCE                      TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/taskboard-backend   Deployment/taskboard-backend   cpu: <unknown>/50%   2         4         2          5m
+
+NAME                                            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE   VOLUMEMODE
+persistentvolumeclaim/taskboard-postgres-data   Bound    pvc-a4692c8b-20ad-4a59-9f4e-df2afcf6ce21   1Gi        RWO            standard       <unset>                 5m    Filesystem
+
+NAME                         DATA   AGE
+configmap/kube-root-ca.crt   1      5m
+configmap/taskboard-config   5      5m
+
+NAME                                     TYPE                 DATA   AGE
+secret/sh.helm.release.v1.taskboard.v1   helm.sh/release.v1   1      5m
+secret/taskboard-db                      Opaque               2      5m
+
+
+# ================ debugging the first install ================
+# Problem 1: frontend ImagePullBackOff - 'kind load docker-image' failed above (ctr: content digest not found). The image never reached the node, so kubelet tried docker.io/library/taskboard-frontend:local.
+$ kubectl -n taskboard describe pod -l app.kubernetes.io/component=frontend | grep -E 'Failed|Back-off' | head -3
+
+# Problem 2: backend stuck in Init:0/2 - the wait-for-db initContainer never succeeds:
+$ kubectl -n taskboard logs deploy/taskboard-backend -c wait-for-db --tail 3
+Found 2 pods, using pod/taskboard-backend-8f44f4655-dq6tp
+waiting for taskboard-postgres:5432 (26)
+taskboard-postgres:5432 - no attempt
+waiting for taskboard-postgres:5432 (27)
+
+$ kubectl -n taskboard exec deploy/taskboard-backend -c wait-for-db -- sh -c 'id; pg_isready -h $DB_HOST -p $DB_PORT; echo rc=$?; pg_isready -h $DB_HOST -p $DB_PORT -U probe; echo rc=$?'
+uid=10001 gid=10001 groups=10001
+taskboard-postgres:5432 - no attempt
+rc=3
+taskboard-postgres:5432 - accepting connections
+rc=0
+
+# Root cause 2: the initContainer runs as UID 10001 (no /etc/passwd entry in the postgres image); without -U, pg_isready cannot work out a user name and returns 3 'no attempt'. Fix: '-U probe' in the template.
+# Root cause 1 fix: scripts/kind-load.sh saves only the node platform (docker save --platform linux/arm64) and uses 'kind load image-archive'.
+$ scripts/kind-load.sh taskboard-backend:local taskboard-frontend:local
+saving taskboard-backend:local (linux/arm64)
+saving taskboard-frontend:local (linux/arm64)
+
+$ helm upgrade --install taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml --wait --timeout 5m
+Release "taskboard" has been upgraded. Happy Helming!
+NAME: taskboard
+LAST DEPLOYED: Thu Oct  8 00:18:14 2026
+NAMESPACE: taskboard
+STATUS: deployed
+REVISION: 2
+DESCRIPTION: Upgrade complete
+NOTES:
+TaskBoard 2.0.0 deployed as release "taskboard" in namespace "taskboard".
+
+Backend image:  taskboard-backend:local
+Frontend image: taskboard-frontend:local
+
+Open:  http://taskboard.local/          (UI)
+       http://taskboard.local/api/tasks (API)
+
+Check:  kubectl -n taskboard get pods,svc,ingress,hpa
+Test:   helm test taskboard -n taskboard
+
+$ helm list -n taskboard
+NAME     	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART          	APP VERSION
+taskboard	taskboard	2       	2026-10-08 00:18:14.528954 +0530 IST	deployed	taskboard-2.0.0	2.0.0      
+
+$ helm history taskboard -n taskboard
+REVISION	UPDATED                 	STATUS    	CHART          	APP VERSION	DESCRIPTION                                                                                                                       
+1       	Thu Oct  8 00:12:34 2026	superseded	taskboard-2.0.0	2.0.0      	Release "taskboard" failed: resource Deployment/taskboard/taskboard-backend not ready. status: InProgress, message: Available: ...
+2       	Thu Oct  8 00:18:14 2026	deployed  	taskboard-2.0.0	2.0.0      	Upgrade complete                                                                                                                  
+
+$ kubectl -n taskboard get deploy,pods,svc,ingress,hpa,pvc -o wide
+NAME                                 READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES                     SELECTOR
+deployment.apps/taskboard-backend    2/2     2            2           6m1s   backend      taskboard-backend:local    app.kubernetes.io/component=backend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+deployment.apps/taskboard-frontend   2/2     2            2           6m1s   frontend     taskboard-frontend:local   app.kubernetes.io/component=frontend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+deployment.apps/taskboard-postgres   1/1     1            1           6m1s   postgres     postgres:17.11-alpine      app.kubernetes.io/component=postgres,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+
+NAME                                      READY   STATUS        RESTARTS      AGE    IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/taskboard-backend-59d5dcc795-4r2g9    1/1     Running       0             21s    10.244.0.16   hw-f-control-plane   <none>           <none>
+pod/taskboard-backend-59d5dcc795-865pz    1/1     Running       0             11s    10.244.0.17   hw-f-control-plane   <none>           <none>
+pod/taskboard-backend-8f44f4655-dq6tp     0/1     Terminating   2 (93s ago)   6m1s   10.244.0.14   hw-f-control-plane   <none>           <none>
+pod/taskboard-frontend-ddd478648-d4n8k    1/1     Running       0             6m1s   10.244.0.10   hw-f-control-plane   <none>           <none>
+pod/taskboard-frontend-ddd478648-zwtpg    1/1     Running       0             6m1s   10.244.0.12   hw-f-control-plane   <none>           <none>
+pod/taskboard-postgres-5b7c9564fd-lgfc8   1/1     Running       0             6m1s   10.244.0.15   hw-f-control-plane   <none>           <none>
+
+NAME                         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE    SELECTOR
+service/taskboard-backend    ClusterIP   10.96.255.59    <none>        8000/TCP   6m1s   app.kubernetes.io/component=backend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+service/taskboard-frontend   ClusterIP   10.96.219.172   <none>        80/TCP     6m1s   app.kubernetes.io/component=frontend,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+service/taskboard-postgres   ClusterIP   10.96.34.134    <none>        5432/TCP   6m1s   app.kubernetes.io/component=postgres,app.kubernetes.io/instance=taskboard,app.kubernetes.io/name=taskboard
+
+NAME                                  CLASS   HOSTS             ADDRESS     PORTS   AGE
+ingress.networking.k8s.io/taskboard   nginx   taskboard.local   localhost   80      6m1s
+
+NAME                                                    REFERENCE                      TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/taskboard-backend   Deployment/taskboard-backend   cpu: <unknown>/50%   2         4         2          6m1s
+
+NAME                                            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE    VOLUMEMODE
+persistentvolumeclaim/taskboard-postgres-data   Bound    pvc-a4692c8b-20ad-4a59-9f4e-df2afcf6ce21   1Gi        RWO            standard       <unset>                 6m1s   Filesystem
+
+$ kubectl -n taskboard logs deploy/taskboard-backend -c migrate
+Found 3 pods, using pod/taskboard-backend-59d5dcc795-4r2g9
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_create_tasks, create tasks table
+INFO  [alembic.runtime.migration] Running upgrade 0001_create_tasks -> 0002_due_date_updated_at, add due_date, updated_at and indexes for the list filters
+
+
+# ================ later: rebuilt frontend image (apk upgrade, 0 CVEs) loaded and rolled out ================
+$ scripts/kind-load.sh taskboard-frontend:local
+saving taskboard-frontend:local (linux/arm64)
+
+$ kubectl -n taskboard rollout restart deploy/taskboard-frontend && kubectl -n taskboard rollout status deploy/taskboard-frontend --timeout=180s
+deployment.apps/taskboard-frontend restarted
+Waiting for deployment "taskboard-frontend" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "taskboard-frontend" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "taskboard-frontend" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "taskboard-frontend" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "taskboard-frontend" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "taskboard-frontend" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "taskboard-frontend" rollout to finish: 1 old replicas are pending termination...
+deployment "taskboard-frontend" successfully rolled out
+
+$ curl -s -o /dev/null -w 'UI via Ingress: HTTP %{http_code}
+' http://taskboard.localhost:30110/
+UI via Ingress: HTTP 200
+
+
+# ================ after the IaC scan: postgres with readOnlyRootFilesystem (outputs/25) rolled out ================
+$ curl -s http://taskboard.localhost:30110/api/tasks/stats
+{"total":74,"todo":72,"inProgress":1,"done":1,"highPriorityOpen":2,"overdue":0}
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml --wait --timeout 5m | grep -E 'STATUS|REVISION'
+STATUS: deployed
+REVISION: 13
+
+$ kubectl -n taskboard rollout status deploy/taskboard-postgres --timeout=180s
+deployment "taskboard-postgres" successfully rolled out
+
+$ kubectl -n taskboard get deploy taskboard-postgres -o jsonpath='{.spec.template.spec.containers[0].securityContext}'; echo
+{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}
+
+$ kubectl -n taskboard exec deploy/taskboard-postgres -- sh -c 'touch /should-fail 2>&1; id'
+touch: /should-fail: Read-only file system
+uid=70(postgres) gid=70(postgres) groups=70(postgres)
+
+$ kubectl -n taskboard get pods
+NAME                                  READY   STATUS      RESTARTS   AGE
+loadgen                               0/1     Completed   0          36m
+taskboard-backend-59d5dcc795-dmqvg    1/1     Running     0          17m
+taskboard-backend-59d5dcc795-gk9nx    1/1     Running     0          17m
+taskboard-frontend-667cdcf97d-w2cbs   1/1     Running     0          31m
+taskboard-frontend-667cdcf97d-xspsw   1/1     Running     0          31m
+taskboard-postgres-55ff9cc87-xhmwn    1/1     Running     0          13s
+
+# Data survived the postgres pod being replaced (PVC):
+$ for i in $(seq 1 20); do c=$(curl -s -o /dev/null -w '%{http_code}' http://taskboard.localhost:30110/api/tasks/stats); [ $c = 200 ] && break; sleep 3; done; curl -s http://taskboard.localhost:30110/api/tasks/stats
+{"total":74,"todo":72,"inProgress":1,"done":1,"highPriorityOpen":2,"overdue":0}
+# Raw manifest copy of the same change, validated by the API server:
+$ kubectl apply -n taskboard --dry-run=server -f kubernetes/10-postgres.yaml
+Warning: resource persistentvolumeclaims/taskboard-postgres-data is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+persistentvolumeclaim/taskboard-postgres-data configured (server dry run)
+Warning: resource services/taskboard-postgres is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+service/taskboard-postgres configured (server dry run)
+Warning: resource deployments/taskboard-postgres is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+deployment.apps/taskboard-postgres configured (server dry run)
+

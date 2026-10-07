@@ -1,0 +1,83 @@
+# Trimmed values for kube-prometheus-stack on a single-node kind cluster that shares
+# Docker with other clusters. Goal: everything the homework needs, as little RAM as possible.
+
+# Control-plane scrape targets that do not work on kind without extra bind-address
+# changes (they listen on 127.0.0.1 inside the node). Disabled instead of left "down".
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# Default rules: keep them (KubePodNotReady etc. are useful), but drop the
+# groups that reference the disabled components above.
+defaultRules:
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30101
+  prometheusSpec:
+    retention: 2h
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    # Pick up ServiceMonitors / PrometheusRules from every namespace,
+    # not only the ones carrying the Helm release label.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 768Mi}
+
+alertmanager:
+  enabled: true
+  service:
+    type: NodePort
+    nodePort: 30104
+  alertmanagerSpec:
+    retention: 2h
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 64Mi}
+
+grafana:
+  enabled: true
+  service:
+    type: NodePort
+    nodePort: 30100
+  # NOTE: this is what I ran. Grafana 13 was OOMKilled twice at 256Mi while the node was busy
+  # (see outputs/17-restarts-check.txt). Next time I would use limits.memory: 384Mi.
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+  # No persistence, no sidecar image downloads beyond the default dashboard sidecar.
+  persistence:
+    enabled: false
+
+kube-state-metrics:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {memory: 64Mi}
+
+prometheusOperator:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 192Mi}
+  admissionWebhooks:
+    patch:
+      resources: {}

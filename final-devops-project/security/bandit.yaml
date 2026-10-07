@@ -1,0 +1,8 @@
+# Bandit (SAST) configuration for the TaskBoard backend.
+#   bandit -c security/bandit.yaml -r application/backend/app
+# Scope: application code only. Tests use `assert` on purpose (B101), so they
+# are excluded instead of skipping B101 globally. No other check is skipped.
+exclude_dirs:
+  - application/backend/tests
+  - application/backend/alembic
+skips: []

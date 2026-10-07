@@ -1,0 +1,133 @@
+### Setup: Service 'api' in namespace team-b; I query it from pod 'dnsutils' in default and from 'dnsutils' in team-b
+$ kubectl apply -f fqdn/team-b.yaml
+namespace/team-b created
+deployment.apps/api created
+service/api created
+pod/dnsutils created
+
+$ kubectl -n team-b rollout status deployment/api --timeout=180s
+Waiting for deployment "api" rollout to finish: 0 of 1 updated replicas are available...
+deployment "api" successfully rolled out
+
+$ kubectl -n team-b wait --for=condition=Ready pod/dnsutils --timeout=180s
+pod/dnsutils condition met
+
+$ kubectl get svc -A -l !component -o wide
+NAMESPACE        NAME                        TYPE           CLUSTER-IP      EXTERNAL-IP                                       PORT(S)                  AGE   SELECTOR
+default          backend-alias               ExternalName   <none>          web-service-clusterip.default.svc.cluster.local   <none>                   11m   <none>
+default          external-database-service   ExternalName   <none>          nencyravaliya.me                                  <none>                   15m   <none>
+default          external-web                ExternalName   <none>          example.com                                       <none>                   11m   <none>
+default          web-service-clusterip       ClusterIP      10.96.96.222    <none>                                            8080/TCP                 18m   app=web-clusterip
+default          web-service-headless        ClusterIP      None            <none>                                            80/TCP                   13m   app=web-headless
+default          web-service-loadbalancer    LoadBalancer   10.96.148.250   172.18.203.200                                    80:30737/TCP             18m   app=web-loadbalancer
+default          web-service-nodeport        NodePort       10.96.81.176    <none>                                            80:30080/TCP             19m   app=web-nodeport
+kube-system      kube-dns                    ClusterIP      10.96.0.10      <none>                                            53/UDP,53/TCP,9153/TCP   56m   k8s-app=kube-dns
+metallb-system   metallb-webhook-service     ClusterIP      10.96.212.174   <none>                                            443/TCP                  17m   component=controller
+team-b           api                         ClusterIP      10.96.101.126   <none>                                            80/TCP                   1s    app=api
+
+$ kubectl get svc api -n team-b
+NAME   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+api    ClusterIP   10.96.101.126   <none>        80/TCP    1s
+
+### /etc/resolv.conf in each pod - the search list depends on the pod's namespace
+$ kubectl exec dnsutils -- cat /etc/resolv.conf
+search default.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:5
+
+$ kubectl exec -n team-b dnsutils -- cat /etc/resolv.conf
+search team-b.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:5
+
+### From namespace default: the short name 'api' does NOT find team-b's Service
+$ kubectl exec dnsutils -- nslookup api
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+** server can't find api: SERVFAIL
+
+command terminated with exit code 1
+
+### From namespace default: <svc>.<ns>, <svc>.<ns>.svc and the full FQDN all work
+$ kubectl exec dnsutils -- nslookup api.team-b
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+Name:	api.team-b.svc.cluster.local
+Address: 10.96.101.126
+
+
+$ kubectl exec dnsutils -- nslookup api.team-b.svc
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+Name:	api.team-b.svc.cluster.local
+Address: 10.96.101.126
+
+
+$ kubectl exec dnsutils -- nslookup api.team-b.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+Name:	api.team-b.svc.cluster.local
+Address: 10.96.101.126
+
+
+### From namespace team-b: the short name works (search domain team-b.svc.cluster.local is tried first)
+$ kubectl exec -n team-b dnsutils -- nslookup api
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+Name:	api.team-b.svc.cluster.local
+Address: 10.96.101.126
+
+
+### ...and the default namespace's Service needs its namespace from here
+$ kubectl exec -n team-b dnsutils -- nslookup web-service-clusterip
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+** server can't find web-service-clusterip: NXDOMAIN
+
+command terminated with exit code 1
+
+$ kubectl exec -n team-b dnsutils -- nslookup web-service-clusterip.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+Name:	web-service-clusterip.default.svc.cluster.local
+Address: 10.96.96.222
+
+
+### Pod-to-service communication across namespaces (HTTP)
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'default -> http://api.team-b.svc.cluster.local -> HTTP %{http_code} via %{remote_ip}\n' http://api.team-b.svc.cluster.local
+default -> http://api.team-b.svc.cluster.local -> HTTP 200 via 10.96.101.126
+
+$ kubectl exec curl-client -- curl -s -m 5 -o /dev/null -w 'default -> http://api -> HTTP %{http_code}\n' http://api
+default -> http://api -> HTTP 000
+command terminated with exit code 28
+
+### How the search list expands a short name (dig +search shows what finally matched)
+$ kubectl exec dnsutils -- dig +search +noall +answer api.team-b
+api.team-b.svc.cluster.local. 30 IN	A	10.96.101.126
+
+### A trailing dot makes the name absolute: no search list, one single query
+$ kubectl exec dnsutils -- nslookup api.team-b.svc.cluster.local.
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+Name:	api.team-b.svc.cluster.local
+Address: 10.96.101.126
+
+
+### Other records CoreDNS serves
+$ kubectl exec dnsutils -- dig +noall +answer SRV _http._tcp.web-service-clusterip.default.svc.cluster.local
+_http._tcp.web-service-clusterip.default.svc.cluster.local. 30 IN SRV 0 100 8080 web-service-clusterip.default.svc.cluster.local.
+
+$ kubectl exec dnsutils -- dig +noall +answer 10-244-0-22.team-b.pod.cluster.local
+10-244-0-22.team-b.pod.cluster.local. 30 IN A	10.244.0.22
+
+$ kubectl exec dnsutils -- dig +noall +answer kubernetes.default.svc.cluster.local
+kubernetes.default.svc.cluster.local. 30 IN A	10.96.0.1
+

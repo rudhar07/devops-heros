@@ -1,0 +1,65 @@
+### Deploy the app first: instructor's 04-full-demo (ConfigMap, Secret, backend, frontend, Ingress)
+$ kubectl get ingressclass
+No resources found
+
+$ kubectl get pods -A -l app.kubernetes.io/name=ingress-nginx
+No resources found
+
+$ kubectl apply -f ingress/full-demo/configmap.yaml -f ingress/full-demo/secret.yaml -f ingress/full-demo/backend.yaml -f ingress/full-demo/frontend.yaml
+configmap/yatri-app-config configured
+secret/yatri-db-secret configured
+deployment.apps/yatri-backend created
+service/yatri-backend-service created
+deployment.apps/yatri-frontend created
+service/yatri-frontend-service created
+
+$ kubectl rollout status deployment/yatri-backend --timeout=240s
+Waiting for deployment "yatri-backend" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "yatri-backend" rollout to finish: 1 of 2 updated replicas are available...
+deployment "yatri-backend" successfully rolled out
+
+$ kubectl rollout status deployment/yatri-frontend --timeout=240s
+Waiting for deployment "yatri-frontend" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "yatri-frontend" rollout to finish: 1 of 2 updated replicas are available...
+deployment "yatri-frontend" successfully rolled out
+
+$ kubectl get deploy,svc -l 'app in (yatri-backend,yatri-frontend)'
+NAME                             READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/yatri-backend    2/2     2            2           2s
+deployment.apps/yatri-frontend   2/2     2            2           2s
+
+NAME                             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+service/yatri-backend-service    ClusterIP   10.96.231.226   <none>        80/TCP    2s
+service/yatri-frontend-service   ClusterIP   10.96.217.57    <none>        80/TCP    2s
+
+### Create the Ingress while NO ingress controller is installed
+$ kubectl apply -f ingress/full-demo/ingress.yaml
+ingress.networking.k8s.io/yatri-ingress created
+
+$ kubectl get ingress yatri-ingress
+NAME            CLASS   HOSTS         ADDRESS   PORTS   AGE
+yatri-ingress   nginx   yatri.local             80      15s
+
+$ kubectl describe ingress yatri-ingress
+Name:             yatri-ingress
+Labels:           app=yatri-app
+Namespace:        default
+Address:          
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host         Path  Backends
+  ----         ----  --------
+  yatri.local  
+               /api(/|$)(.*)   yatri-backend-service:80 (10.244.0.28:5000,10.244.0.30:5000)
+               /               yatri-frontend-service:80 (10.244.0.29:80,10.244.0.31:80)
+Annotations:   nginx.ingress.kubernetes.io/rewrite-target: /$2
+               nginx.ingress.kubernetes.io/ssl-redirect: false
+               nginx.ingress.kubernetes.io/use-regex: true
+Events:        <none>
+
+$ curl -s -m 5 -o /dev/null -w 'http://localhost:30081/ -> HTTP %{http_code}\n' -H 'Host: yatri.local' http://localhost:30081/
+http://localhost:30081/ -> HTTP 000
+
+# ADDRESS is empty, there are no events, and nothing listens on the node's port 80 (mapped to my localhost:30081).
+# The Ingress object is only stored in etcd - nobody reads it.

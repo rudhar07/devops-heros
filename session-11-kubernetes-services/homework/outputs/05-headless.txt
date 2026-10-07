@@ -1,0 +1,110 @@
+### Headless Service (clusterIP: None) + StatefulSet with 3 replicas
+$ kubectl apply -f services/05-headless/
+statefulset.apps/web-stateful created
+pod/headless-dns-client created
+service/web-service-headless created
+
+$ kubectl rollout status statefulset/web-stateful --timeout=240s
+Waiting for statefulset spec update to be observed...
+Waiting for 3 pods to be ready...
+Waiting for 3 pods to be ready...
+Waiting for 2 pods to be ready...
+Waiting for 2 pods to be ready...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 3 new pods have been updated...
+
+$ kubectl wait --for=condition=Ready pod/headless-dns-client --timeout=120s
+pod/headless-dns-client condition met
+
+$ kubectl get svc web-service-headless -o wide
+NAME                   TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE   SELECTOR
+web-service-headless   ClusterIP   None         <none>        80/TCP    7s    app=web-headless
+
+$ kubectl describe svc web-service-headless
+Name:                     web-service-headless
+Namespace:                default
+Labels:                   app=web-headless
+Annotations:              <none>
+Selector:                 app=web-headless
+Type:                     ClusterIP
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       None
+IPs:                      None
+Port:                     web  80/TCP
+TargetPort:               80/TCP
+Endpoints:                10.244.0.215:80,10.244.0.217:80,10.244.0.218:80
+Session Affinity:         None
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+$ kubectl get pods -l app=web-headless -o wide
+NAME             READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+web-stateful-0   1/1     Running   0          7s    10.244.0.215   hw-a-control-plane   <none>           <none>
+web-stateful-1   1/1     Running   0          5s    10.244.0.217   hw-a-control-plane   <none>           <none>
+web-stateful-2   1/1     Running   0          3s    10.244.0.218   hw-a-control-plane   <none>           <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=web-service-headless -o wide
+NAME                         ADDRESSTYPE   PORTS   ENDPOINTS                                AGE
+web-service-headless-lx5tf   IPv4          80      10.244.0.215,10.244.0.217,10.244.0.218   7s
+
+### Test: DNS returns the pod IPs directly (no virtual IP)
+$ kubectl exec dnsutils -- dig +noall +answer web-service-headless.default.svc.cluster.local
+web-service-headless.default.svc.cluster.local.	30 IN A	10.244.0.218
+web-service-headless.default.svc.cluster.local.	30 IN A	10.244.0.215
+web-service-headless.default.svc.cluster.local.	30 IN A	10.244.0.217
+
+# compare with a normal ClusterIP Service, which returns one virtual IP:
+$ kubectl exec dnsutils -- dig +noall +answer web-service-clusterip.default.svc.cluster.local
+web-service-clusterip.default.svc.cluster.local. 30 IN A 10.96.96.222
+
+### Each StatefulSet pod gets its own stable DNS name <pod>.<headless-svc>:
+$ kubectl exec headless-dns-client -- nslookup web-stateful-0.web-service-headless.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+
+Name:	web-stateful-0.web-service-headless.default.svc.cluster.local
+Address: 10.244.0.215
+
+
+$ kubectl exec headless-dns-client -- nslookup web-stateful-1.web-service-headless.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Name:	web-stateful-1.web-service-headless.default.svc.cluster.local
+Address: 10.244.0.217
+
+
+
+$ kubectl exec headless-dns-client -- nslookup web-stateful-2.web-service-headless.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+
+Name:	web-stateful-2.web-service-headless.default.svc.cluster.local
+Address: 10.244.0.218
+
+
+$ kubectl exec headless-dns-client -- sh -c 'for i in 0 1 2; do curl -s -o /dev/null -w "web-stateful-$i.web-service-headless -> HTTP %{http_code} from %{remote_ip}\n" http://web-stateful-$i.web-service-headless; done'
+web-stateful-0.web-service-headless -> HTTP 200 from 10.244.0.215
+web-stateful-1.web-service-headless -> HTTP 200 from 10.244.0.217
+web-stateful-2.web-service-headless -> HTTP 200 from 10.244.0.218
+
+### Stable name survives a pod restart (IP changes, name does not)
+$ kubectl get pod web-stateful-1 -o 'jsonpath={.status.podIP}{"\n"}'
+10.244.0.217
+
+$ kubectl delete pod web-stateful-1
+pod "web-stateful-1" deleted from default namespace
+
+$ kubectl wait --for=condition=Ready pod/web-stateful-1 --timeout=180s
+pod/web-stateful-1 condition met
+
+$ kubectl get pod web-stateful-1 -o 'jsonpath={.status.podIP}{"\n"}'
+10.244.0.219
+
+$ kubectl exec dnsutils -- dig +short web-stateful-1.web-service-headless.default.svc.cluster.local
+10.244.0.219
+

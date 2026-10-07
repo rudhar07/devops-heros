@@ -1,0 +1,34 @@
+# Standalone copy of the PrometheusRule rendered by the Helm chart
+# (helm/taskboard/templates/prometheusrule.yaml) for release "taskboard".
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: taskboard-alerts
+  namespace: taskboard
+  labels:
+    release: kps
+spec:
+  groups:
+    - name: taskboard.rules
+      rules:
+        # Fires when no backend pod can be scraped (all down, or Service has no endpoints)
+        - alert: TaskboardBackendDown
+          expr: sum(up{namespace="taskboard", service="taskboard-backend"}) == 0 or absent(up{namespace="taskboard", service="taskboard-backend"})
+          for: 1m
+          labels: {severity: critical}
+          annotations:
+            summary: "No TaskBoard backend target is up in taskboard"
+        - alert: TaskboardHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{namespace="taskboard", status=~"5.."}[5m]))
+              / clamp_min(sum(rate(http_requests_total{namespace="taskboard"}[5m])), 1e-9) > 0.05
+          for: 2m
+          labels: {severity: warning}
+          annotations:
+            summary: "TaskBoard API 5xx ratio above 5%"
+        - alert: TaskboardHighLatencyP95
+          expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="taskboard"}[5m]))) > 0.5
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "TaskBoard API p95 latency above 500ms"

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "taskboard.fullname" . }}-frontend
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "taskboard.selectorLabels" (dict "ctx" . "component" "frontend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "taskboard.labels" . | nindent 8 }}
+        {{- include "taskboard.selectorLabels" (dict "ctx" . "component" "frontend") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: frontend
+          image: {{ include "taskboard.frontendImage" . | quote }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.frontend.port }}
+          env:
+            # nginx proxies /api here (in-cluster fallback; the Ingress routes /api directly)
+            - name: BACKEND_URL
+              value: "http://{{ include "taskboard.fullname" . }}-backend:{{ .Values.backend.port }}"
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          securityContext:
+            {{- include "taskboard.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            # read-only root FS: nginx needs these two writable
+            - {name: tmp, mountPath: /tmp}
+            - {name: nginx-conf, mountPath: /etc/nginx/conf.d}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - {name: nginx-conf, emptyDir: {}}

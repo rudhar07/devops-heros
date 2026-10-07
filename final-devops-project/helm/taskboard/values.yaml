@@ -1,0 +1,98 @@
+# Default values for the taskboard chart. values-dev.yaml / values-prod.yaml
+# override parts of this. Every value here is safe to commit: the database
+# password below is a FAKE demo value (use secret.existingSecret for real ones).
+
+nameOverride: ""
+fullnameOverride: ""
+
+backend:
+  image:
+    repository: ghcr.io/rudhar07/devops-heros/taskboard-backend
+    tag: ""            # empty = Chart.appVersion; CI sets the git SHA
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  port: 8000
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+  # Run "alembic upgrade head" in an initContainer before the API starts.
+  migrations:
+    enabled: true
+  probes:
+    liveness: {path: /health, initialDelaySeconds: 5, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 3}
+    readiness: {path: /ready, initialDelaySeconds: 3, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 3}
+
+frontend:
+  image:
+    repository: ghcr.io/rudhar07/devops-heros/taskboard-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  port: 8080
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 64Mi}
+
+imagePullSecrets: []
+
+# Non-secret settings -> ConfigMap (envFrom in the backend).
+config:
+  appEnv: dev
+  logLevel: INFO
+
+# Where the backend finds PostgreSQL. host "" = the in-chart postgres Service.
+database:
+  host: ""
+  port: 5432
+  name: taskboard
+
+# DB credentials -> Secret. FAKE demo values. In production set
+# existingSecret to a Secret created outside Git (Sealed Secrets, External
+# Secrets Operator, AWS Secrets Manager CSI, ...) with keys DB_USER/DB_PASSWORD.
+secret:
+  existingSecret: ""
+  username: taskboard
+  password: demo-password-123
+
+# In-cluster PostgreSQL for dev/demo. On AWS: postgres.enabled=false + RDS.
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "17.11-alpine"
+  storage:
+    size: 1Gi
+    storageClassName: ""   # "" = cluster default (kind: local-path, EKS: gp3)
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+ingress:
+  enabled: true
+  className: nginx
+  host: taskboard.local
+  annotations: {}
+  tls: []
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 60
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    # kube-prometheus-stack only selects ServiceMonitors with its release label
+    # unless serviceMonitorSelectorNilUsesHelmValues=false.
+    labels:
+      release: kps
+  prometheusRule:
+    enabled: true
+    labels:
+      release: kps
+
+# helm test pod
+tests:
+  image: curlimages/curl:8.5.0

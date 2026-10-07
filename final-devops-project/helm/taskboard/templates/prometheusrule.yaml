@@ -1,0 +1,38 @@
+{{- if and .Values.monitoring.prometheusRule.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "taskboard.fullname" . }}-alerts
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: taskboard.rules
+      rules:
+        - alert: TaskboardBackendDown
+          expr: sum(up{namespace="{{ .Release.Namespace }}", service="{{ include "taskboard.fullname" . }}-backend"}) == 0 or absent(up{namespace="{{ .Release.Namespace }}", service="{{ include "taskboard.fullname" . }}-backend"})
+          for: 1m
+          labels: {severity: critical}
+          annotations:
+            summary: "No TaskBoard backend target is up in {{ .Release.Namespace }}"
+            description: "Prometheus cannot scrape any backend pod for 1 minute."
+        - alert: TaskboardHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{namespace="{{ .Release.Namespace }}", status=~"5.."}[5m]))
+              / clamp_min(sum(rate(http_requests_total{namespace="{{ .Release.Namespace }}"}[5m])), 1e-9) > 0.05
+          for: 2m
+          labels: {severity: warning}
+          annotations:
+            summary: "TaskBoard API 5xx ratio above 5%"
+            description: "{{ "{{" }} $value | humanizePercentage {{ "}}" }} of requests fail."
+        - alert: TaskboardHighLatencyP95
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="{{ .Release.Namespace }}"}[5m]))) > 0.5
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "TaskBoard API p95 latency above 500ms"
+{{- end }}

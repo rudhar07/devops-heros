@@ -1,0 +1,100 @@
+$ kubectl apply -f pod-lifecycle/05-crashloopbackoff.yaml
+pod/lifecycle-crashloop created
+
+$ kubectl get pods --field-selector metadata.name=lifecycle-crashloop -w --output-watch-events    # ran in the background from apply until now
+EVENT      NAME                  READY   STATUS    RESTARTS   AGE
+ADDED      lifecycle-crashloop   0/1     Pending   0          0s
+MODIFIED   lifecycle-crashloop   0/1     Pending   0          0s
+MODIFIED   lifecycle-crashloop   0/1     ContainerCreating   0          0s
+MODIFIED   lifecycle-crashloop   0/1     ContainerCreating   0          1s
+MODIFIED   lifecycle-crashloop   1/1     Running             0          1s
+MODIFIED   lifecycle-crashloop   0/1     Error               0          5s
+MODIFIED   lifecycle-crashloop   1/1     Running             1 (1s ago)   5s
+MODIFIED   lifecycle-crashloop   0/1     Error               1 (5s ago)   9s
+MODIFIED   lifecycle-crashloop   0/1     CrashLoopBackOff    1 (12s ago)   20s
+MODIFIED   lifecycle-crashloop   1/1     Running             2 (12s ago)   20s
+MODIFIED   lifecycle-crashloop   0/1     Error               2 (16s ago)   24s
+MODIFIED   lifecycle-crashloop   0/1     CrashLoopBackOff    2 (25s ago)   48s
+MODIFIED   lifecycle-crashloop   1/1     Running             3 (25s ago)   48s
+MODIFIED   lifecycle-crashloop   0/1     Error               3 (28s ago)   51s
+
+$ kubectl get pod lifecycle-crashloop
+NAME                  READY   STATUS   RESTARTS      AGE
+lifecycle-crashloop   0/1     Error    3 (52s ago)   75s
+
+$ kubectl describe pod lifecycle-crashloop
+Name:             lifecycle-crashloop
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-a-control-plane/172.18.0.3
+Start Time:       Wed, 07 Oct 2026 22:47:26 +0530
+Labels:           <none>
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.184
+IPs:
+  IP:  10.244.0.184
+Containers:
+  crashing-app:
+    Container ID:  containerd://0870a1cab198aaa0b51f1176607975cd9e539d79d216558cf515b66d98f8cc38
+    Image:         busybox:1.36
+    Image ID:      docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo 'Application started'; sleep 3; echo 'Application crashed'; exit 1
+    State:          Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 07 Oct 2026 22:48:14 +0530
+      Finished:     Wed, 07 Oct 2026 22:48:17 +0530
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 07 Oct 2026 22:47:46 +0530
+      Finished:     Wed, 07 Oct 2026 22:47:49 +0530
+    Ready:          False
+    Restart Count:  3
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-cxmxf (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-cxmxf:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  75s                default-scheduler  Successfully assigned default/lifecycle-crashloop to hw-a-control-plane
+  Normal   Pulled     27s (x4 over 74s)  kubelet            spec.containers{crashing-app}: Container image "busybox:1.36" already present on machine and can be accessed by the pod
+  Normal   Created    27s (x4 over 74s)  kubelet            spec.containers{crashing-app}: Container created
+  Normal   Started    27s (x4 over 74s)  kubelet            spec.containers{crashing-app}: Container started
+  Warning  BackOff    24s (x3 over 66s)  kubelet            spec.containers{crashing-app}: Back-off restarting failed container crashing-app in pod lifecycle-crashloop_default(e015172d-2138-4240-88c3-9a331eb3e110)
+
+$ kubectl logs lifecycle-crashloop --previous
+unable to retrieve container logs for containerd://fb8da08a7c7aafe57c9191982d869d35d2be11cd3bbcebf787d3b329cda4bb00
+$ kubectl get pod lifecycle-crashloop -o 'jsonpath={.status.containerStatuses[0].lastState}{"\n"}{.status.containerStatuses[0].state}{"\n"}'
+{"terminated":{"containerID":"containerd://fb8da08a7c7aafe57c9191982d869d35d2be11cd3bbcebf787d3b329cda4bb00","exitCode":1,"finishedAt":"2026-10-07T17:17:49Z","reason":"Error","startedAt":"2026-10-07T17:17:46Z"}}
+{"terminated":{"containerID":"containerd://0870a1cab198aaa0b51f1176607975cd9e539d79d216558cf515b66d98f8cc38","exitCode":1,"finishedAt":"2026-10-07T17:18:17Z","reason":"Error","startedAt":"2026-10-07T17:18:14Z"}}
+
+### cleanup
+$ kubectl delete pod lifecycle-crashloop --wait=false
+pod "lifecycle-crashloop" deleted from default namespace
+

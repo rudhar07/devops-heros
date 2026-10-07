@@ -1,0 +1,47 @@
+# Re-run after switching podinfo to --level=debug so every request is logged (info level only logs startup).
+$ kubectl apply -f monitoring/podinfo-app.yaml
+namespace/podinfo unchanged
+deployment.apps/podinfo configured
+service/podinfo unchanged
+
+$ kubectl -n podinfo rollout status deploy/podinfo --timeout=10m
+Waiting for deployment "podinfo" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "podinfo" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "podinfo" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "podinfo" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "podinfo" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "podinfo" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "podinfo" rollout to finish: 1 old replicas are pending termination...
+deployment "podinfo" successfully rolled out
+
+$ kubectl -n podinfo logs deploy/podinfo --tail=6
+Found 2 pods, using pod/podinfo-8bc664d66-bfbqv
+{"level":"debug","ts":"2026-10-07T18:16:35.955Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/","method":"GET","remote":"10.244.0.14:45312","user-agent":"Wget"}
+{"level":"debug","ts":"2026-10-07T18:16:36.376Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/api/info","method":"GET","remote":"10.244.0.14:45352","user-agent":"Wget"}
+{"level":"debug","ts":"2026-10-07T18:16:36.582Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/","method":"GET","remote":"10.244.0.14:45364","user-agent":"Wget"}
+{"level":"debug","ts":"2026-10-07T18:16:36.586Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/api/info","method":"GET","remote":"10.244.0.14:45374","user-agent":"Wget"}
+{"level":"debug","ts":"2026-10-07T18:16:36.791Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/","method":"GET","remote":"10.244.0.14:45390","user-agent":"Wget"}
+{"level":"debug","ts":"2026-10-07T18:16:37.000Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/api/info","method":"GET","remote":"10.244.0.14:45410","user-agent":"Wget"}
+
+$ kubectl -n podinfo logs -l app=podinfo --prefix --tail=2
+[pod/podinfo-8bc664d66-grd6d/podinfo] {"level":"debug","ts":"2026-10-07T18:16:37.206Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/","method":"GET","remote":"10.244.0.14:45420","user-agent":"Wget"}
+[pod/podinfo-8bc664d66-grd6d/podinfo] {"level":"debug","ts":"2026-10-07T18:16:37.210Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/api/info","method":"GET","remote":"10.244.0.14:45432","user-agent":"Wget"}
+[pod/podinfo-8bc664d66-bfbqv/podinfo] {"level":"debug","ts":"2026-10-07T18:16:36.791Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/","method":"GET","remote":"10.244.0.14:45390","user-agent":"Wget"}
+[pod/podinfo-8bc664d66-bfbqv/podinfo] {"level":"debug","ts":"2026-10-07T18:16:37.000Z","caller":"http/logging.go:21","msg":"request started","proto":"HTTP/1.1","uri":"/api/info","method":"GET","remote":"10.244.0.14:45410","user-agent":"Wget"}
+
+$ kubectl -n podinfo logs deploy/podinfo --since=1m | python3 -c "<count lines by msg / url>"
+Found 2 pods, using pod/podinfo-8bc664d66-bfbqv
+   52  request started  
+    1  Starting podinfo  
+    1  Starting HTTP Server.  
+
+$ kubectl -n podinfo get events --sort-by=.lastTimestamp --field-selector type=Warning
+LAST SEEN   TYPE      REASON      OBJECT                       MESSAGE
+2m22s       Warning   Failed      pod/podinfo-ff5c6b4f-mgzg6   Failed to pull image "ghcr.io/stefanprodan/podinfo:6.7.1": failed to pull and unpack image "ghcr.io/stefanprodan/podinfo:6.7.1": failed to resolve reference "ghcr.io/stefanprodan/podinfo:6.7.1": failed to do request: Head "https://ghcr.io/v2/stefanprodan/podinfo/manifests/6.7.1": dial tcp: lookup ghcr.io on 192.168.65.254:53: server misbehaving
+2m22s       Warning   Failed      pod/podinfo-ff5c6b4f-mgzg6   Error: ErrImagePull
+2m22s       Warning   Failed      pod/podinfo-ff5c6b4f-mgzg6   Error: ImagePullBackOff
+90s         Warning   Failed      pod/loadgen                  Failed to pull image "busybox:1.36": failed to pull and unpack image "docker.io/library/busybox:1.36": failed to resolve reference "docker.io/library/busybox:1.36": failed to do request: Head "https://registry-1.docker.io/v2/library/busybox/manifests/1.36": dial tcp: lookup registry-1.docker.io on 192.168.65.254:53: server misbehaving
+90s         Warning   Failed      pod/loadgen                  Error: ErrImagePull
+89s         Warning   Failed      pod/loadgen                  Error: ImagePullBackOff
+10s         Warning   Unhealthy   pod/podinfo-ff5c6b4f-bjffk   Readiness probe failed: HTTP probe failed with statuscode: 503
+

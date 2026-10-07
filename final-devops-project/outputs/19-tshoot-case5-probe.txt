@@ -1,0 +1,64 @@
+# CASE 5 - liveness probe on a path that does not exist (probe layer)
+# BREAK
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml -f troubleshooting/case5-bad-liveness-path.values.yaml --timeout 60s | grep -E 'STATUS|REVISION'
+STATUS: deployed
+REVISION: 11
+
+$ sleep 75; kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS             RESTARTS      AGE
+taskboard-backend-5bcf44557b-bmvc4   0/1     CrashLoopBackOff   3 (14s ago)   75s
+taskboard-backend-5bcf44557b-bzps6   0/1     CrashLoopBackOff   3 (19s ago)   65s
+
+# IDENTIFY: the new pod starts, becomes Ready, then its RESTARTS counter climbs
+$ sleep 30; kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS             RESTARTS      AGE
+taskboard-backend-5bcf44557b-bmvc4   0/1     CrashLoopBackOff   4 (4s ago)    105s
+taskboard-backend-5bcf44557b-bzps6   0/1     CrashLoopBackOff   4 (14s ago)   95s
+
+# INVESTIGATE
+$ NEW=$(kubectl -n taskboard get pods -l app.kubernetes.io/component=backend --sort-by=.metadata.creationTimestamp -o name | tail -1); kubectl -n taskboard describe $NEW | grep -E 'Liveness|Readiness|Unhealthy|Killing|Last State|Reason|Exit Code' | head -10
+      Reason:       Completed
+      Exit Code:    0
+      Reason:       Completed
+      Exit Code:    0
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Completed
+      Exit Code:    0
+    Liveness:   http-get http://:http/healthz delay=5s timeout=3s period=5s #success=1 #failure=2
+    Readiness:  http-get http://:http/ready delay=3s timeout=3s period=5s #success=1 #failure=3
+
+$ NEW=$(kubectl -n taskboard get pods -l app.kubernetes.io/component=backend --sort-by=.metadata.creationTimestamp -o name | tail -1); kubectl -n taskboard logs $NEW --previous | grep -E 'healthz|Shutting|shutting' | tail -4
+Defaulted container "backend" out of: backend, wait-for-db (init), migrate (init)
+INFO:     10.244.0.1:59562 - "GET /healthz HTTP/1.1" 404 Not Found
+INFO:     10.244.0.1:48642 - "GET /healthz HTTP/1.1" 404 Not Found
+INFO:     Shutting down
+2026-10-07 19:32:02,290 INFO taskboard shutting down
+
+$ kubectl -n taskboard exec deploy/taskboard-backend -c backend -- python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:8000/health').status)"
+error: unable to upgrade connection: container not found ("backend")
+[exit code 1]
+
+$ kubectl -n taskboard exec deploy/taskboard-backend -c backend -- python -c "import urllib.request as u, urllib.error as e
+try: u.urlopen('http://127.0.0.1:8000/healthz')
+except e.HTTPError as x: print(x.code, x.reason)"
+error: unable to upgrade connection: container not found ("backend")
+[exit code 1]
+
+# ROOT CAUSE: livenessProbe.httpGet.path=/healthz. That is the nginx (frontend) endpoint; FastAPI serves /health. 404 counts as a failed probe; after failureThreshold=2 the kubelet kills and restarts the container -> restarts, then CrashLoopBackOff.
+# FIX
+$ helm rollback taskboard 0 -n taskboard --wait --timeout 3m
+Rollback was a success! Happy Helming!
+
+# VERIFY
+$ kubectl -n taskboard get deploy taskboard-backend -o jsonpath='{.spec.template.spec.containers[0].livenessProbe.httpGet.path}'; echo
+/health
+
+$ kubectl -n taskboard rollout status deploy/taskboard-backend --timeout=180s
+deployment "taskboard-backend" successfully rolled out
+
+$ sleep 30; kubectl -n taskboard get pods -l app.kubernetes.io/component=backend
+NAME                                 READY   STATUS    RESTARTS   AGE
+taskboard-backend-59d5dcc795-dmqvg   1/1     Running   0          50s
+taskboard-backend-59d5dcc795-gk9nx   1/1     Running   0          41s
+

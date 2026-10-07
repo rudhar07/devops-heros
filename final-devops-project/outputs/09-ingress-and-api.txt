@@ -1,0 +1,88 @@
+# Ingress host for dev changed to taskboard.localhost (resolves to 127.0.0.1 without editing /etc/hosts)
+$ helm upgrade taskboard helm/taskboard -n taskboard -f helm/taskboard/values-dev.yaml --wait --timeout 5m | head -6
+Release "taskboard" has been upgraded. Happy Helming!
+NAME: taskboard
+LAST DEPLOYED: Thu Oct  8 00:18:54 2026
+NAMESPACE: taskboard
+STATUS: deployed
+REVISION: 3
+
+$ kubectl -n taskboard get ingress taskboard
+NAME        CLASS   HOSTS                 ADDRESS     PORTS   AGE
+taskboard   nginx   taskboard.localhost   localhost   80      6m21s
+
+$ kubectl -n taskboard describe ingress taskboard | sed -n '/Rules/,/Annotations/p'
+Rules:
+  Host                 Path  Backends
+  ----                 ----  --------
+  taskboard.localhost  
+                       /api   taskboard-backend:http (10.244.0.16:8000,10.244.0.17:8000)
+                       /      taskboard-frontend:http (10.244.0.12:8080,10.244.0.10:8080)
+Annotations:           meta.helm.sh/release-name: taskboard
+
+# UI through the Ingress (/ -> frontend Service)
+$ curl -s -o /dev/null -w 'HTTP %{http_code} %{content_type} %{size_download} bytes
+' http://taskboard.localhost:30110/
+HTTP 200 text/html 469 bytes
+
+$ curl -s http://taskboard.localhost:30110/ | grep -o '<title>.*</title>'
+<title>TaskBoard</title>
+
+# API through the Ingress (/api -> backend Service directly)
+$ curl -s http://taskboard.localhost:30110/api/info
+{"service":"TaskBoard API","version":"2.0.0","environment":"dev","commit":"local","docs":"/docs"}
+$ curl -s -X POST http://taskboard.localhost:30110/api/tasks -H 'Content-Type: application/json' -d '{"title":"Deploy to kind with Helm","priority":"HIGH","assignee":"Rudhar","due_date":"2026-10-09"}'
+{"title":"Deploy to kind with Helm","description":"","priority":"HIGH","status":"TODO","assignee":"Rudhar","due_date":"2026-10-09","id":1,"created_at":"2026-10-07T18:48:55.225380Z","updated_at":"2026-10-07T18:48:55.225386Z"}
+$ curl -s -X POST http://taskboard.localhost:30110/api/tasks -H 'Content-Type: application/json' -d '{"title":"Wire up Prometheus","status":"IN_PROGRESS"}'
+{"title":"Wire up Prometheus","description":"","priority":"MEDIUM","status":"IN_PROGRESS","assignee":"Unassigned","due_date":null,"id":2,"created_at":"2026-10-07T18:48:55.249905Z","updated_at":"2026-10-07T18:48:55.249908Z"}
+$ curl -s -X POST http://taskboard.localhost:30110/api/tasks -H 'Content-Type: application/json' -d '{"title":"Temporary task","priority":"LOW"}'
+{"title":"Temporary task","description":"","priority":"LOW","status":"TODO","assignee":"Unassigned","due_date":null,"id":3,"created_at":"2026-10-07T18:48:55.274989Z","updated_at":"2026-10-07T18:48:55.274992Z"}
+$ curl -s -X PUT http://taskboard.localhost:30110/api/tasks/1 -H 'Content-Type: application/json' -d '{"status":"DONE"}'
+{"title":"Deploy to kind with Helm","description":"","priority":"HIGH","status":"DONE","assignee":"Rudhar","due_date":"2026-10-09","id":1,"created_at":"2026-10-07T18:48:55.225380Z","updated_at":"2026-10-07T18:48:55.293426Z"}
+$ curl -s -o /dev/null -w 'DELETE -> HTTP %{http_code}
+' -X DELETE http://taskboard.localhost:30110/api/tasks/3
+DELETE -> HTTP 204
+
+$ curl -s http://taskboard.localhost:30110/api/tasks
+[{"title":"Wire up Prometheus","description":"","priority":"MEDIUM","status":"IN_PROGRESS","assignee":"Unassigned","due_date":null,"id":2,"created_at":"2026-10-07T18:48:55.249905Z","updated_at":"2026-10-07T18:48:55.249908Z"},{"title":"Deploy to kind with Helm","description":"","priority":"HIGH","status":"DONE","assignee":"Rudhar","due_date":"2026-10-09","id":1,"created_at":"2026-10-07T18:48:55.225380Z","updated_at":"2026-10-07T18:48:55.293426Z"}]
+$ curl -s http://taskboard.localhost:30110/api/tasks/stats
+{"total":2,"todo":0,"inProgress":1,"done":1,"highPriorityOpen":0,"overdue":0}
+# Unknown host -> ingress-nginx default backend 404 (routing is host based)
+$ curl -s -o /dev/null -w 'HTTP %{http_code}
+' http://localhost:30110/
+HTTP 404
+
+# /metrics is not routed by the Ingress (it goes to the frontend SPA fallback, not to the backend):
+$ curl -s http://taskboard.localhost:30110/metrics | head -c 80; echo
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+
+# helm test: a pod calls the backend Service and the frontend /api proxy from inside the cluster
+$ helm test taskboard -n taskboard --logs
+NAME: taskboard
+LAST DEPLOYED: Thu Oct  8 00:18:54 2026
+NAMESPACE: taskboard
+STATUS: deployed
+REVISION: 3
+DESCRIPTION: Upgrade complete
+TEST SUITE:     taskboard-test-api
+Last Started:   Thu Oct  8 00:18:55 2026
+Last Completed: Thu Oct  8 00:19:04 2026
+Phase:          Succeeded
+
+POD LOGS: taskboard-test-api (curl)
+{"status":"UP"}{"status":"READY"}{"total":2,"todo":0,"inProgress":1,"done":1,"highPriorityOpen":0,"overdue":0}
+helm test: OK
+
+
+$ kubectl -n taskboard exec deploy/taskboard-postgres -- psql -U taskboard -d taskboard -c 'SELECT id,title,status FROM tasks ORDER BY id'
+ id |          title           |   status    
+----+--------------------------+-------------
+  1 | Deploy to kind with Helm | DONE
+  2 | Wire up Prometheus       | IN_PROGRESS
+(2 rows)
+
+

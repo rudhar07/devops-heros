@@ -1,0 +1,185 @@
+# Container image scanning with Trivy 0.75.0 (same version CI installs).
+# ---------- taskboard-backend:local ----------
+$ trivy image --scanners vuln --format json -o security/reports/trivy-backend.json taskboard-backend:local && jq -r '[.Results[].Vulnerabilities[]?] | group_by(.Severity) | map({severity: .[0].Severity, total: length, fixable: map(select(.FixedVersion != null and .FixedVersion != "")) | length}) | .[] | "\(.severity)	total=\(.total)	fixable=\(.fixable)"' security/reports/trivy-backend.json
+HIGH	total=44	fixable=0
+LOW	total=61	fixable=0
+MEDIUM	total=58	fixable=0
+UNKNOWN	total=2	fixable=0
+
+$ jq -r '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | .[] | [.VulnerabilityID, .Severity, .PkgName, .InstalledVersion, (.FixedVersion // "-"), .Status] | @tsv' security/reports/trivy-backend.json | sort -u | head -20
+CVE-2025-69720	HIGH	libncursesw6	6.5+20250216-2	-	affected
+CVE-2025-69720	HIGH	libtinfo6	6.5+20250216-2	-	affected
+CVE-2025-69720	HIGH	ncurses-base	6.5+20250216-2	-	affected
+CVE-2025-69720	HIGH	ncurses-bin	6.5+20250216-2	-	affected
+CVE-2026-16742	HIGH	libsystemd0	257.13-1~deb13u1	-	affected
+CVE-2026-16742	HIGH	libudev1	257.13-1~deb13u1	-	affected
+CVE-2026-54369	HIGH	libacl1	2.3.2-2+b1	-	affected
+CVE-2026-76642	HIGH	bsdutils	1:2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	libblkid1	2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	liblastlog2-2	2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	libmount1	2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	libsmartcols1	2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	libuuid1	2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	login	1:4.16.0-2+really2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	mount	2.41.5-0+deb13u1	-	affected
+CVE-2026-76642	HIGH	util-linux	2.41.5-0+deb13u1	-	affected
+CVE-2026-78408	HIGH	bsdutils	1:2.41.5-0+deb13u1	-	affected
+CVE-2026-78408	HIGH	libblkid1	2.41.5-0+deb13u1	-	affected
+CVE-2026-78408	HIGH	liblastlog2-2	2.41.5-0+deb13u1	-	affected
+CVE-2026-78408	HIGH	libmount1	2.41.5-0+deb13u1	-	affected
+
+# CI gate: HIGH,CRITICAL, --ignore-unfixed, --exit-code 1
+$ trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 taskboard-backend:local; echo gate-exit=$?
+
+Report Summary
+
+┌──────────────────────────────────────────────────────────────────────────────────┬────────────┬─────────────────┐
+│                                      Target                                      │    Type    │ Vulnerabilities │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ taskboard-backend:local (debian 13.7)                                            │   debian   │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/alembic-1.20.0.dist-info/METADATA         │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/annotated_doc-0.0.5.dist-info/METADATA    │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/annotated_types-0.8.0.dist-info/METADATA  │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/anyio-4.15.1.dist-info/METADATA           │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/click-8.5.0.dist-info/METADATA            │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/fastapi-0.142.2.dist-info/METADATA        │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/h11-0.16.0.dist-info/METADATA             │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/idna-3.20.dist-info/METADATA              │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/mako-1.4.3.dist-info/METADATA             │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/markupsafe-3.0.4.dist-info/METADATA       │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/opentelemetry_api-1.45.1.dist-info/METAD- │ python-pkg │        0        │
+│ ATA                                                                              │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/prometheus_client-0.26.0.dist-info/METAD- │ python-pkg │        0        │
+│ ATA                                                                              │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/prometheus_fastapi_instrumentator-8.1.0.- │ python-pkg │        0        │
+│ dist-info/METADATA                                                               │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/psycopg-3.3.6.dist-info/METADATA          │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/psycopg_binary-3.3.6.dist-info/METADATA   │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/pydantic-2.13.5.dist-info/METADATA        │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/pydantic_core-2.46.5.dist-info/METADATA   │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/pydantic_settings-2.15.0.dist-info/METAD- │ python-pkg │        0        │
+│ ATA                                                                              │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/python_dotenv-1.2.4.dist-info/METADATA    │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/sqlalchemy-2.1.4.dist-info/METADATA       │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/starlette-1.7.0.dist-info/METADATA        │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/typing_extensions-4.16.0.dist-info/METAD- │ python-pkg │        0        │
+│ ATA                                                                              │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/typing_inspection-0.4.4.dist-info/METADA- │ python-pkg │        0        │
+│ TA                                                                               │            │                 │
+├──────────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/uvicorn-0.54.0.dist-info/METADATA         │ python-pkg │        0        │
+└──────────────────────────────────────────────────────────────────────────────────┴────────────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+gate-exit=0
+
+# ---------- taskboard-frontend:local ----------
+$ trivy image --scanners vuln --format json -o security/reports/trivy-frontend.json taskboard-frontend:local && jq -r '[.Results[].Vulnerabilities[]?] | group_by(.Severity) | map({severity: .[0].Severity, total: length, fixable: map(select(.FixedVersion != null and .FixedVersion != "")) | length}) | .[] | "\(.severity)	total=\(.total)	fixable=\(.fixable)"' security/reports/trivy-frontend.json
+MEDIUM	total=1	fixable=1
+
+$ jq -r '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | .[] | [.VulnerabilityID, .Severity, .PkgName, .InstalledVersion, (.FixedVersion // "-"), .Status] | @tsv' security/reports/trivy-frontend.json | sort -u | head -20
+
+# CI gate: HIGH,CRITICAL, --ignore-unfixed, --exit-code 1
+$ trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 taskboard-frontend:local; echo gate-exit=$?
+
+Report Summary
+
+┌──────────────────────────────────────────┬────────┬─────────────────┐
+│                  Target                  │  Type  │ Vulnerabilities │
+├──────────────────────────────────────────┼────────┼─────────────────┤
+│ taskboard-frontend:local (alpine 3.24.2) │ alpine │        0        │
+└──────────────────────────────────────────┴────────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+gate-exit=0
+
+# ---------- details used in the README explanation ----------
+$ jq -r '[.Results[].Vulnerabilities[]? | select(.VulnerabilityID=="CVE-2025-69720")][0] | .VulnerabilityID, .Severity, .Title, .Status, .PrimaryURL' security/reports/trivy-backend.json
+CVE-2025-69720
+HIGH
+ncurses: ncurses: Buffer overflow vulnerability may lead to arbitrary code execution.
+affected
+https://avd.aquasec.com/nvd/cve-2025-69720
+
+$ jq -r '[.Results[].Vulnerabilities[]?] | .[] | [.VulnerabilityID,.Severity,.PkgName,.InstalledVersion,.FixedVersion] | @tsv' security/reports/trivy-frontend.json
+CVE-2026-85091	MEDIUM	zlib	1.3.2-r0	1.3.2-r1
+
+# Fix: added 'apk upgrade --no-cache' to the frontend runtime stage, rebuilt, scanned again (all severities):
+$ docker build -q -t taskboard-frontend:local application/frontend
+Dockerfile:23
+--------------------
+  21 |     # (first scan: zlib CVE-2026-85091, MEDIUM, fixed in 1.3.2-r1).
+  22 |     USER root
+  23 | >>> RUN apk upgrade --no-cache
+  24 |     
+  25 |     ENV BACKEND_URL=http://backend:8000
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c apk upgrade --no-cache" did not complete successfully: exit code: 99
+[exit code 1]
+
+$ trivy image --scanners vuln --format json -o security/reports/trivy-frontend.json taskboard-frontend:local && jq '[.Results[].Vulnerabilities[]?] | length' security/reports/trivy-frontend.json
+1
+
+$ docker run --rm --entrypoint id taskboard-frontend:local
+uid=101(nginx) gid=101(nginx) groups=101(nginx),101(nginx)
+
+# Why it failed: this Mac's Docker cannot resolve the Alpine package CDN (pypi works, dl-cdn does not):
+$ docker run --rm alpine:3.20 sh -c 'wget -q -O /dev/null https://dl-cdn.alpinelinux.org/alpine/ && echo cdn-ok'
+wget: bad address 'dl-cdn.alpinelinux.org'
+[exit code 1]
+
+# So I reverted the apk upgrade line and accepted the single MEDIUM finding (gate is HIGH/CRITICAL). Rebuilt image:
+$ docker build -q -t taskboard-frontend:local application/frontend
+sha256:fe4b6913f344b61ca7463541f1f374cf331ec0f51564726ce7675bdc7f7a01cf
+
+$ trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet taskboard-frontend:local >/dev/null; echo gate-exit=$?
+gate-exit=0
+
+
+# ================ later the same night: the Alpine CDN resolves again ================
+$ docker run --rm alpine:3.20 sh -c 'wget -q -O /dev/null https://dl-cdn.alpinelinux.org/alpine/ && echo cdn-ok'
+cdn-ok
+
+# So the 'apk upgrade --no-cache' line went back into the runtime stage (as root, then USER 101 again):
+$ docker build -q -t taskboard-frontend:local application/frontend
+sha256:2adafd64aa8cb95754251fbfc08e3051e58ffaf32258d2acdde74aac0e171f3a
+
+$ docker run --rm --entrypoint sh taskboard-frontend:local -c 'id; apk info -v zlib'
+uid=101(nginx) gid=101(nginx) groups=101(nginx),101(nginx)
+zlib: A compression/decompression Library
+zlib: https://zlib.net/
+zlib: 129 KiB
+
+$ trivy image --scanners vuln --format json -o security/reports/trivy-frontend.json --quiet taskboard-frontend:local && jq '[.Results[].Vulnerabilities[]?] | length' security/reports/trivy-frontend.json
+0
+
+$ trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet taskboard-frontend:local >/dev/null; echo gate-exit=$?
+gate-exit=0
+

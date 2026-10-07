@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars for REAL AWS (terraform.tfvars is gitignored-by-convention here;
+# never put access keys in it - use AWS_PROFILE / aws sso login instead).
+project_name        = "taskboard"
+environment         = "prod"
+aws_region          = "ap-south-1"
+use_localstack      = false
+enable_nat_gateway  = true
+enable_ecr          = true
+enable_eks          = true
+eks_version         = "1.35"
+node_instance_types = ["t3.medium"]
+node_min_size       = 2
+node_desired_size   = 2
+node_max_size       = 4
+cluster_endpoint_public_access = true
+cluster_admin_cidrs            = ["203.0.113.10/32"] # your office/home IP, never 0.0.0.0/0

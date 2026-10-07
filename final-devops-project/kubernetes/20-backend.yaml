@@ -1,0 +1,60 @@
+# FastAPI backend: Deployment (initContainers wait for the DB and run
+# Alembic) + ClusterIP Service. Probes: /health (liveness), /ready (readiness).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskboard-backend
+  labels: {app.kubernetes.io/name: taskboard, app.kubernetes.io/component: backend}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app.kubernetes.io/name: taskboard, app.kubernetes.io/component: backend}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: taskboard, app.kubernetes.io/component: backend}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      initContainers:
+        - name: wait-for-db
+          image: postgres:17.11-alpine
+          command: ["sh", "-c", "for i in $(seq 1 60); do pg_isready -h \"$DB_HOST\" -p \"$DB_PORT\" -U probe -t 2 && exit 0; echo \"waiting for $DB_HOST:$DB_PORT ($i)\"; sleep 2; done; exit 1"]
+          envFrom: [{configMapRef: {name: taskboard-config}}]
+          resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {cpu: 100m, memory: 64Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+        - name: migrate
+          image: taskboard-backend:local
+          command: ["alembic", "upgrade", "head"]
+          envFrom: [{configMapRef: {name: taskboard-config}}, {secretRef: {name: taskboard-db}}]
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+      containers:
+        - name: backend
+          image: taskboard-backend:local
+          ports: [{name: http, containerPort: 8000}]
+          envFrom: [{configMapRef: {name: taskboard-config}}, {secretRef: {name: taskboard-db}}]
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+          # requests are required for the HPA's CPU utilisation maths
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskboard-backend
+  labels: {app.kubernetes.io/name: taskboard, app.kubernetes.io/component: backend}
+spec:
+  selector: {app.kubernetes.io/name: taskboard, app.kubernetes.io/component: backend}
+  ports:
+    - {name: http, port: 8000, targetPort: http}

@@ -1,0 +1,15 @@
+# Fixed copy of session-11-kubernetes-services/troubleshooting/empty-endpoints.yaml:
+# the selector now matches the running backend pods (label app=yatri-backend, port 5000).
+apiVersion: v1
+kind: Service
+metadata:
+  name: broken-backend-service
+spec:
+  type: ClusterIP
+  selector:
+    app: yatri-backend   # FIX: was wrong-backend-name
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000
+      protocol: TCP

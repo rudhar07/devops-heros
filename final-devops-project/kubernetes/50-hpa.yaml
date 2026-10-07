@@ -1,0 +1,15 @@
+# Scales the backend on CPU (needs metrics-server and CPU requests on the pods).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: taskboard-backend
+  labels: {app.kubernetes.io/name: taskboard, app.kubernetes.io/component: backend}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: taskboard-backend}
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 50}}
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 60}

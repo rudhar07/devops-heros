@@ -1,0 +1,122 @@
+# During my first rolling-update run the rollback stalled. This is what I found:
+$ kubectl get pods -n kube-system
+NAME                                         READY   STATUS    RESTARTS      AGE
+coredns-559f6c778d-lh46v                     1/1     Running   0             5m46s
+coredns-559f6c778d-wg2dg                     1/1     Running   0             5m46s
+etcd-hw-a-control-plane                      1/1     Running   0             5m54s
+kindnet-s99sg                                1/1     Running   0             5m47s
+kube-apiserver-hw-a-control-plane            1/1     Running   0             5m54s
+kube-controller-manager-hw-a-control-plane   1/1     Running   2 (34s ago)   5m54s
+kube-proxy-775hv                             1/1     Running   0             5m47s
+kube-scheduler-hw-a-control-plane            1/1     Running   3 (33s ago)   5m54s
+
+$ kubectl logs -n kube-system kube-scheduler-hw-a-control-plane --previous --tail=3
+I1007 16:40:50.585087       1 server.go:283] "[graceful-termination] secure server is exiting"
+I1007 16:40:50.580664       1 tlsconfig.go:258] "Shutting down DynamicServingCertificateController"
+E1007 16:40:50.585959       1 server.go:337] "Leaderelection lost"
+
+$ kubectl logs -n kube-system kube-controller-manager-hw-a-control-plane --previous --tail=40
+I1007 16:40:49.316152       1 servicecidrs_controller.go:141] "Shutting down" controller="service-cidr-controller"
+I1007 16:40:49.343146       1 ttlafterfinished_controller.go:116] "Shutting down TTL after finished controller"
+I1007 16:40:49.340923       1 pvc_protection_controller.go:182] "Shutting down PVC protection controller"
+I1007 16:40:49.344567       1 daemon_controller.go:368] "Shutting down daemon sets controller"
+I1007 16:40:49.333399       1 clusterroleaggregation_controller.go:180] "Shutting down ClusterRoleAggregator controller"
+I1007 16:40:49.357612       1 serviceaccounts_controller.go:121] "Shutting down service account controller"
+I1007 16:40:49.345664       1 certificate_controller.go:124] "Shutting down certificate controller" name="csrsigning-kube-apiserver-client"
+I1007 16:40:49.357101       1 certificate_controller.go:124] "Shutting down certificate controller" name="csrsigning-kubelet-serving"
+I1007 16:40:49.362695       1 resourceversion.go:137] "Shutting down" controller="resource-version-controller"
+I1007 16:40:49.355392       1 certificate_controller.go:124] "Shutting down certificate controller" name="csrsigning-legacy-unknown"
+I1007 16:40:49.242797       1 migrationrunner.go:144] "Shutting down" controller="migration-runner-controller"
+I1007 16:40:49.306346       1 controller.go:185] "Shutting down ephemeral volume controller"
+I1007 16:40:49.428869       1 attach_detach_controller.go:347] "Shutting down attach detach controller"
+I1007 16:40:49.405760       1 gc_controller.go:102] "Shutting down GC controller"
+I1007 16:40:49.439326       1 stateful_set.go:238] "Shutting down statefulset controller"
+I1007 16:40:49.413859       1 garbagecollector.go:145] "Shutting down controller" controller="garbagecollector"
+I1007 16:40:49.441580       1 tokencleaner.go:121] "Shutting down token cleaner controller"
+I1007 16:40:49.344663       1 horizontal.go:232] "Shutting down HPA controller"
+I1007 16:40:49.453905       1 controller.go:823] "Shutting down resource claim controller"
+I1007 16:40:49.459923       1 horizontal.go:342] "Horizontal Pod Autoscaler controller worker shutting down"
+I1007 16:40:49.459972       1 horizontal.go:342] "Horizontal Pod Autoscaler controller worker shutting down"
+I1007 16:40:49.460017       1 horizontal.go:342] "Horizontal Pod Autoscaler controller worker shutting down"
+I1007 16:40:49.460061       1 horizontal.go:342] "Horizontal Pod Autoscaler controller worker shutting down"
+I1007 16:40:49.419309       1 replica_set.go:289] "Shutting down controller" name="replicationcontroller"
+I1007 16:40:49.450502       1 disruption.go:464] "Shutting down disruption controller"
+I1007 16:40:49.424356       1 event.go:395] "Event occurred" object="kube-system/kube-controller-manager" fieldPath="" kind="Lease" apiVersion="coordination.k8s.io/v1" type="Normal" reason="LeaderElection" message="hw-a-control-plane_ebb79471-c736-4993-b561-c39680a0a319 stopped leading"
+I1007 16:40:49.431572       1 dynamic_serving_content.go:149] "Shutting down controller" name="csr-controller::/etc/kubernetes/pki/ca.crt::/etc/kubernetes/pki/ca.key"
+E1007 16:40:49.464971       1 controllermanager.go:413] "leaderelection lost/stopped"
+I1007 16:40:49.446294       1 horizontal.go:342] "Horizontal Pod Autoscaler controller worker shutting down"
+I1007 16:40:49.455200       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472315       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472354       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472367       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472386       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472415       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472435       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472452       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.472457       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.441838       1 resource_quota_controller.go:285] "resource quota controller worker shutting down"
+I1007 16:40:49.437449       1 range_allocator.go:185] "Shutting down range CIDR allocator"
+
+$ docker stats --no-stream --format 'table {{.Name}}	{{.CPUPerc}}	{{.MemUsage}}'
+NAME                 CPU %     MEM USAGE / LIMIT
+hw-d-control-plane   36.52%    559.1MiB / 7.749GiB
+hw-a-control-plane   68.66%    623.6MiB / 7.749GiB
+hw-b-control-plane   21.09%    734.8MiB / 7.749GiB
+adobe-illustrator    0.81%     588.2MiB / 7.749GiB
+mailchimp            0.62%     4.132GiB / 7.749GiB
+grafana              1.90%     260.4MiB / 7.749GiB
+
+$ kubectl wait -n kube-system --for=condition=Ready pod --all --timeout=180s
+pod/coredns-559f6c778d-lh46v condition met
+pod/coredns-559f6c778d-wg2dg condition met
+pod/etcd-hw-a-control-plane condition met
+pod/kindnet-s99sg condition met
+pod/kube-apiserver-hw-a-control-plane condition met
+pod/kube-controller-manager-hw-a-control-plane condition met
+pod/kube-proxy-775hv condition met
+pod/kube-scheduler-hw-a-control-plane condition met
+
+$ kubectl get pods -n kube-system
+NAME                                         READY   STATUS    RESTARTS      AGE
+coredns-559f6c778d-lh46v                     1/1     Running   0             5m49s
+coredns-559f6c778d-wg2dg                     1/1     Running   0             5m49s
+etcd-hw-a-control-plane                      1/1     Running   0             5m57s
+kindnet-s99sg                                1/1     Running   0             5m50s
+kube-apiserver-hw-a-control-plane            1/1     Running   0             5m57s
+kube-controller-manager-hw-a-control-plane   1/1     Running   2 (37s ago)   5m57s
+kube-proxy-775hv                             1/1     Running   0             5m50s
+kube-scheduler-hw-a-control-plane            1/1     Running   3 (36s ago)   5m57s
+
+
+# Later, after recreating the cluster with leader election off, etcd/apiserver/coredns restarted once more.
+$ kubectl get pods -n kube-system -o 'custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount,LAST-REASON:.status.containerStatuses[0].lastState.terminated.reason,EXIT:.status.containerStatuses[0].lastState.terminated.exitCode'
+NAME                                         RESTARTS   LAST-REASON   EXIT
+coredns-559f6c778d-7srwb                     1          Completed     0
+coredns-559f6c778d-q6rhr                     1          Completed     0
+etcd-hw-a-control-plane                      1          Completed     0
+kindnet-qgpbk                                0          <none>        <none>
+kube-apiserver-hw-a-control-plane            1          Error         137
+kube-controller-manager-hw-a-control-plane   3          Error         1
+kube-proxy-554f9                             0          <none>        <none>
+kube-scheduler-hw-a-control-plane            1          Error         1
+
+$ docker exec hw-a-control-plane sh -c "dmesg | grep -i -E \"out of memory\" | tail -3"
+[ 9104.130413] Out of memory: Killed process 524942 (local-path-prov) total-vm:1310196kB, anon-rss:7424kB, file-rss:28kB, shmem-rss:0kB, UID:0 pgtables:204kB oom_score_adj:1000
+[ 9564.699718] Out of memory: Killed process 550297 (local-path-prov) total-vm:1310748kB, anon-rss:8624kB, file-rss:156kB, shmem-rss:0kB, UID:0 pgtables:200kB oom_score_adj:1000
+[ 9564.699820] Out of memory: Killed process 550402 (local-path-prov) total-vm:1310748kB, anon-rss:8624kB, file-rss:156kB, shmem-rss:0kB, UID:0 pgtables:200kB oom_score_adj:1000
+
+$ docker run --rm --privileged --pid=host alpine:3.20 free -m     # memory of the Docker Desktop VM itself
+              total        used        free      shared  buff/cache   available
+Mem:           7935        7414          90          36         431         296
+Swap:          1024        1024           0
+
+$ docker stats --no-stream --format 'table {{.Name}}	{{.MemUsage}}'
+NAME                 MEM USAGE / LIMIT
+elegant_haslett      15.21MiB / 7.749GiB
+hw-a-control-plane   643.2MiB / 7.749GiB
+hw-d-control-plane   548.7MiB / 7.749GiB
+hw-b-control-plane   683.1MiB / 7.749GiB
+adobe-illustrator    587.9MiB / 7.749GiB
+mailchimp            4.134GiB / 7.749GiB
+grafana              258.2MiB / 7.749GiB
+

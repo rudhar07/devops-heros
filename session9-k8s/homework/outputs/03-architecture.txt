@@ -1,0 +1,94 @@
+$ kubectl wait -n kube-system --for=condition=Ready pod --all --timeout=180s
+pod/coredns-559f6c778d-x26wn condition met
+pod/etcd-hw-minikube condition met
+pod/kindnet-zxz2k condition met
+pod/kube-apiserver-hw-minikube condition met
+pod/kube-controller-manager-hw-minikube condition met
+pod/kube-proxy-8pfb9 condition met
+pod/kube-scheduler-hw-minikube condition met
+pod/storage-provisioner condition met
+
+$ kubectl get pods -n kube-system -o wide
+NAME                                  READY   STATUS    RESTARTS   AGE   IP             NODE          NOMINATED NODE   READINESS GATES
+coredns-559f6c778d-x26wn              1/1     Running   0          47s   10.244.0.2     hw-minikube   <none>           <none>
+etcd-hw-minikube                      1/1     Running   0          54s   192.168.49.2   hw-minikube   <none>           <none>
+kindnet-zxz2k                         1/1     Running   0          47s   192.168.49.2   hw-minikube   <none>           <none>
+kube-apiserver-hw-minikube            1/1     Running   0          54s   192.168.49.2   hw-minikube   <none>           <none>
+kube-controller-manager-hw-minikube   1/1     Running   0          54s   192.168.49.2   hw-minikube   <none>           <none>
+kube-proxy-8pfb9                      1/1     Running   0          47s   192.168.49.2   hw-minikube   <none>           <none>
+kube-scheduler-hw-minikube            1/1     Running   0          54s   192.168.49.2   hw-minikube   <none>           <none>
+storage-provisioner                   1/1     Running   0          52s   192.168.49.2   hw-minikube   <none>           <none>
+
+$ kubectl get pods -n kube-system -l tier=control-plane -o custom-columns=NAME:.metadata.name,COMPONENT:.metadata.labels.component,IMAGE:.spec.containers[0].image
+NAME                                  COMPONENT                 IMAGE
+etcd-hw-minikube                      etcd                      registry.k8s.io/etcd:3.7.0-0
+kube-apiserver-hw-minikube            kube-apiserver            registry.k8s.io/kube-apiserver:v1.37.0
+kube-controller-manager-hw-minikube   kube-controller-manager   registry.k8s.io/kube-controller-manager:v1.37.0
+kube-scheduler-hw-minikube            kube-scheduler            registry.k8s.io/kube-scheduler:v1.37.0
+
+$ kubectl get daemonsets,deployments -n kube-system
+NAME                        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+daemonset.apps/kindnet      1         1         1       1            1           <none>                   63s
+daemonset.apps/kube-proxy   1         1         1       1            1           kubernetes.io/os=linux   64s
+
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/coredns   1/1     1            1           64s
+
+$ minikube -p hw-minikube ssh -- sudo ls /etc/kubernetes/manifests
+etcd.yaml	     kube-controller-manager.yaml
+kube-apiserver.yaml  kube-scheduler.yaml
+
+$ minikube -p hw-minikube ssh -- sudo systemctl is-active kubelet containerd; ps -eo comm | grep -E '^(kubelet|containerd|kube-apiserver|etcd|kube-scheduler|kube-controller|kube-proxy)' | sort | uniq
+active
+active
+containerd
+containerd-shim
+etcd
+kube-apiserver
+kube-controller
+kube-proxy
+kube-scheduler
+kubelet
+
+$ minikube -p hw-minikube ssh -- sudo crictl ps --state running
+CONTAINER           IMAGE               CREATED              STATE               NAME                      ATTEMPT             POD ID              POD                                   NAMESPACE
+3c5ab389abd88       fbccbf70a429f       22 seconds ago       Running             coredns                   0                   2cfd319bb2c40       coredns-559f6c778d-x26wn              kube-system
+e3f28e39b686f       66749159455b3       22 seconds ago       Running             storage-provisioner       0                   f7d28b07181ab       storage-provisioner                   kube-system
+3f72beb76a678       8e13ccc0aaa68       33 seconds ago       Running             kindnet-cni               0                   bc5133d59c934       kindnet-zxz2k                         kube-system
+d3a74c262d8fa       550b682d81d41       57 seconds ago       Running             kube-proxy                0                   e01d651adb3bd       kube-proxy-8pfb9                      kube-system
+695282d78ddbf       6003d52023b9d       About a minute ago   Running             kube-apiserver            0                   d475eb5f82912       kube-apiserver-hw-minikube            kube-system
+568de274a5860       c2e426bbd1cd6       About a minute ago   Running             etcd                      0                   62140285be087       etcd-hw-minikube                      kube-system
+49c6a2093450c       384eabc4fe526       About a minute ago   Running             kube-scheduler            0                   bdc8e091043c6       kube-scheduler-hw-minikube            kube-system
+5622adebdcd9d       b1ad0e33c9012       About a minute ago   Running             kube-controller-manager   0                   07392158dee08       kube-controller-manager-hw-minikube   kube-system
+
+$ kubectl get pod -n kube-system -l component=kube-apiserver -o jsonpath={.items[0].spec.containers[0].command} | tr , "\n" | head -20
+["kube-apiserver"
+"--advertise-address=192.168.49.2"
+"--allow-privileged=true"
+"--authorization-mode=Node
+RBAC"
+"--client-ca-file=/var/lib/minikube/certs/ca.crt"
+"--enable-bootstrap-token-auth=true"
+"--etcd-cafile=/var/lib/minikube/certs/etcd/ca.crt"
+"--etcd-certfile=/var/lib/minikube/certs/apiserver-etcd-client.crt"
+"--etcd-keyfile=/var/lib/minikube/certs/apiserver-etcd-client.key"
+"--etcd-servers=https://127.0.0.1:2379"
+"--kubelet-client-certificate=/var/lib/minikube/certs/apiserver-kubelet-client.crt"
+"--kubelet-client-key=/var/lib/minikube/certs/apiserver-kubelet-client.key"
+"--kubelet-preferred-address-types=InternalIP
+ExternalIP
+Hostname"
+"--proxy-client-cert-file=/var/lib/minikube/certs/front-proxy-client.crt"
+"--proxy-client-key-file=/var/lib/minikube/certs/front-proxy-client.key"
+"--requestheader-allowed-names=front-proxy-client"
+"--requestheader-client-ca-file=/var/lib/minikube/certs/front-proxy-ca.crt"
+
+
+$ kubectl get node hw-minikube -o jsonpath={.status.nodeInfo}
+{"architecture":"arm64","bootID":"3ae05ec3-5540-4aa2-95e7-091da40789bd","containerRuntimeVersion":"containerd://2.3.4","kernelVersion":"6.12.76-linuxkit","kubeProxyVersion":"","kubeletVersion":"v1.37.0","machineID":"c7552358bf1aab9f1f21b3de6a971616","operatingSystem":"linux","osImage":"Debian GNU/Linux 12 (bookworm)","runningInUserNamespace":false,"swap":{"capacity":1073737728},"systemUUID":"c7552358bf1aab9f1f21b3de6a971616"}
+
+
+$ kubectl get lease -n kube-system
+NAME                                   HOLDER                                                                      AGE
+apiserver-kic7evfwm7cnn2qqu27teuqmkq   apiserver-kic7evfwm7cnn2qqu27teuqmkq_878fa141-6fd1-4c16-a354-ea9f64fc1724   66s
+

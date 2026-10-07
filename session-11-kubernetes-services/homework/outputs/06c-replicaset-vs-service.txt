@@ -1,0 +1,139 @@
+### ReplicaSet vs Service: the RS keeps pods alive, the Service gives them one stable address
+$ kubectl get pods -l app=web-clusterip -o wide
+NAME                                 READY   STATUS    RESTARTS   AGE   IP           NODE                 NOMINATED NODE   READINESS GATES
+web-app-clusterip-695dddddd5-lz9bv   1/1     Running   0          92s   10.244.0.7   hw-a-control-plane   <none>           <none>
+web-app-clusterip-695dddddd5-szd4j   1/1     Running   0          92s   10.244.0.8   hw-a-control-plane   <none>           <none>
+web-app-clusterip-695dddddd5-tcj58   1/1     Running   0          93s   10.244.0.6   hw-a-control-plane   <none>           <none>
+
+$ kubectl get svc web-service-clusterip
+NAME                    TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+web-service-clusterip   ClusterIP   10.96.96.222   <none>        8080/TCP   17m
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=web-service-clusterip -o yaml
+apiVersion: v1
+items:
+- addressType: IPv4
+  apiVersion: discovery.k8s.io/v1
+  endpoints:
+  - addresses:
+    - 10.244.0.6
+    conditions:
+      ready: true
+      serving: true
+      terminating: false
+    nodeName: hw-a-control-plane
+    targetRef:
+      kind: Pod
+      name: web-app-clusterip-695dddddd5-tcj58
+      namespace: default
+      uid: 80ea3e3b-8ec7-4ee3-b8f0-54abcedb7e0c
+  - addresses:
+    - 10.244.0.7
+    conditions:
+      ready: true
+      serving: true
+      terminating: false
+    nodeName: hw-a-control-plane
+    targetRef:
+      kind: Pod
+      name: web-app-clusterip-695dddddd5-lz9bv
+      namespace: default
+      uid: e558630c-0821-4165-b1f3-b7195df89ddf
+  - addresses:
+    - 10.244.0.8
+    conditions:
+      ready: true
+      serving: true
+      terminating: false
+    nodeName: hw-a-control-plane
+    targetRef:
+      kind: Pod
+      name: web-app-clusterip-695dddddd5-szd4j
+      namespace: default
+      uid: 35da6515-9678-4494-a913-b20c9da33351
+  kind: EndpointSlice
+  metadata:
+    annotations:
+      endpoints.kubernetes.io/last-change-trigger-time: "2026-10-07T17:43:03Z"
+    creationTimestamp: "2026-10-07T17:27:00Z"
+    generateName: web-service-clusterip-
+    generation: 98
+    labels:
+      app: web-clusterip
+      endpointslice.kubernetes.io/managed-by: endpointslice-controller.k8s.io
+      kubernetes.io/service-name: web-service-clusterip
+    name: web-service-clusterip-69bvq
+    namespace: default
+    ownerReferences:
+    - apiVersion: v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Service
+      name: web-service-clusterip
+      uid: b7c31c25-f59d-4c57-8511-8777e60db954
+    resourceVersion: "9958"
+    uid: 48f9aae0-a67d-4514-be27-60c6fe4a6e67
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+kind: List
+metadata:
+  resourceVersion: ""
+
+### Without a Service, a client would need pod IPs - and they change when a pod is replaced
+$ kubectl get pod web-app-clusterip-695dddddd5-lz9bv -o 'jsonpath={.status.podIP}{"\n"}'
+10.244.0.7
+
+$ kubectl delete pod web-app-clusterip-695dddddd5-lz9bv
+pod "web-app-clusterip-695dddddd5-lz9bv" deleted from default namespace
+
+$ kubectl get pods -l app=web-clusterip -o wide
+NAME                                 READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+web-app-clusterip-695dddddd5-4p7hs   1/1     Running   0          5s    10.244.0.20   hw-a-control-plane   <none>           <none>
+web-app-clusterip-695dddddd5-szd4j   1/1     Running   0          97s   10.244.0.8    hw-a-control-plane   <none>           <none>
+web-app-clusterip-695dddddd5-tcj58   1/1     Running   0          98s   10.244.0.6    hw-a-control-plane   <none>           <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=web-service-clusterip
+NAME                          ADDRESSTYPE   PORTS   ENDPOINTS                           AGE
+web-service-clusterip-69bvq   IPv4          80      10.244.0.6,10.244.0.8,10.244.0.20   17m
+
+### ...the Service name and ClusterIP did not change:
+$ kubectl get svc web-service-clusterip
+NAME                    TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+web-service-clusterip   ClusterIP   10.96.96.222   <none>        8080/TCP   17m
+
+$ kubectl exec curl-client -- curl -s -o /dev/null -w 'HTTP %{http_code} via %{remote_ip}\n' http://web-service-clusterip:8080
+HTTP 200 via 10.96.96.222
+
+### How the traffic actually reaches a pod: kube-proxy's iptables chain for this Service
+$ docker exec hw-a-control-plane iptables -t nat -S KUBE-SERVICES | grep web-service-clusterip
+-A KUBE-SERVICES -d 10.96.96.222/32 -p tcp -m comment --comment "default/web-service-clusterip:http cluster IP" -m tcp --dport 8080 -j KUBE-SVC-TIXQXGX7DUC52XEM
+
+$ docker exec hw-a-control-plane iptables -t nat -S KUBE-SVC-TIXQXGX7DUC52XEM
+-N KUBE-SVC-TIXQXGX7DUC52XEM
+-A KUBE-SVC-TIXQXGX7DUC52XEM ! -s 10.244.0.0/16 -d 10.96.96.222/32 -p tcp -m comment --comment "default/web-service-clusterip:http cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
+-A KUBE-SVC-TIXQXGX7DUC52XEM -m comment --comment "default/web-service-clusterip:http -> 10.244.0.20:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-Z2VVDCEITVPGKUDB
+-A KUBE-SVC-TIXQXGX7DUC52XEM -m comment --comment "default/web-service-clusterip:http -> 10.244.0.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-A5RNH7T5JVKFJ3BA
+-A KUBE-SVC-TIXQXGX7DUC52XEM -m comment --comment "default/web-service-clusterip:http -> 10.244.0.8:80" -j KUBE-SEP-KQYXHOSXGF3CO67S
+
+$ docker exec hw-a-control-plane iptables -t nat -S KUBE-SEP-Z2VVDCEITVPGKUDB
+-N KUBE-SEP-Z2VVDCEITVPGKUDB
+-A KUBE-SEP-Z2VVDCEITVPGKUDB -s 10.244.0.20/32 -m comment --comment "default/web-service-clusterip:http" -j KUBE-MARK-MASQ
+-A KUBE-SEP-Z2VVDCEITVPGKUDB -p tcp -m comment --comment "default/web-service-clusterip:http" -m tcp -j DNAT --to-destination 10.244.0.20:80
+
+### A Service whose selector matches nothing has no endpoints (no traffic possible):
+$ kubectl create service clusterip nobody-home --tcp=80:80
+service/nobody-home created
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=nobody-home
+NAME                ADDRESSTYPE   PORTS     ENDPOINTS   AGE
+nobody-home-4t9s2   IPv4          <unset>   <unset>     0s
+
+$ kubectl exec curl-client -- curl -s -m 3 -o /dev/null -w 'HTTP %{http_code}\n' http://nobody-home
+HTTP 000
+command terminated with exit code 7
+
+$ kubectl delete service nobody-home
+service "nobody-home" deleted from default namespace
+

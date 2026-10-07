@@ -1,0 +1,20 @@
+# Two extra ExternalName Services I added, because the instructor's target (nencyravaliya.me)
+# no longer resolves (NXDOMAIN) when I ran this on 2026-10-07.
+# 1) an alias to a public website
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-web
+spec:
+  type: ExternalName
+  externalName: example.com
+---
+# 2) an alias to a Service in another namespace - the most common real use
+#    (apps in "default" keep calling "backend-alias"; the real backend lives elsewhere)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-alias
+spec:
+  type: ExternalName
+  externalName: web-service-clusterip.default.svc.cluster.local

@@ -1,0 +1,18 @@
+$ minikube delete -p hw-minikube
+* Deleting "hw-minikube" in docker ...
+* Deleting container "hw-minikube" ...
+* Removing /Users/rudhar/.minikube/machines/hw-minikube ...
+* Removed all traces of the "hw-minikube" cluster.
+
+$ minikube profile list
+
+* Exiting due to MK_USAGE_NO_PROFILE: No minikube profile was found.
+* Suggestion: 
+
+    You can create one using 'minikube start'.
+    
+
+
+$ docker ps --filter name=hw-minikube
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+

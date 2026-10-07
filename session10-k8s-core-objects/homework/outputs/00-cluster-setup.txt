@@ -1,0 +1,119 @@
+# Attempt 1 used hostPort 8081 for node port 80 and failed:
+#   docker: Error response from daemon: ... Bind for 0.0.0.0:8081 failed: port is already allocated
+# (an unrelated container on my Docker Desktop already publishes 8081), so I moved HTTP to localhost:30081.
+# Attempt 2 worked, but the scheduler and controller-manager kept losing leader election under load
+# (outputs/00b-control-plane-restart.txt). Attempt 3 below recreates the cluster with leader election off.
+
+$ kind delete cluster --name hw-a
+Deleting cluster "hw-a" ...
+Deleted nodes: ["hw-a-control-plane"]
+
+$ kind version
+kind v0.33.0 go1.27.0 darwin/arm64
+
+$ cat /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/homework/cluster/kind-hw-a.yaml
+# Single-node kind cluster used for sessions 10, 11 and 12.
+# - node port 80  (ingress-nginx HTTP)  -> localhost:30081 on my Mac
+#   (I first tried host port 8081, but another container on my Docker Desktop already holds it)
+# - node port 443 (ingress-nginx HTTPS) -> localhost:8444
+# - NodePort 30080 (session 11 NodePort demo) -> localhost:30080
+# - leader election is switched off for kube-controller-manager and kube-scheduler: my laptop's
+#   Docker VM was so busy that both kept losing their leader lease and restarting (see
+#   outputs/00b-control-plane-restart.txt). With a single control-plane node there is nobody
+#   to elect anyway.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hw-a
+kubeadmConfigPatchesJSON6902:
+  - group: kubeadm.k8s.io
+    version: v1beta4
+    kind: ClusterConfiguration
+    patch: |
+      - op: add
+        path: /controllerManager/extraArgs/-
+        value: {name: leader-elect, value: "false"}
+      - op: add
+        path: /scheduler/extraArgs
+        value: [{name: leader-elect, value: "false"}]
+nodes:
+  - role: control-plane
+    labels:
+      ingress-ready: "true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 30081
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8444
+        protocol: TCP
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+
+$ kind create cluster --config /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session10-k8s-core-objects/homework/cluster/kind-hw-a.yaml --wait 180s
+Creating cluster "hw-a" ...
+ • Ensuring node image (kindest/node:v1.37.0) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.37.0) 🖼️
+ • Preparing nodes 📦   ...
+ ✓ Preparing nodes 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Waiting ≤ 3m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 3m0s for control-plane = Ready ⏳
+ • Ready after 16s 💚
+Set kubectl context to "kind-hw-a"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-hw-a
+
+Thanks for using kind! 😊
+
+$ kubectl get nodes -o wide --show-labels
+NAME                 STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION             CONTAINER-RUNTIME    LABELS
+hw-a-control-plane   Ready    control-plane   20s   v1.37.0   172.18.0.3    <none>        Debian GNU/Linux 13 (trixie)   6.12.76-linuxkit (arm64)   containerd://2.3.4   beta.kubernetes.io/arch=arm64,beta.kubernetes.io/os=linux,ingress-ready=true,kubernetes.io/arch=arm64,kubernetes.io/hostname=hw-a-control-plane,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=
+
+$ kubectl version
+Client Version: v1.36.1
+Kustomize Version: v5.8.1
+Server Version: v1.37.0
+
+$ kubectl wait -n kube-system --for=condition=Ready pod --all --timeout=180s
+pod/coredns-559f6c778d-7srwb condition met
+pod/coredns-559f6c778d-q6rhr condition met
+pod/etcd-hw-a-control-plane condition met
+pod/kindnet-qgpbk condition met
+pod/kube-apiserver-hw-a-control-plane condition met
+pod/kube-controller-manager-hw-a-control-plane condition met
+pod/kube-proxy-554f9 condition met
+pod/kube-scheduler-hw-a-control-plane condition met
+
+$ kubectl get pods -A
+NAMESPACE            NAME                                         READY   STATUS    RESTARTS   AGE
+kube-system          coredns-559f6c778d-7srwb                     1/1     Running   0          14s
+kube-system          coredns-559f6c778d-q6rhr                     1/1     Running   0          14s
+kube-system          etcd-hw-a-control-plane                      1/1     Running   0          21s
+kube-system          kindnet-qgpbk                                1/1     Running   0          14s
+kube-system          kube-apiserver-hw-a-control-plane            1/1     Running   0          21s
+kube-system          kube-controller-manager-hw-a-control-plane   1/1     Running   0          21s
+kube-system          kube-proxy-554f9                             1/1     Running   0          14s
+kube-system          kube-scheduler-hw-a-control-plane            1/1     Running   0          21s
+local-path-storage   local-path-provisioner-75f7fc7dc5-jwh2r      1/1     Running   0          14s
+
+$ kubectl -n kube-system get pod kube-scheduler-hw-a-control-plane -o 'jsonpath={.spec.containers[0].command}'
+["kube-scheduler","--authentication-kubeconfig=/etc/kubernetes/scheduler.conf","--authorization-kubeconfig=/etc/kubernetes/scheduler.conf","--bind-address=127.0.0.1","--kubeconfig=/etc/kubernetes/scheduler.conf","--leader-elect=false"]
+
+
+$ kubectl -n kube-system get pod kube-controller-manager-hw-a-control-plane -o 'jsonpath={.spec.containers[0].command}'
+["kube-controller-manager","--allocate-node-cidrs=true","--authentication-kubeconfig=/etc/kubernetes/controller-manager.conf","--authorization-kubeconfig=/etc/kubernetes/controller-manager.conf","--bind-address=127.0.0.1","--client-ca-file=/etc/kubernetes/pki/ca.crt","--cluster-cidr=10.244.0.0/16","--cluster-name=hw-a","--cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt","--cluster-signing-key-file=/etc/kubernetes/pki/ca.key","--controllers=*,bootstrapsigner,tokencleaner","--kubeconfig=/etc/kubernetes/controller-manager.conf","--requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt","--root-ca-file=/etc/kubernetes/pki/ca.crt","--service-account-private-key-file=/etc/kubernetes/pki/sa.key","--service-cluster-ip-range=10.96.0.0/16","--use-service-account-credentials=true","--enable-hostpath-provisioner=true","--leader-elect=false"]
+
+
+$ docker ps --filter name=hw-a --format 'table {{.Names}}	{{.Image}}	{{.Ports}}'
+NAMES                IMAGE                  PORTS
+hw-a-control-plane   kindest/node:v1.37.0   0.0.0.0:30080->30080/tcp, 0.0.0.0:30081->80/tcp, 0.0.0.0:8444->443/tcp, 127.0.0.1:59594->6443/tcp
+

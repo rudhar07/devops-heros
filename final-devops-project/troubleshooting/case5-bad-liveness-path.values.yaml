@@ -1,0 +1,5 @@
+# Case 5 (probe layer): liveness probe on a path the backend does not serve.
+# FastAPI answers /healthz with 404 -> liveness fails -> kubelet restarts the container.
+backend:
+  probes:
+    liveness: {path: /healthz, initialDelaySeconds: 5, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 2}

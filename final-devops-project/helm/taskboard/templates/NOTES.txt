@@ -1,0 +1,16 @@
+TaskBoard {{ .Chart.AppVersion }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Backend image:  {{ include "taskboard.backendImage" . }}
+Frontend image: {{ include "taskboard.frontendImage" . }}
+{{- if .Values.ingress.enabled }}
+
+Open:  http://{{ .Values.ingress.host }}/          (UI)
+       http://{{ .Values.ingress.host }}/api/tasks (API)
+{{- else }}
+
+kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "taskboard.fullname" . }}-frontend 18092:80
+then open http://localhost:18092
+{{- end }}
+
+Check:  kubectl -n {{ .Release.Namespace }} get pods,svc,ingress,hpa
+Test:   helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

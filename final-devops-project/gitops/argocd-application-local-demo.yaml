@@ -1,0 +1,40 @@
+# What I actually ran on the local kind cluster (outputs/22-gitops.txt).
+# Identical to argocd-application.yaml except:
+#   - repoURL: a throw-away git daemon container (hw-f-gitd) on the docker
+#     "kind" network, serving a scratch copy of this repo layout. The GitHub
+#     path only exists after the student pushes, and the kind cluster cannot
+#     use my local working tree directly.
+#   - images: the locally built taskboard-*:local images (loaded into kind),
+#     because the GHCR images do not exist before the first CI run.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: taskboard-gitops
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git://hw-f-gitd/final-gitops-repo
+    targetRevision: main
+    path: final-devops-project/helm/taskboard
+    helm:
+      releaseName: taskboard-gitops
+      valueFiles:
+        - values-gitops.yaml
+      parameters:
+        - {name: backend.image.repository, value: taskboard-backend}
+        - {name: backend.image.tag, value: local}
+        - {name: frontend.image.repository, value: taskboard-frontend}
+        - {name: frontend.image.tag, value: local}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: taskboard-gitops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -1,0 +1,141 @@
+### Step 1: deploy v1 (strategy: Recreate)
+$ kubectl apply -f strategies/04-recreate/deployment-v1.yaml -f strategies/04-recreate/service.yaml
+deployment.apps/app-recreate created
+service/app-recreate-service created
+
+$ kubectl rollout status deployment/app-recreate --timeout=180s
+Waiting for deployment "app-recreate" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-recreate" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "app-recreate" rollout to finish: 1 of 3 updated replicas are available...
+Waiting for deployment "app-recreate" rollout to finish: 2 of 3 updated replicas are available...
+deployment "app-recreate" successfully rolled out
+
+$ kubectl get deploy app-recreate -o 'jsonpath={.spec.strategy}'
+{"type":"Recreate"}
+
+
+$ kubectl get pods -l app=app-recreate -L version
+NAME                            READY   STATUS    RESTARTS   AGE   VERSION
+app-recreate-6c78cb55bb-56jp8   1/1     Running   0          1s    v1
+app-recreate-6c78cb55bb-mn85t   1/1     Running   0          1s    v1
+app-recreate-6c78cb55bb-t45xx   1/1     Running   0          1s    v1
+
+$ kubectl exec client -- sh -c 'curl -s app-recreate-service | grep -o "VERSION: v[12]"'
+command terminated with exit code 1
+
+### Step 2: update to v2 while watching pods and sending a request every 0.25s
+$ kubectl apply -f strategies/04-recreate/deployment-v2.yaml
+deployment.apps/app-recreate configured
+
+$ kubectl rollout status deployment/app-recreate --timeout=180s
+Waiting for deployment "app-recreate" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-recreate" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-recreate" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-recreate" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-recreate" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-recreate" rollout to finish: 0 out of 3 new replicas have been updated...
+Waiting for deployment "app-recreate" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "app-recreate" rollout to finish: 1 of 3 updated replicas are available...
+Waiting for deployment "app-recreate" rollout to finish: 2 of 3 updated replicas are available...
+deployment "app-recreate" successfully rolled out
+
+$ kubectl get rs -l app=app-recreate
+NAME                      DESIRED   CURRENT   READY   AGE
+app-recreate-6c78cb55bb   0         0         0       6s
+app-recreate-7bd8d89b8b   3         3         3       1s
+
+$ kubectl get pods -l app=app-recreate -L version -w --output-watch-events    # ran in the background during the update
+EVENT      NAME                            READY   STATUS    RESTARTS   AGE   VERSION
+ADDED      app-recreate-6c78cb55bb-56jp8   1/1     Running   0          2s    v1
+ADDED      app-recreate-6c78cb55bb-mn85t   1/1     Running   0          2s    v1
+ADDED      app-recreate-6c78cb55bb-t45xx   1/1     Running   0          2s    v1
+MODIFIED   app-recreate-6c78cb55bb-t45xx   1/1     Terminating   0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-56jp8   1/1     Terminating   0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-mn85t   1/1     Terminating   0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-t45xx   1/1     Terminating   0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-56jp8   1/1     Terminating   0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-mn85t   1/1     Terminating   0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-mn85t   0/1     Completed     0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-56jp8   0/1     Completed     0          5s    v1
+MODIFIED   app-recreate-6c78cb55bb-t45xx   0/1     Completed     0          5s    v1
+ADDED      app-recreate-7bd8d89b8b-7f5fk   0/1     Pending       0          0s    v2
+ADDED      app-recreate-7bd8d89b8b-plvgc   0/1     Pending       0          0s    v2
+ADDED      app-recreate-7bd8d89b8b-fgcfs   0/1     Pending       0          0s    v2
+MODIFIED   app-recreate-7bd8d89b8b-7f5fk   0/1     Pending       0          0s    v2
+MODIFIED   app-recreate-7bd8d89b8b-plvgc   0/1     Pending       0          0s    v2
+MODIFIED   app-recreate-7bd8d89b8b-fgcfs   0/1     Pending       0          0s    v2
+MODIFIED   app-recreate-7bd8d89b8b-7f5fk   0/1     ContainerCreating   0          0s    v2
+MODIFIED   app-recreate-7bd8d89b8b-fgcfs   0/1     ContainerCreating   0          0s    v2
+MODIFIED   app-recreate-7bd8d89b8b-plvgc   0/1     ContainerCreating   0          0s    v2
+MODIFIED   app-recreate-6c78cb55bb-mn85t   0/1     Completed           0          6s    v1
+DELETED    app-recreate-6c78cb55bb-mn85t   0/1     Completed           0          6s    v1
+MODIFIED   app-recreate-6c78cb55bb-56jp8   0/1     Completed           0          6s    v1
+DELETED    app-recreate-6c78cb55bb-56jp8   0/1     Completed           0          6s    v1
+MODIFIED   app-recreate-6c78cb55bb-t45xx   0/1     Completed           0          6s    v1
+DELETED    app-recreate-6c78cb55bb-t45xx   0/1     Completed           0          6s    v1
+MODIFIED   app-recreate-7bd8d89b8b-7f5fk   0/1     ContainerCreating   0          1s    v2
+MODIFIED   app-recreate-7bd8d89b8b-fgcfs   0/1     ContainerCreating   0          1s    v2
+MODIFIED   app-recreate-7bd8d89b8b-plvgc   0/1     ContainerCreating   0          1s    v2
+MODIFIED   app-recreate-7bd8d89b8b-7f5fk   1/1     Running             0          1s    v2
+MODIFIED   app-recreate-7bd8d89b8b-fgcfs   1/1     Running             0          1s    v2
+MODIFIED   app-recreate-7bd8d89b8b-plvgc   1/1     Running             0          1s    v2
+
+$ kubectl exec client -- sh -c '<240 requests, one every 0.25s, print VERSION or FAILED>' | uniq -c    # ran in parallel
+  13 VERSION: v1
+   3 FAILED (no answer)
+ 224 VERSION: v2
+
+$ kubectl get pods -l app=app-recreate -L version
+NAME                            READY   STATUS    RESTARTS   AGE   VERSION
+app-recreate-7bd8d89b8b-7f5fk   1/1     Running   0          62s   v2
+app-recreate-7bd8d89b8b-fgcfs   1/1     Running   0          62s   v2
+app-recreate-7bd8d89b8b-plvgc   1/1     Running   0          62s   v2
+
+$ kubectl describe deployment app-recreate
+Name:               app-recreate
+Namespace:          default
+CreationTimestamp:  Wed, 07 Oct 2026 22:43:37 +0530
+Labels:             app=app-recreate
+Annotations:        deployment.kubernetes.io/revision: 2
+Selector:           app=app-recreate
+Replicas:           3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:       Recreate
+MinReadySeconds:    0
+Pod Template:
+  Labels:  app=app-recreate
+           version=v2
+  Containers:
+   web:
+    Image:      nginx:1.25-alpine
+    Port:       80/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:     100m
+      memory:  64Mi
+    Requests:
+      cpu:         30m
+      memory:      32Mi
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  app-recreate-6c78cb55bb (0/0 replicas created)
+NewReplicaSet:   app-recreate-7bd8d89b8b (3/3 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  67s   deployment-controller  Scaled up replica set app-recreate-6c78cb55bb from 0 to 3
+  Normal  ScalingReplicaSet  62s   deployment-controller  Scaled down replica set app-recreate-6c78cb55bb from 3 to 0
+  Normal  ScalingReplicaSet  62s   deployment-controller  Scaled up replica set app-recreate-7bd8d89b8b from 0 to 3
+
+### Cleanup
+$ kubectl delete -f strategies/04-recreate/deployment-v2.yaml -f strategies/04-recreate/service.yaml
+deployment.apps "app-recreate" deleted from default namespace
+service "app-recreate-service" deleted from default namespace
+

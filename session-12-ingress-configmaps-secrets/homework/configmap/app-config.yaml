@@ -1,0 +1,18 @@
+# ConfigMap for the Yatri app. Same keys as the instructor's 01-configmap/app-config.yaml,
+# plus one file-style key (app.properties) that I mount as a file.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yatri-app-config
+  labels:
+    app: yatri-backend
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  PORT: "5000"
+  DEFAULT_CURRENCY: "INR"
+  MAX_BOOKING_DAYS: "30"
+  app.properties: |
+    feature.seat-map=enabled
+    feature.upi-payments=enabled
+    cache.ttl.seconds=120

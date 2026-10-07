@@ -1,0 +1,7 @@
+[run]
+branch = true
+source = app
+
+[report]
+show_missing = true
+skip_covered = false
