@@ -190,7 +190,7 @@ screenshots (Playwright/Chromium against the running app).
 | `outputs/screenshots/03-mobile-layout.png` | same page at 390 px width (responsive layout) |
 | `outputs/screenshots/04-grafana-dashboard.png` | Grafana dashboard with live data |
 
-**GitHub Actions run:** <!-- RUN-LINK: filled in after the first push -->
+**GitHub Actions run:** https://github.com/rudhar07/devops-heros/actions/runs/37704261656 (all 14 jobs green; details in the CI/CD section)
 
 ![TaskBoard through the Ingress](outputs/screenshots/02-kind-ingress-ui.png)
 
@@ -590,9 +590,40 @@ all 3 root workflows lint clean
 (actionlint 1.7.12 with shellcheck 0.11.0, so the `run:` scripts were shell-checked too.) I also ran
 the `compose-e2e` job's commands locally against the same images (`outputs/26-...`), ending in
 `Compose CRUD OK`, and every scanner command of jobs 1-8 with the same versions and config files
-(sections 6, 13). The actual GitHub run link goes here after the first push:
+(sections 6, 13).
 
-<!-- RUN-LINK: filled in after the first push -->
+**Successful GitHub run:** https://github.com/rudhar07/devops-heros/actions/runs/37704261656
+(push to `main`, commit `1de74af`). Result: **success**, all 14 jobs green:
+
+| Job | Result |
+|---|---|
+| Backend tests (pytest + coverage) | success |
+| Frontend tests + build (+ npm audit) | success |
+| IaC checks (terraform, helm lint, Trivy config) | success |
+| Secret scan (Gitleaks) | success |
+| SAST (Bandit) | success |
+| SCA (pip-audit + Trivy fs) | success |
+| Docker build (backend), Docker build (frontend) | success |
+| Image scan (Trivy, backend), Image scan (Trivy, frontend) | success |
+| Compose end-to-end (CRUD through nginx) | success |
+| Security gate | success |
+| Push images to GHCR | success |
+| Deploy to Kubernetes (kind + Helm), incl. `helm test` | success |
+
+It took three pushes to get there, and each failure was real:
+
+1. **Checkout failed in every job.** The instructor repo I merged had a submodule entry with no URL in
+   `.gitmodules`. I removed the broken entry.
+2. **The SAST job failed.** The Bandit report step asks for SARIF output, which needs the
+   `bandit[sarif]` extra. My local checks only produced JSON, so they never hit it. I fixed
+   `requirements-security.txt`.
+3. **The deploy job failed after the test passed.** The `helm test` pod had
+   `hook-delete-policy: hook-succeeded`, so it was deleted as soon as it passed, before
+   `helm test --logs` could read it. GitHub's runner is fast enough to lose that race every time, and
+   my laptop wasn't. I changed it to `before-hook-creation`.
+
+Lesson: running each tool locally is not the same as running the pipeline. Every one of these only
+showed up on the real runner.
 
 ---
 
