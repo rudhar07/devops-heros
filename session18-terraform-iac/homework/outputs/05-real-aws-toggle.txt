@@ -1,0 +1,19 @@
+# No AWS_* env vars set and no credentials file in ~/.aws on this machine.
+
+$ terraform plan -no-color -var use_localstack=false 2>&1 | tail -15
+Error: No valid credential sources found
+
+  with provider["registry.terraform.io/hashicorp/aws"],
+  on provider.tf line 25, in provider "aws":
+  25: provider "aws" {
+
+Please see https://registry.terraform.io/providers/hashicorp/aws
+for more information about providing credentials.
+
+Error: failed to refresh cached credentials, no EC2 IMDS role found,
+operation error ec2imds: GetMetadata, exceeded maximum number of attempts, 3,
+request send failed, Get
+"http://169.254.169.254/latest/meta-data/iam/security-credentials/": dial tcp
+169.254.169.254:80: connect: host is down
+
+

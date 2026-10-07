@@ -1,0 +1,10 @@
+$ aws --endpoint-url http://localhost:4566 rds describe-db-instances; echo "exit code: $?"
+
+aws: [ERROR]: An error occurred (InternalFailure) when calling the DescribeDBInstances operation: The API for service rds is either not included in your current license plan or has not yet been emulated by LocalStack.
+exit code: 254
+
+$ docker logs hw-localstack 2>&1 | grep -i rds | tail -3
+  We move towards a unified LocalStack for AWS image in March 2026.
+2026-10-07T16:29:06.874  INFO --- [et.reactor-1] l.aws.handlers.service     : The API for service rds is either not included in your current license plan or has not yet been emulated by LocalStack.
+2026-10-07T16:29:06.876  INFO --- [et.reactor-1] localstack.request.aws     : AWS rds.DescribeDBInstances => 501 (InternalFailure)
+

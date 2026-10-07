@@ -1,0 +1,11 @@
+# Homework override of the session-level .gitignore:
+# terraform.tfvars here holds no secrets (only LocalStack/demo settings) and the
+# dependency lock file should be committed, so re-include both.
+!terraform.tfvars
+!.terraform.lock.hcl
+
+# State, plans and provider binaries still never go into Git.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

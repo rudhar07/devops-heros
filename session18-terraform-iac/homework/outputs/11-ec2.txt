@@ -1,0 +1,149 @@
+# AWS CLI against LocalStack 4.14.0 (fake creds). EC2 here is emulated: instances are records in LocalStack, no VM boots.
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-regions --query 'Regions[?RegionName==`ap-south-1`]'
+[
+    {
+        "OptInStatus": "opt-in-not-required",
+        "RegionName": "ap-south-1",
+        "Endpoint": "ec2.ap-south-1.amazonaws.com"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-availability-zones --query 'AvailabilityZones[].{Zone:ZoneName,State:State}' --output table
+------------------------------
+|  DescribeAvailabilityZones |
++------------+---------------+
+|    State   |     Zone      |
++------------+---------------+
+|  available |  ap-south-1a  |
+|  available |  ap-south-1b  |
+|  available |  ap-south-1c  |
++------------+---------------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-images --owners amazon --query 'Images[:5].{ImageId:ImageId,Name:Name,Arch:Architecture}' --output table
+-------------------------------------------------------------------------------------------------
+|                                        DescribeImages                                         |
++--------+---------------+----------------------------------------------------------------------+
+|  Arch  |    ImageId    |                                Name                                  |
++--------+---------------+----------------------------------------------------------------------+
+|  x86_64|  ami-03cf127a |  Windows_Server-2016-English-Nano-Base-2017.10.13                    |
+|  x86_64|  ami-12c6146b |  Windows_Server-2008-R2_SP1-English-64Bit-Base-2017.10.13            |
+|  x86_64|  ami-1812c061 |  Windows_Server-2016-English-Full-SQL_2016_SP1_Standard-2017.10.13   |
+|  x86_64|  ami-1e749f67 |  ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-20170727     |
+|  x86_64|  ami-1ecc1e67 |  Windows_Server-2012-R2_RTM-English-64Bit-Base-2017.10.13            |
++--------+---------------+----------------------------------------------------------------------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-instance-types --instance-types t3.micro t3.large m5.large c5.large r5.large --query 'InstanceTypes[].{Type:InstanceType,vCPU:VCpuInfo.DefaultVCpus,MemMiB:MemoryInfo.SizeInMiB}' --output table
+--------------------------------
+|     DescribeInstanceTypes    |
++--------+------------+--------+
+| MemMiB |   Type     | vCPU   |
++--------+------------+--------+
+|  4096  |  c5.large  |  2     |
+|  8192  |  m5.large  |  2     |
+|  16384 |  r5.large  |  2     |
+|  8192  |  t3.large  |  2     |
+|  1024  |  t3.micro  |  2     |
++--------+------------+--------+
+
+# The private key in KeyMaterial is LocalStack-generated and thrown away; I only print the name and fingerprint.
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-key-pair --key-name hw18-key --query '{KeyName:KeyName,Fingerprint:KeyFingerprint}'
+{
+    "KeyName": "hw18-key",
+    "Fingerprint": "72:59:89:55:7f:b0:31:fe:b4:da:ac:6b:41:c4:4a:33:e1:a8:bb:ab"
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[].{VpcId:VpcId,Cidr:CidrBlock}'
+[
+    {
+        "VpcId": "vpc-f97242ec786e03865",
+        "Cidr": "172.31.0.0/16"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-security-group --group-name hw18-web-sg --description 'web: 80 from anywhere, 22 from one IP' --vpc-id vpc-f97242ec786e03865
+{
+    "GroupId": "sg-a71f81cfbe1118cfa",
+    "SecurityGroupArn": "arn:aws:ec2:ap-south-1:000000000000:security-group/sg-a71f81cfbe1118cfa"
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 authorize-security-group-ingress --group-id sg-a71f81cfbe1118cfa --protocol tcp --port 80 --cidr 0.0.0.0/0 --query 'SecurityGroupRules[].{Port:FromPort,Cidr:CidrIpv4}'
+[
+    {
+        "Port": 80,
+        "Cidr": "0.0.0.0/0"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 authorize-security-group-ingress --group-id sg-a71f81cfbe1118cfa --protocol tcp --port 22 --cidr 203.0.113.10/32 --query 'SecurityGroupRules[].{Port:FromPort,Cidr:CidrIpv4}'
+[
+    {
+        "Port": 22,
+        "Cidr": "203.0.113.10/32"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 run-instances --image-id ami-03cf127a --instance-type t3.micro --key-name hw18-key --security-group-ids sg-a71f81cfbe1118cfa --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=8,VolumeType=gp3}' --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=hw18-web}]' --query 'Instances[0].{Id:InstanceId,State:State.Name,Type:InstanceType,PrivateIp:PrivateIpAddress}'
+{
+    "Id": "i-77be17123b544599e",
+    "State": "pending",
+    "Type": "t3.micro",
+    "PrivateIp": "10.186.201.15"
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-instances --instance-ids i-77be17123b544599e --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress,Key:KeyName,AZ:Placement.AvailabilityZone}'
+[
+    {
+        "Id": "i-77be17123b544599e",
+        "State": "running",
+        "PrivateIp": "10.186.201.15",
+        "PublicIp": "54.214.107.163",
+        "Key": "hw18-key",
+        "AZ": "ap-south-1a"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-volume --availability-zone ap-south-1a --size 10 --volume-type gp3 --query '{VolumeId:VolumeId,Size:Size,Type:VolumeType,State:State}'
+{
+    "VolumeId": "vol-e8b6f45eb9cc1ed5a",
+    "Size": 10,
+    "Type": "gp3",
+    "State": "creating"
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 stop-instances --instance-ids i-77be17123b544599e --query 'StoppingInstances[].{Id:InstanceId,From:PreviousState.Name,To:CurrentState.Name}'
+[
+    {
+        "Id": "i-77be17123b544599e",
+        "From": "running",
+        "To": "stopping"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 start-instances --instance-ids i-77be17123b544599e --query 'StartingInstances[].{Id:InstanceId,From:PreviousState.Name,To:CurrentState.Name}'
+[
+    {
+        "Id": "i-77be17123b544599e",
+        "From": "stopped",
+        "To": "pending"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 terminate-instances --instance-ids i-77be17123b544599e --query 'TerminatingInstances[].{Id:InstanceId,From:PreviousState.Name,To:CurrentState.Name}'
+[
+    {
+        "Id": "i-77be17123b544599e",
+        "From": "running",
+        "To": "shutting-down"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 delete-security-group --group-id sg-a71f81cfbe1118cfa
+
+$ aws --endpoint-url http://localhost:4566 ec2 delete-key-pair --key-name hw18-key
+{
+    "Return": true,
+    "KeyPairId": "key-776354d5d10706a6d"
+}
+

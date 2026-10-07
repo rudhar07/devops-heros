@@ -1,0 +1,75 @@
+$ python3 -c "import json; s=json.load(open('terraform.tfstate')); print('version', s['version'], '| terraform_version', s['terraform_version'], '| serial', s['serial']); print('lineage', s['lineage']); [print(' ', r['mode'], r['type']+'.'+r['name'], '->', r['instances'][0]['attributes']['id']) for r in s['resources']]"
+version 4 | terraform_version 1.16.4 | serial 5
+lineage 07fe7caf-cf24-2596-b3cc-7617b35b601b
+  managed aws_s3_bucket.demo -> rudhar-session18-tf-demo-10143
+  managed aws_s3_bucket_public_access_block.demo -> rudhar-session18-tf-demo-10143
+  managed aws_s3_bucket_server_side_encryption_configuration.demo -> rudhar-session18-tf-demo-10143
+  managed aws_s3_bucket_versioning.demo -> rudhar-session18-tf-demo-10143
+
+$ terraform plan -no-color
+aws_s3_bucket.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_public_access_block.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_server_side_encryption_configuration.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_versioning.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.
+
+$ terraform plan -no-color -var environment=staging
+aws_s3_bucket.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_versioning.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_public_access_block.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_server_side_encryption_configuration.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  ~ update in-place
+
+Terraform will perform the following actions:
+
+  # aws_s3_bucket.demo will be updated in-place
+  ~ resource "aws_s3_bucket" "demo" {
+        id                          = "rudhar-session18-tf-demo-10143"
+      ~ tags                        = {
+          ~ "Environment" = "dev" -> "staging"
+            "Name"        = "rudhar-session18-tf-demo-10143"
+            "Project"     = "Session18"
+        }
+      ~ tags_all                    = {
+          ~ "Environment" = "dev" -> "staging"
+            # (4 unchanged elements hidden)
+        }
+        # (14 unchanged attributes hidden)
+
+        # (3 unchanged blocks hidden)
+    }
+
+Plan: 0 to add, 1 to change, 0 to destroy.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
+
+$ terraform plan -no-color -var bucket_name=rudhar-session18-renamed-10143 2>&1 | grep -E "^  #|must be replaced|forces replacement|^Plan:"
+  # aws_s3_bucket.demo must be replaced
+      ~ bucket                      = "rudhar-session18-tf-demo-10143" -> "rudhar-session18-renamed-10143" # forces replacement
+  # aws_s3_bucket_public_access_block.demo must be replaced
+      ~ bucket                  = "rudhar-session18-tf-demo-10143" -> (known after apply) # forces replacement
+  # aws_s3_bucket_server_side_encryption_configuration.demo must be replaced
+      ~ bucket                = "rudhar-session18-tf-demo-10143" -> (known after apply) # forces replacement
+  # aws_s3_bucket_versioning.demo must be replaced
+      ~ bucket                = "rudhar-session18-tf-demo-10143" -> (known after apply) # forces replacement
+Plan: 4 to add, 0 to change, 4 to destroy.
+
+$ terraform plan -no-color -var bucket_name=rudhar-session18-renamed-10143 2>&1 | grep -E "indicated with|^-/\+|^  -/\+|resource \"aws_s3_bucket\" \"demo\""
+plan. Resource actions are indicated with the following symbols:
+-/+ destroy and then create replacement
+-/+ resource "aws_s3_bucket" "demo" {
+-/+ resource "aws_s3_bucket_public_access_block" "demo" {
+-/+ resource "aws_s3_bucket_server_side_encryption_configuration" "demo" {
+-/+ resource "aws_s3_bucket_versioning" "demo" {
+
+(Neither of the two -var plans above was applied; the next file shows the destroy.)

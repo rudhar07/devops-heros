@@ -1,0 +1,127 @@
+# AWS CLI against LocalStack 4.14.0 (fake creds test/test). Policy files are in aws-services/01-iam/.
+
+$ cat s3-readonly-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListTheReportsBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::hw18-reports"
+    },
+    {
+      "Sid": "ReadObjectsInIt",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::hw18-reports/*"
+    }
+  ]
+}
+
+$ aws --endpoint-url http://localhost:4566 iam create-group --group-name hw18-developers --query 'Group.{Name:GroupName,Arn:Arn}'
+{
+    "Name": "hw18-developers",
+    "Arn": "arn:aws:iam::000000000000:group/hw18-developers"
+}
+
+$ aws --endpoint-url http://localhost:4566 iam create-user --user-name hw18-alice --tags Key=Team,Value=dev --query 'User.{Name:UserName,Arn:Arn}'
+{
+    "Name": "hw18-alice",
+    "Arn": "arn:aws:iam::000000000000:user/hw18-alice"
+}
+
+$ aws --endpoint-url http://localhost:4566 iam add-user-to-group --group-name hw18-developers --user-name hw18-alice
+
+$ aws --endpoint-url http://localhost:4566 iam create-policy --policy-name hw18-s3-reports-readonly --policy-document file://s3-readonly-policy.json --query 'Policy.{Name:PolicyName,Arn:Arn,Version:DefaultVersionId}'
+{
+    "Name": "hw18-s3-reports-readonly",
+    "Arn": "arn:aws:iam::000000000000:policy/hw18-s3-reports-readonly",
+    "Version": "v1"
+}
+
+$ aws --endpoint-url http://localhost:4566 iam attach-group-policy --group-name hw18-developers --policy-arn arn:aws:iam::000000000000:policy/hw18-s3-reports-readonly
+
+$ aws --endpoint-url http://localhost:4566 iam get-group --group-name hw18-developers --query '{Group:Group.GroupName,Users:Users[].UserName}'
+{
+    "Group": "hw18-developers",
+    "Users": [
+        "hw18-alice"
+    ]
+}
+
+$ aws --endpoint-url http://localhost:4566 iam list-attached-group-policies --group-name hw18-developers
+{
+    "AttachedPolicies": [
+        {
+            "PolicyName": "hw18-s3-reports-readonly",
+            "PolicyArn": "arn:aws:iam::000000000000:policy/hw18-s3-reports-readonly"
+        }
+    ]
+}
+
+$ aws --endpoint-url http://localhost:4566 iam list-groups-for-user --user-name hw18-alice --query 'Groups[].GroupName'
+[
+    "hw18-developers"
+]
+
+$ cat ec2-trust-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Principal": { "Service": "ec2.amazonaws.com" }, "Action": "sts:AssumeRole" }
+  ]
+}
+
+$ aws --endpoint-url http://localhost:4566 iam create-role --role-name hw18-ec2-app-role --assume-role-policy-document file://ec2-trust-policy.json --query 'Role.{Name:RoleName,Arn:Arn}'
+{
+    "Name": "hw18-ec2-app-role",
+    "Arn": "arn:aws:iam::000000000000:role/hw18-ec2-app-role"
+}
+
+$ aws --endpoint-url http://localhost:4566 iam attach-role-policy --role-name hw18-ec2-app-role --policy-arn arn:aws:iam::000000000000:policy/hw18-s3-reports-readonly
+
+$ aws --endpoint-url http://localhost:4566 iam list-attached-role-policies --role-name hw18-ec2-app-role
+{
+    "AttachedPolicies": [
+        {
+            "PolicyName": "hw18-s3-reports-readonly",
+            "PolicyArn": "arn:aws:iam::000000000000:policy/hw18-s3-reports-readonly"
+        }
+    ]
+}
+
+$ aws --endpoint-url http://localhost:4566 iam simulate-principal-policy --policy-source-arn arn:aws:iam::000000000000:user/hw18-alice --action-names s3:GetObject s3:DeleteObject --resource-arns arn:aws:s3:::hw18-reports/q3.csv --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+-------------------------------------
+|      SimulatePrincipalPolicy      |
++------------------+----------------+
+|      Action      |   Decision     |
++------------------+----------------+
+|  s3:GetObject    |  explicitDeny  |
+|  s3:DeleteObject |  explicitDeny  |
++------------------+----------------+
+
+# NOTE: real AWS would say GetObject=allowed, DeleteObject=implicitDeny here. LocalStack's answer looked wrong,
+# so I tried two more things below to find out why.
+
+$ aws --endpoint-url http://localhost:4566 iam simulate-custom-policy --policy-input-list file://s3-readonly-policy.json --action-names s3:GetObject s3:DeleteObject s3:ListBucket --resource-arns arn:aws:s3:::hw18-reports/q3.csv --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+
+aws: [ERROR]: An error occurred (InternalFailure) when calling the SimulateCustomPolicy operation: The simulate_custom_policy action has not been implemented
+
+# Checking whether it is just group membership: attach the same policy directly to the user and simulate again.
+
+$ aws --endpoint-url http://localhost:4566 iam attach-user-policy --user-name hw18-alice --policy-arn arn:aws:iam::000000000000:policy/hw18-s3-reports-readonly
+
+$ aws --endpoint-url http://localhost:4566 iam simulate-principal-policy --policy-source-arn arn:aws:iam::000000000000:user/hw18-alice --action-names s3:GetObject s3:DeleteObject --resource-arns arn:aws:s3:::hw18-reports/q3.csv --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
+-------------------------------------
+|      SimulatePrincipalPolicy      |
++------------------+----------------+
+|      Action      |   Decision     |
++------------------+----------------+
+|  s3:GetObject    |  explicitDeny  |
+|  s3:DeleteObject |  explicitDeny  |
++------------------+----------------+
+
+# RESULT: even with the policy attached straight to the user, LocalStack community answers explicitDeny for
+# everything, and simulate-custom-policy is not implemented. LocalStack community stores IAM objects but does
+# not evaluate/enforce policies, so the allow/deny check stays conceptual (see 01-iam/README.md).

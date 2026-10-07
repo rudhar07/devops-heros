@@ -1,0 +1,260 @@
+$ terraform plan -destroy -no-color
+aws_s3_bucket.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_server_side_encryption_configuration.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_public_access_block.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_versioning.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  - destroy
+
+Terraform will perform the following actions:
+
+  # aws_s3_bucket.demo will be destroyed
+  - resource "aws_s3_bucket" "demo" {
+      - arn                         = "arn:aws:s3:::rudhar-session18-tf-demo-10143" -> null
+      - bucket                      = "rudhar-session18-tf-demo-10143" -> null
+      - bucket_domain_name          = "rudhar-session18-tf-demo-10143.s3.amazonaws.com" -> null
+      - bucket_namespace            = "global" -> null
+      - bucket_region               = "ap-south-1" -> null
+      - bucket_regional_domain_name = "rudhar-session18-tf-demo-10143.s3.ap-south-1.amazonaws.com" -> null
+      - force_destroy               = true -> null
+      - hosted_zone_id              = "Z11RGJOFQNVJUP" -> null
+      - id                          = "rudhar-session18-tf-demo-10143" -> null
+      - object_lock_enabled         = false -> null
+      - region                      = "ap-south-1" -> null
+      - request_payer               = "BucketOwner" -> null
+      - tags                        = {
+          - "Environment" = "dev"
+          - "Name"        = "rudhar-session18-tf-demo-10143"
+          - "Project"     = "Session18"
+        } -> null
+      - tags_all                    = {
+          - "Environment" = "dev"
+          - "ManagedBy"   = "Terraform"
+          - "Name"        = "rudhar-session18-tf-demo-10143"
+          - "Owner"       = "rudhar-bajaj"
+          - "Project"     = "Session18"
+        } -> null
+        # (3 unchanged attributes hidden)
+
+      - grant {
+          - id          = "75aa57f09aa0c8caeab4f8c24e99d10f8e7faeebf76c078efc7c6caea54ba06a" -> null
+          - permissions = [
+              - "FULL_CONTROL",
+            ] -> null
+          - type        = "CanonicalUser" -> null
+            # (1 unchanged attribute hidden)
+        }
+
+      - server_side_encryption_configuration {
+          - rule {
+              - bucket_key_enabled = false -> null
+
+              - apply_server_side_encryption_by_default {
+                  - sse_algorithm     = "AES256" -> null
+                    # (1 unchanged attribute hidden)
+                }
+            }
+        }
+
+      - versioning {
+          - enabled    = true -> null
+          - mfa_delete = false -> null
+        }
+    }
+
+  # aws_s3_bucket_public_access_block.demo will be destroyed
+  - resource "aws_s3_bucket_public_access_block" "demo" {
+      - block_public_acls       = true -> null
+      - block_public_policy     = true -> null
+      - bucket                  = "rudhar-session18-tf-demo-10143" -> null
+      - id                      = "rudhar-session18-tf-demo-10143" -> null
+      - ignore_public_acls      = true -> null
+      - region                  = "ap-south-1" -> null
+      - restrict_public_buckets = true -> null
+    }
+
+  # aws_s3_bucket_server_side_encryption_configuration.demo will be destroyed
+  - resource "aws_s3_bucket_server_side_encryption_configuration" "demo" {
+      - bucket                = "rudhar-session18-tf-demo-10143" -> null
+      - id                    = "rudhar-session18-tf-demo-10143" -> null
+      - region                = "ap-south-1" -> null
+        # (1 unchanged attribute hidden)
+
+      - rule {
+          - blocked_encryption_types = [] -> null
+          - bucket_key_enabled       = false -> null
+
+          - apply_server_side_encryption_by_default {
+              - sse_algorithm     = "AES256" -> null
+                # (1 unchanged attribute hidden)
+            }
+        }
+    }
+
+  # aws_s3_bucket_versioning.demo will be destroyed
+  - resource "aws_s3_bucket_versioning" "demo" {
+      - bucket                = "rudhar-session18-tf-demo-10143" -> null
+      - id                    = "rudhar-session18-tf-demo-10143" -> null
+      - region                = "ap-south-1" -> null
+        # (1 unchanged attribute hidden)
+
+      - versioning_configuration {
+          - mfa_delete = "Disabled" -> null
+          - status     = "Enabled" -> null
+        }
+    }
+
+Plan: 0 to add, 0 to change, 4 to destroy.
+
+Changes to Outputs:
+  - bucket_arn        = "arn:aws:s3:::rudhar-session18-tf-demo-10143" -> null
+  - bucket_name       = "rudhar-session18-tf-demo-10143" -> null
+  - bucket_region     = "ap-south-1" -> null
+  - target            = "LocalStack (http://localhost:4566)" -> null
+  - versioning_status = "Enabled" -> null
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
+
+$ terraform destroy -auto-approve -no-color
+aws_s3_bucket.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_server_side_encryption_configuration.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_versioning.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_public_access_block.demo: Refreshing state... [id=rudhar-session18-tf-demo-10143]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  - destroy
+
+Terraform will perform the following actions:
+
+  # aws_s3_bucket.demo will be destroyed
+  - resource "aws_s3_bucket" "demo" {
+      - arn                         = "arn:aws:s3:::rudhar-session18-tf-demo-10143" -> null
+      - bucket                      = "rudhar-session18-tf-demo-10143" -> null
+      - bucket_domain_name          = "rudhar-session18-tf-demo-10143.s3.amazonaws.com" -> null
+      - bucket_namespace            = "global" -> null
+      - bucket_region               = "ap-south-1" -> null
+      - bucket_regional_domain_name = "rudhar-session18-tf-demo-10143.s3.ap-south-1.amazonaws.com" -> null
+      - force_destroy               = true -> null
+      - hosted_zone_id              = "Z11RGJOFQNVJUP" -> null
+      - id                          = "rudhar-session18-tf-demo-10143" -> null
+      - object_lock_enabled         = false -> null
+      - region                      = "ap-south-1" -> null
+      - request_payer               = "BucketOwner" -> null
+      - tags                        = {
+          - "Environment" = "dev"
+          - "Name"        = "rudhar-session18-tf-demo-10143"
+          - "Project"     = "Session18"
+        } -> null
+      - tags_all                    = {
+          - "Environment" = "dev"
+          - "ManagedBy"   = "Terraform"
+          - "Name"        = "rudhar-session18-tf-demo-10143"
+          - "Owner"       = "rudhar-bajaj"
+          - "Project"     = "Session18"
+        } -> null
+        # (3 unchanged attributes hidden)
+
+      - grant {
+          - id          = "75aa57f09aa0c8caeab4f8c24e99d10f8e7faeebf76c078efc7c6caea54ba06a" -> null
+          - permissions = [
+              - "FULL_CONTROL",
+            ] -> null
+          - type        = "CanonicalUser" -> null
+            # (1 unchanged attribute hidden)
+        }
+
+      - server_side_encryption_configuration {
+          - rule {
+              - bucket_key_enabled = false -> null
+
+              - apply_server_side_encryption_by_default {
+                  - sse_algorithm     = "AES256" -> null
+                    # (1 unchanged attribute hidden)
+                }
+            }
+        }
+
+      - versioning {
+          - enabled    = true -> null
+          - mfa_delete = false -> null
+        }
+    }
+
+  # aws_s3_bucket_public_access_block.demo will be destroyed
+  - resource "aws_s3_bucket_public_access_block" "demo" {
+      - block_public_acls       = true -> null
+      - block_public_policy     = true -> null
+      - bucket                  = "rudhar-session18-tf-demo-10143" -> null
+      - id                      = "rudhar-session18-tf-demo-10143" -> null
+      - ignore_public_acls      = true -> null
+      - region                  = "ap-south-1" -> null
+      - restrict_public_buckets = true -> null
+    }
+
+  # aws_s3_bucket_server_side_encryption_configuration.demo will be destroyed
+  - resource "aws_s3_bucket_server_side_encryption_configuration" "demo" {
+      - bucket                = "rudhar-session18-tf-demo-10143" -> null
+      - id                    = "rudhar-session18-tf-demo-10143" -> null
+      - region                = "ap-south-1" -> null
+        # (1 unchanged attribute hidden)
+
+      - rule {
+          - blocked_encryption_types = [] -> null
+          - bucket_key_enabled       = false -> null
+
+          - apply_server_side_encryption_by_default {
+              - sse_algorithm     = "AES256" -> null
+                # (1 unchanged attribute hidden)
+            }
+        }
+    }
+
+  # aws_s3_bucket_versioning.demo will be destroyed
+  - resource "aws_s3_bucket_versioning" "demo" {
+      - bucket                = "rudhar-session18-tf-demo-10143" -> null
+      - id                    = "rudhar-session18-tf-demo-10143" -> null
+      - region                = "ap-south-1" -> null
+        # (1 unchanged attribute hidden)
+
+      - versioning_configuration {
+          - mfa_delete = "Disabled" -> null
+          - status     = "Enabled" -> null
+        }
+    }
+
+Plan: 0 to add, 0 to change, 4 to destroy.
+
+Changes to Outputs:
+  - bucket_arn        = "arn:aws:s3:::rudhar-session18-tf-demo-10143" -> null
+  - bucket_name       = "rudhar-session18-tf-demo-10143" -> null
+  - bucket_region     = "ap-south-1" -> null
+  - target            = "LocalStack (http://localhost:4566)" -> null
+  - versioning_status = "Enabled" -> null
+aws_s3_bucket_server_side_encryption_configuration.demo: Destroying... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_public_access_block.demo: Destroying... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_versioning.demo: Destroying... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_versioning.demo: Destruction complete after 0s
+aws_s3_bucket_server_side_encryption_configuration.demo: Destruction complete after 0s
+aws_s3_bucket_public_access_block.demo: Destruction complete after 0s
+aws_s3_bucket.demo: Destroying... [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket.demo: Destruction complete after 0s
+
+Destroy complete! Resources: 4 destroyed.
+
+$ terraform state list; echo "state list exit code: $? (empty = nothing tracked)"
+state list exit code: 0 (empty = nothing tracked)
+
+$ aws --endpoint-url http://localhost:4566 s3 ls; echo "s3 ls exit code: $?"
+s3 ls exit code: 0
+
+$ aws --endpoint-url http://localhost:4566 s3api head-bucket --bucket rudhar-session18-tf-demo-10143; echo "head-bucket exit code: $?"
+
+aws: [ERROR]: An error occurred (404) when calling the HeadBucket operation: Not Found
+head-bucket exit code: 254
+

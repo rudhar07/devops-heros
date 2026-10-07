@@ -1,0 +1,353 @@
+$ terraform version
+Terraform v1.16.4
+on darwin_arm64
+
+Your version of Terraform is out of date! The latest version
+is 1.16.5. You can update by downloading from https://developer.hashicorp.com/terraform/install
+
+$ curl -s http://localhost:4566/_localstack/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[\"edition\"], d[\"version\"]); [print(\" \",k,v) for k,v in d[\"services\"].items() if v!=\"disabled\"]"
+community 4.14.0
+  dynamodb available
+  dynamodbstreams available
+  ec2 available
+  iam available
+  kinesis available
+  s3 available
+  sts available
+
+$ terraform init -no-color
+Initializing the backend...
+
+Initializing provider plugins...
+- Finding hashicorp/aws versions matching "~> 6.0"...
+- Installing hashicorp/aws v6.67.0...
+- Installed hashicorp/aws v6.67.0 (signed by HashiCorp)
+
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+
+You may now begin working with Terraform. Try running "terraform plan" to see
+any changes that are required for your infrastructure. All Terraform commands
+should now work.
+
+If you ever set or change modules or backend configuration for Terraform,
+rerun this command to reinitialize your working directory. If you forget, other
+commands will detect it and remind you to do so if necessary.
+
+$ terraform fmt -recursive; echo "fmt exit code: $?"
+fmt exit code: 0
+
+$ terraform fmt -check -diff; echo "fmt -check exit code: $?"
+fmt -check exit code: 0
+
+$ terraform validate -no-color
+Success! The configuration is valid.
+
+
+$ terraform plan -no-color -out=tfplan
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # aws_s3_bucket.demo will be created
+  + resource "aws_s3_bucket" "demo" {
+      + acceleration_status         = (known after apply)
+      + acl                         = (known after apply)
+      + arn                         = (known after apply)
+      + bucket                      = "rudhar-session18-tf-demo-10143"
+      + bucket_domain_name          = (known after apply)
+      + bucket_namespace            = (known after apply)
+      + bucket_prefix               = (known after apply)
+      + bucket_region               = (known after apply)
+      + bucket_regional_domain_name = (known after apply)
+      + force_destroy               = true
+      + hosted_zone_id              = (known after apply)
+      + id                          = (known after apply)
+      + object_lock_enabled         = (known after apply)
+      + policy                      = (known after apply)
+      + region                      = "ap-south-1"
+      + request_payer               = (known after apply)
+      + tags                        = {
+          + "Environment" = "dev"
+          + "Name"        = "rudhar-session18-tf-demo-10143"
+          + "Project"     = "Session18"
+        }
+      + tags_all                    = {
+          + "Environment" = "dev"
+          + "ManagedBy"   = "Terraform"
+          + "Name"        = "rudhar-session18-tf-demo-10143"
+          + "Owner"       = "rudhar-bajaj"
+          + "Project"     = "Session18"
+        }
+      + website_domain              = (known after apply)
+      + website_endpoint            = (known after apply)
+
+      + cors_rule (known after apply)
+
+      + grant (known after apply)
+
+      + lifecycle_rule (known after apply)
+
+      + logging (known after apply)
+
+      + object_lock_configuration (known after apply)
+
+      + replication_configuration (known after apply)
+
+      + server_side_encryption_configuration (known after apply)
+
+      + versioning (known after apply)
+
+      + website (known after apply)
+    }
+
+  # aws_s3_bucket_public_access_block.demo will be created
+  + resource "aws_s3_bucket_public_access_block" "demo" {
+      + block_public_acls       = true
+      + block_public_policy     = true
+      + bucket                  = (known after apply)
+      + id                      = (known after apply)
+      + ignore_public_acls      = true
+      + region                  = "ap-south-1"
+      + restrict_public_buckets = true
+    }
+
+  # aws_s3_bucket_server_side_encryption_configuration.demo will be created
+  + resource "aws_s3_bucket_server_side_encryption_configuration" "demo" {
+      + bucket = (known after apply)
+      + id     = (known after apply)
+      + region = "ap-south-1"
+
+      + rule {
+          + blocked_encryption_types = (known after apply)
+          + bucket_key_enabled       = (known after apply)
+
+          + apply_server_side_encryption_by_default {
+              + kms_master_key_id = (known after apply)
+              + sse_algorithm     = "AES256"
+            }
+        }
+    }
+
+  # aws_s3_bucket_versioning.demo will be created
+  + resource "aws_s3_bucket_versioning" "demo" {
+      + bucket = (known after apply)
+      + id     = (known after apply)
+      + region = "ap-south-1"
+
+      + versioning_configuration {
+          + mfa_delete = (known after apply)
+          + status     = "Enabled"
+        }
+    }
+
+Plan: 4 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + bucket_arn        = (known after apply)
+  + bucket_name       = "rudhar-session18-tf-demo-10143"
+  + bucket_region     = "ap-south-1"
+  + target            = "LocalStack (http://localhost:4566)"
+  + versioning_status = "Enabled"
+
+─────────────────────────────────────────────────────────────────────────────
+
+Saved the plan to: tfplan
+
+To perform exactly these actions, run the following command to apply:
+    terraform apply "tfplan"
+
+$ terraform apply -no-color tfplan
+aws_s3_bucket.demo: Creating...
+aws_s3_bucket.demo: Creation complete after 1s [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_public_access_block.demo: Creating...
+aws_s3_bucket_versioning.demo: Creating...
+aws_s3_bucket_server_side_encryption_configuration.demo: Creating...
+aws_s3_bucket_public_access_block.demo: Creation complete after 0s [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_server_side_encryption_configuration.demo: Creation complete after 0s [id=rudhar-session18-tf-demo-10143]
+aws_s3_bucket_versioning.demo: Creation complete after 1s [id=rudhar-session18-tf-demo-10143]
+
+Apply complete! Resources: 4 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+bucket_arn = "arn:aws:s3:::rudhar-session18-tf-demo-10143"
+bucket_name = "rudhar-session18-tf-demo-10143"
+bucket_region = "ap-south-1"
+target = "LocalStack (http://localhost:4566)"
+versioning_status = "Enabled"
+
+$ ls -la
+total 80
+drwxr-xr-x@ 11 rudhar  staff   352 Oct  7 21:54 .
+drwxr-xr-x@  6 rudhar  staff   192 Oct  7 21:53 ..
+drwxr-xr-x@  3 rudhar  staff    96 Oct  7 21:54 .terraform
+-rw-r--r--@  1 rudhar  staff  1481 Oct  7 21:54 .terraform.lock.hcl
+-rw-r--r--@  1 rudhar  staff  1197 Oct  7 21:53 main.tf
+-rw-r--r--@  1 rudhar  staff   659 Oct  7 21:53 outputs.tf
+-rw-r--r--@  1 rudhar  staff  2063 Oct  7 21:53 provider.tf
+-rw-r--r--@  1 rudhar  staff  7239 Oct  7 21:54 terraform.tfstate
+-rw-r--r--@  1 rudhar  staff   255 Oct  7 21:53 terraform.tfvars
+-rw-r--r--@  1 rudhar  staff  5917 Oct  7 21:54 tfplan
+-rw-r--r--@  1 rudhar  staff  1117 Oct  7 21:53 variables.tf
+
+$ terraform state list
+aws_s3_bucket.demo
+aws_s3_bucket_public_access_block.demo
+aws_s3_bucket_server_side_encryption_configuration.demo
+aws_s3_bucket_versioning.demo
+
+$ terraform show -no-color
+# aws_s3_bucket.demo:
+resource "aws_s3_bucket" "demo" {
+    acceleration_status         = null
+    arn                         = "arn:aws:s3:::rudhar-session18-tf-demo-10143"
+    bucket                      = "rudhar-session18-tf-demo-10143"
+    bucket_domain_name          = "rudhar-session18-tf-demo-10143.s3.amazonaws.com"
+    bucket_namespace            = "global"
+    bucket_prefix               = null
+    bucket_region               = "ap-south-1"
+    bucket_regional_domain_name = "rudhar-session18-tf-demo-10143.s3.ap-south-1.amazonaws.com"
+    force_destroy               = true
+    hosted_zone_id              = "Z11RGJOFQNVJUP"
+    id                          = "rudhar-session18-tf-demo-10143"
+    object_lock_enabled         = false
+    policy                      = null
+    region                      = "ap-south-1"
+    request_payer               = "BucketOwner"
+    tags                        = {
+        "Environment" = "dev"
+        "Name"        = "rudhar-session18-tf-demo-10143"
+        "Project"     = "Session18"
+    }
+    tags_all                    = {
+        "Environment" = "dev"
+        "ManagedBy"   = "Terraform"
+        "Name"        = "rudhar-session18-tf-demo-10143"
+        "Owner"       = "rudhar-bajaj"
+        "Project"     = "Session18"
+    }
+
+    grant {
+        id          = "75aa57f09aa0c8caeab4f8c24e99d10f8e7faeebf76c078efc7c6caea54ba06a"
+        permissions = [
+            "FULL_CONTROL",
+        ]
+        type        = "CanonicalUser"
+        uri         = null
+    }
+
+    server_side_encryption_configuration {
+        rule {
+            bucket_key_enabled = false
+
+            apply_server_side_encryption_by_default {
+                kms_master_key_id = null
+                sse_algorithm     = "AES256"
+            }
+        }
+    }
+
+    versioning {
+        enabled    = false
+        mfa_delete = false
+    }
+}
+
+# aws_s3_bucket_public_access_block.demo:
+resource "aws_s3_bucket_public_access_block" "demo" {
+    block_public_acls       = true
+    block_public_policy     = true
+    bucket                  = "rudhar-session18-tf-demo-10143"
+    id                      = "rudhar-session18-tf-demo-10143"
+    ignore_public_acls      = true
+    region                  = "ap-south-1"
+    restrict_public_buckets = true
+}
+
+# aws_s3_bucket_server_side_encryption_configuration.demo:
+resource "aws_s3_bucket_server_side_encryption_configuration" "demo" {
+    bucket                = "rudhar-session18-tf-demo-10143"
+    expected_bucket_owner = null
+    id                    = "rudhar-session18-tf-demo-10143"
+    region                = "ap-south-1"
+
+    rule {
+        blocked_encryption_types = []
+        bucket_key_enabled       = false
+
+        apply_server_side_encryption_by_default {
+            kms_master_key_id = null
+            sse_algorithm     = "AES256"
+        }
+    }
+}
+
+# aws_s3_bucket_versioning.demo:
+resource "aws_s3_bucket_versioning" "demo" {
+    bucket                = "rudhar-session18-tf-demo-10143"
+    expected_bucket_owner = null
+    id                    = "rudhar-session18-tf-demo-10143"
+    region                = "ap-south-1"
+
+    versioning_configuration {
+        mfa_delete = "Disabled"
+        status     = "Enabled"
+    }
+}
+
+
+Outputs:
+
+bucket_arn = "arn:aws:s3:::rudhar-session18-tf-demo-10143"
+bucket_name = "rudhar-session18-tf-demo-10143"
+bucket_region = "ap-south-1"
+target = "LocalStack (http://localhost:4566)"
+versioning_status = "Enabled"
+
+$ terraform output -no-color
+bucket_arn = "arn:aws:s3:::rudhar-session18-tf-demo-10143"
+bucket_name = "rudhar-session18-tf-demo-10143"
+bucket_region = "ap-south-1"
+target = "LocalStack (http://localhost:4566)"
+versioning_status = "Enabled"
+
+$ terraform output -raw bucket_name; echo
+rudhar-session18-tf-demo-10143
+
+$ terraform output -json
+{
+  "bucket_arn": {
+    "sensitive": false,
+    "type": "string",
+    "value": "arn:aws:s3:::rudhar-session18-tf-demo-10143"
+  },
+  "bucket_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "rudhar-session18-tf-demo-10143"
+  },
+  "bucket_region": {
+    "sensitive": false,
+    "type": "string",
+    "value": "ap-south-1"
+  },
+  "target": {
+    "sensitive": false,
+    "type": "string",
+    "value": "LocalStack (http://localhost:4566)"
+  },
+  "versioning_status": {
+    "sensitive": false,
+    "type": "string",
+    "value": "Enabled"
+  }
+}
+

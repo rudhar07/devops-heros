@@ -1,0 +1,129 @@
+# AWS CLI against LocalStack 4.14.0 (fake creds). Public + private subnet by hand, to see what Terraform automates in session 19.
+
+$ python3 -c "import ipaddress as i; v=i.ip_network('10.30.0.0/16'); print(v, '->', v.num_addresses, 'addresses'); s=list(v.subnets(new_prefix=24)); print('/24 subnets that fit:', len(s), '| first three:', [str(x) for x in s[:3]]); n=s[1]; print(n, '->', n.num_addresses, 'addresses,', n.num_addresses-5, 'usable in AWS (5 reserved)'); h=list(n.hosts()); print('AWS reserves:', n.network_address, h[0], h[1], h[2], n.broadcast_address)"
+10.30.0.0/16 -> 65536 addresses
+/24 subnets that fit: 256 | first three: ['10.30.0.0/24', '10.30.1.0/24', '10.30.2.0/24']
+10.30.1.0/24 -> 256 addresses, 251 usable in AWS (5 reserved)
+AWS reserves: 10.30.1.0 10.30.1.1 10.30.1.2 10.30.1.3 10.30.1.255
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-vpc --cidr-block 10.30.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=hw18-vpc}]' --query 'Vpc.{VpcId:VpcId,Cidr:CidrBlock,State:State}'
+{
+    "VpcId": "vpc-d569147281d3df57c",
+    "Cidr": "10.30.0.0/16",
+    "State": "available"
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-subnet --vpc-id vpc-d569147281d3df57c --cidr-block 10.30.1.0/24 --availability-zone ap-south-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=hw18-public}]' --query 'Subnet.{SubnetId:SubnetId,Cidr:CidrBlock,AZ:AvailabilityZone,FreeIPs:AvailableIpAddressCount}'
+{
+    "SubnetId": "subnet-ff41c3e9949b8a340",
+    "Cidr": "10.30.1.0/24",
+    "AZ": "ap-south-1a",
+    "FreeIPs": 251
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-subnet --vpc-id vpc-d569147281d3df57c --cidr-block 10.30.2.0/24 --availability-zone ap-south-1b --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=hw18-private}]' --query 'Subnet.{SubnetId:SubnetId,Cidr:CidrBlock,AZ:AvailabilityZone,FreeIPs:AvailableIpAddressCount}'
+{
+    "SubnetId": "subnet-b17c248ddb720174d",
+    "Cidr": "10.30.2.0/24",
+    "AZ": "ap-south-1b",
+    "FreeIPs": 251
+}
+
+# A subnet that does not fit inside the VPC is rejected:
+$ aws --endpoint-url http://localhost:4566 ec2 create-subnet --vpc-id vpc-d569147281d3df57c --cidr-block 10.99.1.0/24
+
+aws: [ERROR]: An error occurred (InvalidSubnet.Range) when calling the CreateSubnet operation: The CIDR '10.99.1.0/24' is invalid.
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-internet-gateway --query 'InternetGateway.InternetGatewayId' --output text
+igw-a9cf0721d92c6722a
+
+$ aws --endpoint-url http://localhost:4566 ec2 attach-internet-gateway --internet-gateway-id igw-a9cf0721d92c6722a --vpc-id vpc-d569147281d3df57c
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-route-table --vpc-id vpc-d569147281d3df57c --query 'RouteTable.{Id:RouteTableId,Routes:Routes}'
+{
+    "Id": "rtb-eff45b741ea978ce5",
+    "Routes": [
+        {
+            "DestinationCidrBlock": "10.30.0.0/16",
+            "GatewayId": "local",
+            "State": "active"
+        }
+    ]
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-route --route-table-id rtb-eff45b741ea978ce5 --destination-cidr-block 0.0.0.0/0 --gateway-id igw-a9cf0721d92c6722a
+{
+    "Return": true
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 associate-route-table --route-table-id rtb-eff45b741ea978ce5 --subnet-id subnet-ff41c3e9949b8a340 --query 'AssociationState.State'
+null
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-route-tables --route-table-ids rtb-eff45b741ea978ce5 --query 'RouteTables[].Routes[].{Dest:DestinationCidrBlock,Target:GatewayId,State:State}' --output table
+-----------------------------------------------------
+|                DescribeRouteTables                |
++---------------+---------+-------------------------+
+|     Dest      |  State  |         Target          |
++---------------+---------+-------------------------+
+|  10.30.0.0/16 |  active |  local                  |
+|  0.0.0.0/0    |  active |  igw-a9cf0721d92c6722a  |
++---------------+---------+-------------------------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-network-acls --filters Name=vpc-id,Values=vpc-d569147281d3df57c --query 'NetworkAcls[].Entries[].{Rule:RuleNumber,Egress:Egress,Action:RuleAction,Cidr:CidrBlock,Proto:Protocol}' --output table
+-----------------------------------------------------
+|                DescribeNetworkAcls                |
++--------+-------------+---------+--------+---------+
+| Action |    Cidr     | Egress  | Proto  |  Rule   |
++--------+-------------+---------+--------+---------+
+|  allow |  0.0.0.0/0  |  True   |  -1    |  100    |
+|  deny  |  0.0.0.0/0  |  True   |  -1    |  32767  |
+|  allow |  0.0.0.0/0  |  False  |  -1    |  100    |
+|  deny  |  0.0.0.0/0  |  False  |  -1    |  32767  |
++--------+-------------+---------+--------+---------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-subnets --filters Name=vpc-id,Values=vpc-d569147281d3df57c --query 'Subnets[].{Name:Tags[?Key==`Name`]|[0].Value,Cidr:CidrBlock,AZ:AvailabilityZone}' --output table
+-------------------------------------------------
+|                DescribeSubnets                |
++-------------+----------------+----------------+
+|     AZ      |     Cidr       |     Name       |
++-------------+----------------+----------------+
+|  ap-south-1a|  10.30.1.0/24  |  hw18-public   |
+|  ap-south-1b|  10.30.2.0/24  |  hw18-private  |
++-------------+----------------+----------------+
+
+# Private subnet: outbound-only internet through a NAT gateway that sits in the PUBLIC subnet.
+
+$ aws --endpoint-url http://localhost:4566 ec2 allocate-address --domain vpc --query '{AllocationId:AllocationId,PublicIp:PublicIp}'
+{
+    "AllocationId": "eipalloc-dd99001498cb79993",
+    "PublicIp": "127.100.10.174"
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-nat-gateway --subnet-id subnet-ff41c3e9949b8a340 --allocation-id eipalloc-dd99001498cb79993 --query 'NatGateway.{Id:NatGatewayId,Subnet:SubnetId,State:State}'
+{
+    "Id": "nat-7806b074e29a1d39c",
+    "Subnet": "subnet-ff41c3e9949b8a340",
+    "State": "available"
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-route-table --vpc-id vpc-d569147281d3df57c --query 'RouteTable.RouteTableId' --output text
+rtb-5007b22b54f11b64d
+
+$ aws --endpoint-url http://localhost:4566 ec2 create-route --route-table-id rtb-5007b22b54f11b64d --destination-cidr-block 0.0.0.0/0 --nat-gateway-id nat-7806b074e29a1d39c
+{
+    "Return": true
+}
+
+$ aws --endpoint-url http://localhost:4566 ec2 associate-route-table --route-table-id rtb-5007b22b54f11b64d --subnet-id subnet-b17c248ddb720174d --query 'AssociationId'
+"rtbassoc-5e52909e24fa2a558"
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-route-tables --filters Name=vpc-id,Values=vpc-d569147281d3df57c --query 'RouteTables[?Associations[?SubnetId]].{Subnet:Associations[0].SubnetId,Routes:join(`, `, Routes[].join(` -> `, [DestinationCidrBlock, GatewayId || NatGatewayId]))}' --output table
+-----------------------------------------------------------------------------------------
+|                                  DescribeRouteTables                                  |
++----------------------------------------------------------+----------------------------+
+|                          Routes                          |          Subnet            |
++----------------------------------------------------------+----------------------------+
+|  10.30.0.0/16-> local, 0.0.0.0/0-> igw-a9cf0721d92c6722a |  subnet-ff41c3e9949b8a340  |
+|  10.30.0.0/16-> local, 0.0.0.0/0-> nat-7806b074e29a1d39c |  subnet-b17c248ddb720174d  |
++----------------------------------------------------------+----------------------------+
+

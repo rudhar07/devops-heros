@@ -1,0 +1,170 @@
+# AWS CLI against LocalStack 4.14.0 (fake creds). JSON files are in aws-services/03-s3/.
+
+$ aws --endpoint-url http://localhost:4566 s3api create-bucket --bucket hw18-s3-lab-10143 --create-bucket-configuration LocationConstraint=ap-south-1
+{
+    "Location": "http://hw18-s3-lab-10143.s3.localhost.localstack.cloud:4566/",
+    "BucketArn": "arn:aws:s3:::hw18-s3-lab-10143"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api put-bucket-versioning --bucket hw18-s3-lab-10143 --versioning-configuration Status=Enabled
+
+$ printf 'v1: draft\n' | aws --endpoint-url http://localhost:4566 s3 cp - s3://hw18-s3-lab-10143/docs/report.txt
+
+$ printf 'v2: final\n' | aws --endpoint-url http://localhost:4566 s3 cp - s3://hw18-s3-lab-10143/docs/report.txt
+
+$ aws --endpoint-url http://localhost:4566 s3 cp s3://hw18-s3-lab-10143/docs/report.txt -
+v2: final
+
+$ aws --endpoint-url http://localhost:4566 s3api list-object-versions --bucket hw18-s3-lab-10143 --prefix docs/ --query 'Versions[].{VersionId:VersionId,IsLatest:IsLatest,Size:Size}' --output table
+----------------------------------------------------------
+|                   ListObjectVersions                   |
++----------+-------+-------------------------------------+
+| IsLatest | Size  |              VersionId              |
++----------+-------+-------------------------------------+
+|  True    |  10   |  AaEXLsqfPs4uxPEcypt1CsrFP0.V3gtk   |
+|  False   |  10   |  AaEXLsqeD5p9FuyrNr0IjGUm6C011ai0   |
++----------+-------+-------------------------------------+
+
+$ aws --endpoint-url http://localhost:4566 s3 rm s3://hw18-s3-lab-10143/docs/report.txt
+delete: s3://hw18-s3-lab-10143/docs/report.txt
+
+$ aws --endpoint-url http://localhost:4566 s3 ls s3://hw18-s3-lab-10143/docs/; echo "ls exit code: $?"
+ls exit code: 1
+
+$ aws --endpoint-url http://localhost:4566 s3api list-object-versions --bucket hw18-s3-lab-10143 --prefix docs/ --query '{Versions:Versions[].VersionId,DeleteMarkers:DeleteMarkers[].{VersionId:VersionId,IsLatest:IsLatest}}'
+{
+    "Versions": [
+        "AaEXLsqfPs4uxPEcypt1CsrFP0.V3gtk",
+        "AaEXLsqeD5p9FuyrNr0IjGUm6C011ai0"
+    ],
+    "DeleteMarkers": [
+        {
+            "VersionId": "AaEXLsqg0eApPXSx1SNh.nFOdl7rieq_",
+            "IsLatest": true
+        }
+    ]
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-object --bucket hw18-s3-lab-10143 --key docs/report.txt --version-id AaEXLsqeD5p9FuyrNr0IjGUm6C011ai0 /dev/stdout --query VersionId
+v1: draft
+"AaEXLsqeD5p9FuyrNr0IjGUm6C011ai0"
+
+# Undelete = delete the delete marker:
+$ aws --endpoint-url http://localhost:4566 s3api delete-object --bucket hw18-s3-lab-10143 --key docs/report.txt --version-id AaEXLsqg0eApPXSx1SNh.nFOdl7rieq_
+{
+    "DeleteMarker": true,
+    "VersionId": "AaEXLsqg0eApPXSx1SNh.nFOdl7rieq_"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3 cp s3://hw18-s3-lab-10143/docs/report.txt -
+v2: final
+
+$ cat lifecycle.json
+{
+  "Rules": [
+    {
+      "ID": "logs-tiering-and-expiry",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "logs/" },
+      "Transitions": [
+        { "Days": 30, "StorageClass": "STANDARD_IA" },
+        { "Days": 90, "StorageClass": "GLACIER" }
+      ],
+      "Expiration": { "Days": 365 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+    }
+  ]
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api put-bucket-lifecycle-configuration --bucket hw18-s3-lab-10143 --lifecycle-configuration file://lifecycle.json
+{
+    "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-bucket-lifecycle-configuration --bucket hw18-s3-lab-10143
+{
+    "TransitionDefaultMinimumObjectSize": "all_storage_classes_128K",
+    "Rules": [
+        {
+            "Expiration": {
+                "Days": 365
+            },
+            "ID": "logs-tiering-and-expiry",
+            "Filter": {
+                "Prefix": "logs/"
+            },
+            "Status": "Enabled",
+            "Transitions": [
+                {
+                    "Days": 30,
+                    "StorageClass": "STANDARD_IA"
+                },
+                {
+                    "Days": 90,
+                    "StorageClass": "GLACIER"
+                }
+            ],
+            "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30
+            }
+        }
+    ]
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api put-bucket-encryption --bucket hw18-s3-lab-10143 --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+
+$ aws --endpoint-url http://localhost:4566 s3api put-bucket-policy --bucket hw18-s3-lab-10143 --policy file://deny-insecure-transport-policy.json
+
+$ aws --endpoint-url http://localhost:4566 s3api get-bucket-policy --bucket hw18-s3-lab-10143 --query Policy --output text | python3 -m json.tool
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "DenyPlainHTTP",
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": [
+                "arn:aws:s3:::hw18-s3-lab-10143",
+                "arn:aws:s3:::hw18-s3-lab-10143/*"
+            ],
+            "Condition": {
+                "Bool": {
+                    "aws:SecureTransport": "false"
+                }
+            }
+        }
+    ]
+}
+
+$ printf 'archive me\n' | aws --endpoint-url http://localhost:4566 s3 cp - s3://hw18-s3-lab-10143/logs/old.log --storage-class STANDARD_IA
+
+$ aws --endpoint-url http://localhost:4566 s3api list-objects-v2 --bucket hw18-s3-lab-10143 --query 'Contents[].{Key:Key,StorageClass:StorageClass}' --output table
+-------------------------------------
+|           ListObjectsV2           |
++------------------+----------------+
+|        Key       | StorageClass   |
++------------------+----------------+
+|  docs/report.txt |  STANDARD      |
+|  logs/old.log    |  STANDARD_IA   |
++------------------+----------------+
+
+$ aws --endpoint-url http://localhost:4566 s3 rb s3://hw18-s3-lab-10143 --force
+delete: s3://hw18-s3-lab-10143/docs/report.txt
+delete: s3://hw18-s3-lab-10143/logs/old.log
+remove_bucket failed: s3://hw18-s3-lab-10143 An error occurred (BucketNotEmpty) when calling the DeleteBucket operation: The bucket you tried to delete is not empty. You must delete all versions in the bucket.
+
+# 'rb --force' only deleted the current versions. A versioned bucket still holds old versions + delete markers, so delete those explicitly:
+
+$ aws --endpoint-url http://localhost:4566 s3api list-object-versions --bucket hw18-s3-lab-10143 --query '{Versions:length(Versions || `[]`),DeleteMarkers:length(DeleteMarkers || `[]`)}'
+{
+    "Versions": 3,
+    "DeleteMarkers": 2
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api delete-objects --bucket hw18-s3-lab-10143 --delete "$(aws --endpoint-url http://localhost:4566 s3api list-object-versions --bucket hw18-s3-lab-10143 --query '{Objects: [Versions[], DeleteMarkers[]][][].{Key:Key,VersionId:VersionId}}' --output json)" --query 'length(Deleted)'
+5
+
+$ aws --endpoint-url http://localhost:4566 s3 rb s3://hw18-s3-lab-10143
+remove_bucket: hw18-s3-lab-10143
+

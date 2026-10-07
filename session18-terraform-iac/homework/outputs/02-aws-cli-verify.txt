@@ -1,0 +1,101 @@
+# AWS CLI run with AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-south-1 (fake LocalStack creds)
+
+$ aws --endpoint-url http://localhost:4566 sts get-caller-identity
+{
+    "UserId": "AKIAIOSFODNN7EXAMPLE",
+    "Account": "000000000000",
+    "Arn": "arn:aws:iam::000000000000:root"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3 ls
+2026-10-07 21:54:47 rudhar-session18-tf-demo-10143
+
+$ aws --endpoint-url http://localhost:4566 s3api head-bucket --bucket rudhar-session18-tf-demo-10143
+{
+    "BucketArn": "arn:aws:s3:::rudhar-session18-tf-demo-10143",
+    "BucketRegion": "ap-south-1"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-bucket-location --bucket rudhar-session18-tf-demo-10143
+{
+    "LocationConstraint": "ap-south-1"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-bucket-versioning --bucket rudhar-session18-tf-demo-10143
+{
+    "Status": "Enabled"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-bucket-encryption --bucket rudhar-session18-tf-demo-10143
+{
+    "ServerSideEncryptionConfiguration": {
+        "Rules": [
+            {
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "AES256"
+                },
+                "BucketKeyEnabled": false
+            }
+        ]
+    }
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-public-access-block --bucket rudhar-session18-tf-demo-10143
+{
+    "PublicAccessBlockConfiguration": {
+        "BlockPublicAcls": true,
+        "IgnorePublicAcls": true,
+        "BlockPublicPolicy": true,
+        "RestrictPublicBuckets": true
+    }
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-bucket-tagging --bucket rudhar-session18-tf-demo-10143
+{
+    "TagSet": [
+        {
+            "Key": "Project",
+            "Value": "Session18"
+        },
+        {
+            "Key": "ManagedBy",
+            "Value": "Terraform"
+        },
+        {
+            "Key": "Owner",
+            "Value": "rudhar-bajaj"
+        },
+        {
+            "Key": "Environment",
+            "Value": "dev"
+        },
+        {
+            "Key": "Name",
+            "Value": "rudhar-session18-tf-demo-10143"
+        }
+    ]
+}
+
+$ echo 'hello v1' > /tmp/hw18-note.txt && aws --endpoint-url http://localhost:4566 s3 cp /tmp/hw18-note.txt s3://rudhar-session18-tf-demo-10143/note.txt
+Completed 9 Bytes/9 Bytes (726 Bytes/s) with 1 file(s) remainingupload: ../../../../../../../../../../tmp/hw18-note.txt to s3://rudhar-session18-tf-demo-10143/note.txt
+
+$ echo 'hello v2' > /tmp/hw18-note.txt && aws --endpoint-url http://localhost:4566 s3 cp /tmp/hw18-note.txt s3://rudhar-session18-tf-demo-10143/note.txt && rm /tmp/hw18-note.txt
+Completed 9 Bytes/9 Bytes (1.4 KiB/s) with 1 file(s) remainingupload: ../../../../../../../../../../tmp/hw18-note.txt to s3://rudhar-session18-tf-demo-10143/note.txt
+
+$ aws --endpoint-url http://localhost:4566 s3api list-object-versions --bucket rudhar-session18-tf-demo-10143 --query 'Versions[].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,Size:Size}' --output table
+----------------------------------------------------------------------
+|                         ListObjectVersions                         |
++----------+-----------+-------+-------------------------------------+
+| IsLatest |    Key    | Size  |              VersionId              |
++----------+-----------+-------+-------------------------------------+
+|  True    |  note.txt |  9    |  AaEXLsqdaPTHLsPHOq1ZJ8UiXPHDH3Oc   |
+|  False   |  note.txt |  9    |  AaEXLsqcYW2fh7ieNOn4od._whUwCo7U   |
++----------+-----------+-------+-------------------------------------+
+
+$ aws --endpoint-url http://localhost:4566 s3api head-object --bucket rudhar-session18-tf-demo-10143 --key note.txt --query '{SSE:ServerSideEncryption,VersionId:VersionId,Length:ContentLength}'
+{
+    "SSE": "AES256",
+    "VersionId": "AaEXLsqdaPTHLsPHOq1ZJ8UiXPHDH3Oc",
+    "Length": 9
+}
+
