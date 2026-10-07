@@ -1,0 +1,13 @@
+# Fix for ../../09-service-dns-troubleshooting/service.yaml
+# Root cause: selector "app: web-ahsgdf" matches no Pod; deployment.yaml labels Pods "app: web".
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

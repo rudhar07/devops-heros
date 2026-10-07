@@ -1,0 +1,11 @@
+# Configuration issue 2: wrong command in the Pod spec (typo "ngnix").
+# The image is fine but the binary doesn't exist -> StartError / RunContainerError, then CrashLoopBackOff.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: config-cmd-demo
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27
+      command: ["ngnix", "-g", "daemon off;"]

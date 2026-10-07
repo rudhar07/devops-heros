@@ -1,0 +1,27 @@
+# Half-fix for scenario 1: ONLY adds DATABASE_URL, keeps the original script.
+# Used to show that the script then exits 0 straight away, which a Pod with
+# restartPolicy Always still treats as a crash (Completed -> CrashLoopBackOff).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-1-crashloop-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: crashloop
+spec:
+  containers:
+    - name: python-app
+      image: python:3.11-alpine
+      env:
+        - name: DATABASE_URL
+          value: "postgres://demo:demo-password-123@postgres-db.production.svc.cluster.local:5432/notes"
+      command:
+        - "python3"
+        - "-c"
+        - |
+          import os, sys
+          db_url = os.environ.get("DATABASE_URL")
+          if not db_url:
+              print("[FATAL ERROR]: DATABASE_URL environment variable is MISSING!", file=sys.stderr)
+              sys.exit(1)
+          print("Application started successfully!")

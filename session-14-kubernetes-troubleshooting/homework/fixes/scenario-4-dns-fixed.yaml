@@ -1,0 +1,23 @@
+# Fix for ../../scenarios/scenario-4-dns-failure/broken.yaml
+# Root cause: wrong hostname "postgres-db-wrong-name". The Service is "postgres-db" in
+# namespace "production" (see postgres-db.yaml). Postgres doesn't speak HTTP, so instead of
+# curl I check the TCP port with nc.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-4-dns-failure-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: dns-failure
+spec:
+  containers:
+    - name: client
+      image: busybox:1.36
+      command: ["sh", "-c"]
+      args:
+        - |
+          echo "Attempting connection to internal database...";
+          nslookup postgres-db.production.svc.cluster.local;
+          nc -zv -w 3 postgres-db.production.svc.cluster.local 5432;
+          echo "Process sleeping...";
+          sleep 3600

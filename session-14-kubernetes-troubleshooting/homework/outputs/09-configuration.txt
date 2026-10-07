@@ -1,0 +1,130 @@
+# ===== Config 1: env var from a ConfigMap key that doesn't exist (own-issues/config-missing-key-*.yaml) =====
+$ kubectl apply -f own-issues/config-missing-key-broken.yaml
+configmap/app-config created
+pod/config-key-demo created
+
+22:49:30 config-key-demo   0/1   ContainerCreating   0     0s
+22:49:33 config-key-demo   0/1   CreateContainerConfigError   0     3s
+22:49:36 config-key-demo   0/1   CreateContainerConfigError   0     7s
+22:49:40 config-key-demo   0/1   CreateContainerConfigError   0     10s
+
+$ kubectl get pod config-key-demo
+NAME              READY   STATUS                       RESTARTS   AGE
+config-key-demo   0/1     CreateContainerConfigError   0          13s
+
+$ kubectl describe pod config-key-demo | sed -n '/Events:/,$p'
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  12s                default-scheduler  Successfully assigned default/config-key-demo to hw-b-control-plane
+  Normal   Pulled     11s (x2 over 12s)  kubelet            spec.containers{app}: Container image "busybox:1.36" already present on machine and can be accessed by the pod
+  Warning  Failed     11s (x2 over 12s)  kubelet            spec.containers{app}: Error: couldn't find key LOGLEVEL in ConfigMap default/app-config
+
+$ kubectl get configmap app-config -o yaml
+apiVersion: v1
+data:
+  APP_MODE: demo
+  LOG_LEVEL: debug
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"APP_MODE":"demo","LOG_LEVEL":"debug"},"kind":"ConfigMap","metadata":{"annotations":{},"name":"app-config","namespace":"default"}}
+  creationTimestamp: "2026-10-07T17:19:30Z"
+  name: app-config
+  namespace: default
+  resourceVersion: "5415"
+  uid: 4c746f09-0f50-4085-bfb5-19929c561f01
+
+# ROOT CAUSE: the pod asks for key LOGLEVEL, the ConfigMap has LOG_LEVEL. kubelet can't build the container's environment -> CreateContainerConfigError (container never starts, so there are no logs).
+$ kubectl logs config-key-demo
+Error from server (BadRequest): container "app" in pod "config-key-demo" is waiting to start: CreateContainerConfigError
+
+# FIX: correct the key name (own-issues/config-missing-key-fixed.yaml). env is immutable -> delete + apply.
+$ kubectl delete pod config-key-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "config-key-demo" force deleted from default namespace
+
+$ kubectl apply -f own-issues/config-missing-key-fixed.yaml
+configmap/app-config unchanged
+pod/config-key-demo created
+
+$ kubectl wait --for=condition=Ready pod/config-key-demo --timeout=180s
+pod/config-key-demo condition met
+
+# VERIFY
+$ kubectl get pod config-key-demo
+NAME              READY   STATUS    RESTARTS   AGE
+config-key-demo   1/1     Running   0          0s
+
+$ kubectl logs config-key-demo
+LOG_LEVEL=debug APP_MODE=demo
+
+$ kubectl delete -f own-issues/config-missing-key-fixed.yaml --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+configmap "app-config" force deleted from default namespace
+pod "config-key-demo" force deleted from default namespace
+
+# ===== Config 2: wrong command in the pod spec (own-issues/config-bad-command-*.yaml) =====
+$ kubectl apply -f own-issues/config-bad-command-broken.yaml
+pod/config-cmd-demo created
+
+22:49:44 config-cmd-demo   0/1   ContainerCreating   0     0s
+22:49:48 config-cmd-demo   0/1   RunContainerError   1 (3s ago)   4s
+22:49:52 config-cmd-demo   0/1   RunContainerError   1 (7s ago)   8s
+22:49:56 config-cmd-demo   0/1   RunContainerError   1 (11s ago)   12s
+22:50:00 config-cmd-demo   0/1   RunContainerError   2 (4s ago)   16s
+22:50:04 config-cmd-demo   0/1   RunContainerError   2 (8s ago)   20s
+
+$ kubectl describe pod config-cmd-demo | sed -n '/Events:/,$p'
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  24s                default-scheduler  Successfully assigned default/config-cmd-demo to hw-b-control-plane
+  Normal   Pulled     12s (x3 over 24s)  kubelet            spec.containers{nginx}: Container image "nginx:1.27" already present on machine and can be accessed by the pod
+  Normal   Created    12s (x3 over 24s)  kubelet            spec.containers{nginx}: Container created
+  Warning  Failed     12s (x3 over 24s)  kubelet            spec.containers{nginx}: Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: exec: "ngnix": executable file not found in $PATH
+  Warning  BackOff    11s (x2 over 22s)  kubelet            spec.containers{nginx}: Back-off restarting failed container nginx in pod config-cmd-demo_default(6e8385fb-17ba-4f2b-a090-6ad8d02162c0)
+
+$ kubectl describe pod config-cmd-demo | sed -n '/Command:/,/Restart Count/p'
+    Command:
+      ngnix
+      -g
+      daemon off;
+    State:          Waiting
+      Reason:       RunContainerError
+    Last State:     Terminated
+      Reason:       StartError
+      Message:      failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: exec: "ngnix": executable file not found in $PATH
+      Exit Code:    128
+      Started:      Thu, 01 Jan 1970 05:30:00 +0530
+      Finished:     Wed, 07 Oct 2026 22:49:56 +0530
+    Ready:          False
+    Restart Count:  2
+
+$ kubectl logs config-cmd-demo
+
+# ROOT CAUSE: command 'ngnix' (typo) is not a file in the image. The image is fine (nginx:1.27 pulled OK); the runtime fails at exec -> StartError / RunContainerError, exit 128, and then CrashLoopBackOff.
+# FIX: command nginx (own-issues/config-bad-command-fixed.yaml). delete + apply.
+$ kubectl delete pod config-cmd-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "config-cmd-demo" force deleted from default namespace
+
+$ kubectl apply -f own-issues/config-bad-command-fixed.yaml
+pod/config-cmd-demo created
+
+$ kubectl wait --for=condition=Ready pod/config-cmd-demo --timeout=180s
+pod/config-cmd-demo condition met
+
+# VERIFY
+$ kubectl get pod config-cmd-demo
+NAME              READY   STATUS    RESTARTS   AGE
+config-cmd-demo   1/1     Running   0          1s
+
+$ kubectl exec config-cmd-demo -- curl -s -o /dev/null -w %{http_code}\n http://localhost/
+200
+
+$ kubectl delete pod config-cmd-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "config-cmd-demo" force deleted from default namespace
+

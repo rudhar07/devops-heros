@@ -1,0 +1,139 @@
+# ===== A. instructor 07-imagepullbackoff (tag does not exist) =====
+$ kubectl apply -f ../07-imagepullbackoff/broken-pod.yaml
+pod/image-demo created
+
+# IDENTIFY - poll every 2s to catch ErrImagePull (the first failure) turning into ImagePullBackOff (kubelet waiting before retrying)
+22:32:33 image-demo   0/1   Pending   0     0s
+22:32:35 image-demo   0/1   ContainerCreating   0     2s
+22:32:37 image-demo   0/1   ContainerCreating   0     4s
+22:32:39 image-demo   0/1   ContainerCreating   0     6s
+22:32:41 image-demo   0/1   ContainerCreating   0     8s
+22:32:44 image-demo   0/1   ContainerCreating   0     11s
+22:32:46 image-demo   0/1   ErrImagePull   0     13s
+22:32:48 image-demo   0/1   ErrImagePull   0     15s
+22:32:50 image-demo   0/1   ErrImagePull   0     17s
+22:32:52 image-demo   0/1   ErrImagePull   0     19s
+22:32:54 image-demo   0/1   ErrImagePull   0     21s
+22:32:56 image-demo   0/1   ErrImagePull   0     23s
+
+# INVESTIGATE
+$ kubectl describe pod image-demo | sed -n '/Containers:/,/Ready:/p;/Events:/,$p'
+Containers:
+  app:
+    Container ID:   
+    Image:          nginx:this-image-does-not-exist
+    Image ID:       
+    Port:           <none>
+    Host Port:      <none>
+    State:          Waiting
+      Reason:       ImagePullBackOff
+    Ready:          False
+Events:
+  Type     Reason     Age               From               Message
+  ----     ------     ----              ----               -------
+  Normal   Scheduled  25s               default-scheduler  Successfully assigned default/image-demo to hw-b-control-plane
+  Warning  Failed     15s               kubelet            spec.containers{app}: Failed to pull image "nginx:this-image-does-not-exist": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:this-image-does-not-exist": failed to resolve reference "docker.io/library/nginx:this-image-does-not-exist": docker.io/library/nginx:this-image-does-not-exist: not found
+  Warning  Failed     15s               kubelet            spec.containers{app}: Error: ErrImagePull
+  Normal   BackOff    14s               kubelet            spec.containers{app}: Back-off pulling image "nginx:this-image-does-not-exist"
+  Warning  Failed     14s               kubelet            spec.containers{app}: Error: ImagePullBackOff
+  Normal   Pulling    2s (x2 over 24s)  kubelet            spec.containers{app}: Pulling image "nginx:this-image-does-not-exist"
+
+$ kubectl get pod image-demo -o jsonpath={.status.containerStatuses[0].state.waiting}{"\n"}
+{"message":"Back-off pulling image \"nginx:this-image-does-not-exist\": ErrImagePull: rpc error: code = NotFound desc = failed to pull and unpack image \"docker.io/library/nginx:this-image-does-not-exist\": failed to resolve reference \"docker.io/library/nginx:this-image-does-not-exist\": docker.io/library/nginx:this-image-does-not-exist: not found","reason":"ImagePullBackOff"}
+
+# Confirm from the node that the tag really doesn't exist (crictl is containerd's CLI inside the kind node):
+$ docker exec hw-b-control-plane crictl pull nginx:this-image-does-not-exist
+E1007 17:03:07.550450  428967 remote_image.go:250] "PullImage from image service failed" err="rpc error: code = NotFound desc = failed to pull and unpack image \"docker.io/library/nginx:this-image-does-not-exist\": failed to resolve reference \"docker.io/library/nginx:this-image-does-not-exist\": docker.io/library/nginx:this-image-does-not-exist: not found" image="nginx:this-image-does-not-exist"
+time="2026-10-07T17:03:07Z" level=fatal msg="pulling image: rpc error: code = NotFound desc = failed to pull and unpack image \"docker.io/library/nginx:this-image-does-not-exist\": failed to resolve reference \"docker.io/library/nginx:this-image-does-not-exist\": docker.io/library/nginx:this-image-does-not-exist: not found"
+
+# ROOT CAUSE: image tag 'this-image-does-not-exist' is not published for docker.io/library/nginx (registry answers 404 not found).
+# FIX: ../07-imagepullbackoff/fixed-pod.yaml uses nginx:1.27. The image field of a Pod CAN be changed in place, so I patch instead of recreating:
+$ kubectl set image pod/image-demo app=nginx:1.27
+pod/image-demo image updated
+
+$ kubectl wait --for=condition=Ready pod/image-demo --timeout=180s
+pod/image-demo condition met
+
+# VERIFY
+$ kubectl get pod image-demo
+NAME         READY   STATUS    RESTARTS   AGE
+image-demo   1/1     Running   0          34s
+
+$ kubectl describe pod image-demo | sed -n '/Events:/,$p'
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  34s                default-scheduler  Successfully assigned default/image-demo to hw-b-control-plane
+  Normal   BackOff    23s                kubelet            spec.containers{app}: Back-off pulling image "nginx:this-image-does-not-exist"
+  Warning  Failed     23s                kubelet            spec.containers{app}: Error: ImagePullBackOff
+  Normal   Pulling    11s (x2 over 33s)  kubelet            spec.containers{app}: Pulling image "nginx:this-image-does-not-exist"
+  Warning  Failed     6s (x2 over 24s)   kubelet            spec.containers{app}: Failed to pull image "nginx:this-image-does-not-exist": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:this-image-does-not-exist": failed to resolve reference "docker.io/library/nginx:this-image-does-not-exist": docker.io/library/nginx:this-image-does-not-exist: not found
+  Warning  Failed     6s (x2 over 24s)   kubelet            spec.containers{app}: Error: ErrImagePull
+  Normal   Pulled     0s                 kubelet            spec.containers{app}: Container image "nginx:1.27" already present on machine and can be accessed by the pod
+  Normal   Created    0s                 kubelet            spec.containers{app}: Container created
+  Normal   Started    0s                 kubelet            spec.containers{app}: Container started
+
+$ kubectl delete pod image-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "image-demo" force deleted from default namespace
+
+# Same result with the instructor's fixed file (delete + apply):
+$ kubectl apply -f ../07-imagepullbackoff/fixed-pod.yaml
+pod/image-demo created
+
+$ kubectl wait --for=condition=Ready pod/image-demo --timeout=180s
+pod/image-demo condition met
+
+$ kubectl get pod image-demo -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[0].image,STATUS:.status.phase
+NAME         IMAGE        STATUS
+image-demo   nginx:1.27   Running
+
+$ kubectl delete pod image-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "image-demo" force deleted from default namespace
+
+# ===== B. scenarios/scenario-2-imagepull (repository does not exist) =====
+$ kubectl apply -f ../scenarios/scenario-2-imagepull/broken.yaml
+pod/fail-2-imagepull-pod created
+
+22:33:08 fail-2-imagepull-pod   0/1   ContainerCreating   0     0s
+22:33:11 fail-2-imagepull-pod   0/1   ContainerCreating   0     3s
+22:33:14 fail-2-imagepull-pod   0/1   ErrImagePull   0     6s
+22:33:18 fail-2-imagepull-pod   0/1   ErrImagePull   0     10s
+22:33:21 fail-2-imagepull-pod   0/1   ErrImagePull   0     13s
+22:33:24 fail-2-imagepull-pod   0/1   ErrImagePull   0     16s
+22:33:27 fail-2-imagepull-pod   0/1   ErrImagePull   0     19s
+22:33:30 fail-2-imagepull-pod   0/1   ImagePullBackOff   0     22s
+
+$ kubectl describe pod fail-2-imagepull-pod | sed -n '/Events:/,$p'
+Events:
+  Type     Reason     Age               From               Message
+  ----     ------     ----              ----               -------
+  Normal   Scheduled  24s               default-scheduler  Successfully assigned default/fail-2-imagepull-pod to hw-b-control-plane
+  Normal   BackOff    21s               kubelet            spec.containers{web-app}: Back-off pulling image "yatri-api-service:v999-invalid-tag-does-not-exist"
+  Warning  Failed     21s               kubelet            spec.containers{web-app}: Error: ImagePullBackOff
+  Normal   Pulling    6s (x2 over 24s)  kubelet            spec.containers{web-app}: Pulling image "yatri-api-service:v999-invalid-tag-does-not-exist"
+  Warning  Failed     4s (x2 over 22s)  kubelet            spec.containers{web-app}: Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+  Warning  Failed     4s (x2 over 22s)  kubelet            spec.containers{web-app}: Error: ErrImagePull
+
+# ROOT CAUSE: 'yatri-api-service' has no registry prefix, so it means docker.io/library/yatri-api-service, which doesn't exist. Docker Hub answers 'pull access denied ... repository does not exist or may require authorization'.
+# That message is the same for a private repo without credentials - you'd check the name first, then imagePullSecrets.
+# FIX: fixes/scenario-2-imagepull-fixed.yaml (a real image).
+$ kubectl delete pod fail-2-imagepull-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-2-imagepull-pod" force deleted from default namespace
+
+$ kubectl apply -f fixes/scenario-2-imagepull-fixed.yaml
+pod/fail-2-imagepull-pod created
+
+$ kubectl wait --for=condition=Ready pod/fail-2-imagepull-pod --timeout=180s
+pod/fail-2-imagepull-pod condition met
+
+$ kubectl get pod fail-2-imagepull-pod -o wide
+NAME                   READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+fail-2-imagepull-pod   1/1     Running   0          29s   10.244.0.61   hw-b-control-plane   <none>           <none>
+
+$ kubectl delete pod fail-2-imagepull-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-2-imagepull-pod" force deleted from default namespace
+

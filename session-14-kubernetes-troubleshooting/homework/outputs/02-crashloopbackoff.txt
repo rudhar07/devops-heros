@@ -1,0 +1,212 @@
+# ===== A. instructor 06-crashloopbackoff =====
+# IDENTIFY
+$ kubectl apply -f ../06-crashloopbackoff/broken-pod.yaml
+pod/crash-demo created
+
+22:30:11 crash-demo   0/1   Pending   0     0s
+22:30:16 crash-demo   0/1   Error   1 (4s ago)   5s
+22:30:21 crash-demo   0/1   Error   1 (9s ago)   10s
+22:30:26 crash-demo   0/1   Error   2 (13s ago)   15s
+22:30:31 crash-demo   0/1   Error   2 (18s ago)   20s
+22:30:36 crash-demo   0/1   Error   2 (23s ago)   25s
+22:30:41 crash-demo   0/1   Error   2 (29s ago)   31s
+22:30:47 crash-demo   0/1   Error   2 (34s ago)   36s
+
+$ kubectl get pod crash-demo
+NAME         READY   STATUS   RESTARTS      AGE
+crash-demo   0/1     Error    3 (27s ago)   41s
+
+# INVESTIGATE
+$ kubectl describe pod crash-demo
+Name:             crash-demo
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-b-control-plane/172.18.0.2
+Start Time:       Wed, 07 Oct 2026 22:30:11 +0530
+Labels:           <none>
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.53
+IPs:
+  IP:  10.244.0.53
+Containers:
+  app:
+    Container ID:  containerd://80a18f8c4f55b1a57a8cf8149c4e5b0f50f752fafeff650de05f98424145be05
+    Image:         busybox:1.36
+    Image ID:      docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      echo "Application starting..."
+      echo "Something went wrong!"
+      exit 1
+      
+    State:          Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 07 Oct 2026 22:30:48 +0530
+      Finished:     Wed, 07 Oct 2026 22:30:48 +0530
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 07 Oct 2026 22:30:25 +0530
+      Finished:     Wed, 07 Oct 2026 22:30:25 +0530
+    Ready:          False
+    Restart Count:  3
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-4q6j8 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-4q6j8:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age               From               Message
+  ----     ------     ----              ----               -------
+  Normal   Scheduled  40s               default-scheduler  Successfully assigned default/crash-demo to hw-b-control-plane
+  Normal   Pulled     4s (x4 over 40s)  kubelet            spec.containers{app}: Container image "busybox:1.36" already present on machine and can be accessed by the pod
+  Normal   Created    4s (x4 over 40s)  kubelet            spec.containers{app}: Container created
+  Normal   Started    4s (x4 over 40s)  kubelet            spec.containers{app}: Container started
+  Warning  BackOff    3s (x3 over 39s)  kubelet            spec.containers{app}: Back-off restarting failed container app in pod crash-demo_default(3d11127d-dcfd-4f9d-a8cf-0f0d4f7dd16b)
+
+$ kubectl logs crash-demo
+Application starting...
+Something went wrong!
+
+$ kubectl logs crash-demo --previous
+unable to retrieve container logs for containerd://e19651324708dca0ad2b4cfe9398d486142fa88d24464e117288d79f22caacd9
+
+$ kubectl get pod crash-demo -o jsonpath={.status.containerStatuses[0].lastState.terminated}{"\n"}
+{"containerID":"containerd://e19651324708dca0ad2b4cfe9398d486142fa88d24464e117288d79f22caacd9","exitCode":1,"finishedAt":"2026-10-07T17:00:25Z","reason":"Error","startedAt":"2026-10-07T17:00:25Z"}
+
+# ROOT CAUSE: the container's command prints an error and exits with code 1. restartPolicy is Always, so kubelet restarts it with growing back-off (10s, 20s, 40s ... 5m).
+# FIX: ../06-crashloopbackoff/fixed-pod.yaml keeps the process running (sleep 3600). Pod spec is mostly immutable, so delete + apply.
+$ kubectl delete pod crash-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "crash-demo" force deleted from default namespace
+
+$ kubectl apply -f ../06-crashloopbackoff/fixed-pod.yaml
+pod/crash-demo created
+
+$ kubectl wait --for=condition=Ready pod/crash-demo --timeout=120s
+pod/crash-demo condition met
+
+# VERIFY
+$ kubectl get pod crash-demo
+NAME         READY   STATUS    RESTARTS   AGE
+crash-demo   1/1     Running   0          1s
+
+$ kubectl logs crash-demo
+Application starting...
+Application is healthy
+
+$ kubectl delete pod crash-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "crash-demo" force deleted from default namespace
+
+# ===== B. scenarios/scenario-1-crashloop (python app needs DATABASE_URL) =====
+$ kubectl apply -f ../scenarios/scenario-1-crashloop/broken.yaml
+pod/fail-1-crashloop-pod created
+
+22:30:53 fail-1-crashloop-pod   0/1   ContainerCreating   0     0s
+22:30:58 fail-1-crashloop-pod   0/1   Error   1 (5s ago)   5s
+22:31:03 fail-1-crashloop-pod   0/1   Error   1 (10s ago)   10s
+22:31:08 fail-1-crashloop-pod   0/1   Error   2 (14s ago)   15s
+22:31:13 fail-1-crashloop-pod   0/1   Error   2 (19s ago)   20s
+22:31:18 fail-1-crashloop-pod   0/1   Error   2 (24s ago)   25s
+
+$ kubectl logs fail-1-crashloop-pod
+[FATAL ERROR]: DATABASE_URL environment variable is MISSING!
+
+$ kubectl logs fail-1-crashloop-pod --previous
+unable to retrieve container logs for containerd://f6a7fe8a568788ebe6b3b31288042320cd6bfd05c5ec3e4e9a85a3a002654c73
+
+$ kubectl describe pod fail-1-crashloop-pod | sed -n '/State:/,/Restart Count/p;/Environment/,/Mounts/p'
+    State:          Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 07 Oct 2026 22:31:07 +0530
+      Finished:     Wed, 07 Oct 2026 22:31:07 +0530
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Wed, 07 Oct 2026 22:30:54 +0530
+      Finished:     Wed, 07 Oct 2026 22:30:54 +0530
+    Ready:          False
+    Restart Count:  2
+    Environment:    <none>
+    Mounts:
+
+# ROOT CAUSE: stderr says DATABASE_URL is missing and the pod's Environment is <none>.
+# Half fix first (fixes/scenario-1-env-only.yaml): add only DATABASE_URL
+$ kubectl delete pod fail-1-crashloop-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-1-crashloop-pod" force deleted from default namespace
+
+$ kubectl apply -f fixes/scenario-1-env-only.yaml
+pod/fail-1-crashloop-pod created
+
+22:31:24 fail-1-crashloop-pod   0/1   Pending   0     0s
+22:31:29 fail-1-crashloop-pod   0/1   Completed   1 (4s ago)   5s
+22:31:34 fail-1-crashloop-pod   0/1   Completed   1 (9s ago)   10s
+22:31:39 fail-1-crashloop-pod   0/1   Completed   2 (14s ago)   15s
+22:31:44 fail-1-crashloop-pod   0/1   Completed   2 (19s ago)   20s
+22:31:49 fail-1-crashloop-pod   0/1   Completed   2 (24s ago)   25s
+
+$ kubectl logs fail-1-crashloop-pod
+Application started successfully!
+
+$ kubectl describe pod fail-1-crashloop-pod | sed -n '/State:/,/Restart Count/p'
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 07 Oct 2026 22:31:36 +0530
+      Finished:     Wed, 07 Oct 2026 22:31:36 +0530
+    Last State:     Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 07 Oct 2026 22:31:25 +0530
+      Finished:     Wed, 07 Oct 2026 22:31:25 +0530
+    Ready:          False
+    Restart Count:  2
+
+# Still restarting: now the script exits 0 ('Completed'). With restartPolicy Always a process that ends is restarted no matter the exit code.
+# Full fix (fixes/scenario-1-crashloop-fixed.yaml): DATABASE_URL set AND the process keeps running like a server.
+$ kubectl delete pod fail-1-crashloop-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-1-crashloop-pod" force deleted from default namespace
+
+$ kubectl apply -f fixes/scenario-1-crashloop-fixed.yaml
+pod/fail-1-crashloop-pod created
+
+$ kubectl wait --for=condition=Ready pod/fail-1-crashloop-pod --timeout=120s
+pod/fail-1-crashloop-pod condition met
+
+22:31:55 fail-1-crashloop-pod   1/1   Running   0     1s
+22:32:01 fail-1-crashloop-pod   1/1   Running   0     6s
+22:32:06 fail-1-crashloop-pod   1/1   Running   0     11s
+
+$ kubectl logs fail-1-crashloop-pod
+Application started successfully!
+
+$ kubectl delete pod fail-1-crashloop-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-1-crashloop-pod" force deleted from default namespace
+

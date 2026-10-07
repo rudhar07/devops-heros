@@ -1,0 +1,114 @@
+# ===== A. instructor 08-pending-pods (nodeSelector for a node that doesn't exist) =====
+$ kubectl apply -f ../08-pending-pods/broken-pod.yaml
+pod/pending-demo created
+
+22:34:22 pending-demo   0/1   Pending   0     0s
+22:34:25 pending-demo   0/1   Pending   0     3s
+22:34:28 pending-demo   0/1   Pending   0     6s
+
+$ kubectl get pod pending-demo -o wide
+NAME           READY   STATUS    RESTARTS   AGE   IP       NODE     NOMINATED NODE   READINESS GATES
+pending-demo   0/1     Pending   0          9s    <none>   <none>   <none>           <none>
+
+$ kubectl describe pod pending-demo | sed -n '/Events:/,$p'
+Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  9s    default-scheduler  0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+
+$ kubectl get nodes --show-labels
+NAME                 STATUS   ROLES           AGE   VERSION   LABELS
+hw-b-control-plane   Ready    control-plane   41m   v1.37.0   beta.kubernetes.io/arch=arm64,beta.kubernetes.io/os=linux,kubernetes.io/arch=arm64,kubernetes.io/hostname=hw-b-control-plane,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=
+
+# ROOT CAUSE: nodeSelector kubernetes.io/hostname=node-that-does-not-exist; my only node is hw-b-control-plane. The scheduler finds 0 matching nodes, so the pod is never assigned (NODE <none>).
+# FIX: ../08-pending-pods/fixed-pod.yaml drops the nodeSelector. nodeSelector is immutable on a pod -> delete + apply.
+$ kubectl delete pod pending-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "pending-demo" force deleted from default namespace
+
+$ kubectl apply -f ../08-pending-pods/fixed-pod.yaml
+pod/pending-demo created
+
+$ kubectl wait --for=condition=Ready pod/pending-demo --timeout=180s
+pod/pending-demo condition met
+
+$ kubectl get pod pending-demo -o wide
+NAME           READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pending-demo   1/1     Running   0          1s    10.244.0.62   hw-b-control-plane   <none>           <none>
+
+$ kubectl delete pod pending-demo --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "pending-demo" force deleted from default namespace
+
+# ===== B. scenarios/scenario-3-pending (asks for 500 CPUs and 1000Gi) =====
+$ kubectl apply -f ../scenarios/scenario-3-pending/broken.yaml
+pod/fail-3-pending-pod created
+
+22:34:33 fail-3-pending-pod   0/1   Pending   0     0s
+22:34:36 fail-3-pending-pod   0/1   Pending   0     3s
+22:34:39 fail-3-pending-pod   0/1   Pending   0     6s
+
+$ kubectl describe pod fail-3-pending-pod | sed -n '/Events:/,$p'
+Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  9s    default-scheduler  0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+
+$ kubectl describe node hw-b-control-plane | sed -n '/Capacity:/,/System Info/p'
+Capacity:
+  cpu:                15
+  ephemeral-storage:  977843695616
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  hugepages-32Mi:     0
+  hugepages-64Ki:     0
+  memory:             8125796Ki
+  pods:               110
+Allocatable:
+  cpu:                15
+  ephemeral-storage:  977843695616
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  hugepages-32Mi:     0
+  hugepages-64Ki:     0
+  memory:             8125796Ki
+  pods:               110
+System Info:
+
+$ kubectl describe node hw-b-control-plane | sed -n '/Allocated resources:/,/Events:/p'
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests    Limits
+  --------           --------    ------
+  cpu                1050m (7%)  0 (0%)
+  memory             490Mi (6%)  340Mi (4%)
+  ephemeral-storage  0 (0%)      0 (0%)
+  hugepages-1Gi      0 (0%)      0 (0%)
+  hugepages-2Mi      0 (0%)      0 (0%)
+  hugepages-32Mi     0 (0%)      0 (0%)
+  hugepages-64Ki     0 (0%)      0 (0%)
+Events:
+
+# ROOT CAUSE: requests (cpu 500, memory 1000Gi) are far above what the node can allocate (see Allocatable). Requests are what the scheduler reserves, so no node fits.
+# FIX: fixes/scenario-3-pending-fixed.yaml requests 100m / 64Mi (limits 250m / 128Mi). Resources on a pod are immutable here -> delete + apply.
+$ kubectl delete pod fail-3-pending-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-3-pending-pod" force deleted from default namespace
+
+$ kubectl apply -f fixes/scenario-3-pending-fixed.yaml
+pod/fail-3-pending-pod created
+
+$ kubectl wait --for=condition=Ready pod/fail-3-pending-pod --timeout=180s
+pod/fail-3-pending-pod condition met
+
+$ kubectl get pod fail-3-pending-pod -o wide
+NAME                 READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+fail-3-pending-pod   1/1     Running   0          1s    10.244.0.63   hw-b-control-plane   <none>           <none>
+
+$ kubectl top pod fail-3-pending-pod
+Error from server (NotFound): podmetrics.metrics.k8s.io "default/fail-3-pending-pod" not found
+
+$ kubectl delete pod fail-3-pending-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-3-pending-pod" force deleted from default namespace
+

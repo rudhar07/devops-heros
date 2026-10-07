@@ -1,0 +1,181 @@
+# Run the instructor's triage script as-is (it uses kubectl from my PATH with my KUBECONFIG)
+$ bash ../scenarios/triage_all.sh
+==================================================
+      KUBERNETES INCIDENT TRIAGE GAUNTLET         
+==================================================
+Deploying 5 intentionally broken production workloads...
+
+pod/fail-1-crashloop-pod created
+pod/fail-2-imagepull-pod created
+pod/fail-3-pending-pod created
+pod/fail-4-dns-failure-pod created
+pod/fail-5-oomkilled-pod created
+
+Workloads deployed! Sleeping 5s to allow states to settle...
+
+=== CURRENT CLUSTER CARNAGE ===
+NAME                     READY   STATUS              RESTARTS     AGE
+fail-1-crashloop-pod     0/1     Error               1 (5s ago)   6s
+fail-2-imagepull-pod     0/1     ContainerCreating   0            6s
+fail-3-pending-pod       0/1     Pending             0            5s
+fail-4-dns-failure-pod   1/1     Running             0            5s
+fail-5-oomkilled-pod     0/1     OOMKilled           1 (5s ago)   5s
+
+==================================================
+Your mission: Diagnose and fix each of the 5 pods!
+Follow the diagnostic guide in README.md!
+==================================================
+
+# A few seconds later:
+$ kubectl get pods -l tier=triage-gauntlet -o wide
+NAME                     READY   STATUS             RESTARTS      AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+fail-1-crashloop-pod     0/1     Error              2 (25s ago)   26s   10.244.0.94   hw-b-control-plane   <none>           <none>
+fail-2-imagepull-pod     0/1     ImagePullBackOff   0             26s   10.244.0.95   hw-b-control-plane   <none>           <none>
+fail-3-pending-pod       0/1     Pending            0             25s   <none>        <none>               <none>           <none>
+fail-4-dns-failure-pod   1/1     Running            0             25s   10.244.0.96   hw-b-control-plane   <none>           <none>
+fail-5-oomkilled-pod     0/1     OOMKilled          2 (25s ago)   25s   10.244.0.97   hw-b-control-plane   <none>           <none>
+
+# One-line triage per pod: phase/waiting reason/last termination reason
+$ kubectl get pods -l tier=triage-gauntlet -o custom-columns=NAME:.metadata.name,PHASE:.status.phase,WAITING:.status.containerStatuses[0].state.waiting.reason,LAST:.status.containerStatuses[0].lastState.terminated.reason,EXIT:.status.containerStatuses[0].lastState.terminated.exitCode,RESTARTS:.status.containerStatuses[0].restartCount
+NAME                     PHASE     WAITING            LAST        EXIT     RESTARTS
+fail-1-crashloop-pod     Running   <none>             Error       1        2
+fail-2-imagepull-pod     Pending   ImagePullBackOff   <none>      <none>   0
+fail-3-pending-pod       Pending   <none>             <none>      <none>   <none>
+fail-4-dns-failure-pod   Running   <none>             <none>      <none>   0
+fail-5-oomkilled-pod     Running   <none>             OOMKilled   137      2
+
+$ kubectl get events --field-selector type=Warning --sort-by=.lastTimestamp
+# (note added afterwards: my retry helper mis-fired here - it matched an event message ending in 'connection refused',
+#  not a kubectl error. The list below is the real output of the last attempt.)
+LAST SEEN   TYPE      REASON                         OBJECT                             MESSAGE
+18m         Warning   FailedScheduling               pod/fail-3-pending-pod             0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+18m         Warning   FailedScheduling               pod/pending-demo                   0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+74s         Warning   FailedScheduling               pod/fail-3-pending-pod             0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+77s         Warning   FailedScheduling               pod/fail-3-pending-pod             0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 37284
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 37186
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 23591
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 31830
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 37020
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 31827
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 37283
+59m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: python, pid: 37365
+54m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo   invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+54m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo   failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+54m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo   invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+54m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo   failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+44m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 71512
+44m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 516631
+43m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 511500
+42m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 517706
+35m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 523705
+34m         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(a5ce478d-cff4-4722-857b-5ae57d906ae6)
+33m         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(9d813c46-0f12-4174-bc95-3c5f82efdba9)
+31m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 524942
+30m         Warning   BackOff                        pod/crash-demo                     Back-off restarting failed container app in pod crash-demo_default(adae2672-9d24-4a6d-b171-1f35c2bc734a)
+30m         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(de2f6988-3956-4c39-adc7-af12a2b74569)
+30m         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(eb127ea0-07e6-4541-9d79-a60aa084f64f)
+28m         Warning   BackOff                        pod/crash-demo                     Back-off restarting failed container app in pod crash-demo_default(62c2bfa5-c13f-400b-ab4e-dcae48f6830b)
+23m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 550297
+23m         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(12e477a1-78e9-404b-b433-25bcb65cb25e)
+22m         Warning   BackOff                        pod/crash-demo                     Back-off restarting failed container app in pod crash-demo_default(3d11127d-dcfd-4f9d-a8cf-0f0d4f7dd16b)
+21m         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(38d1f38e-b497-49c6-a2a8-fc4cd46f5126)
+21m         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(d206086e-a865-4117-b539-152f16988bbe)
+20m         Warning   Failed                         pod/image-demo                     Error: ImagePullBackOff
+19m         Warning   Failed                         pod/image-demo                     Failed to pull image "nginx:this-image-does-not-exist": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:this-image-does-not-exist": failed to resolve reference "docker.io/library/nginx:this-image-does-not-exist": docker.io/library/nginx:this-image-does-not-exist: not found
+19m         Warning   Failed                         pod/image-demo                     Error: ErrImagePull
+19m         Warning   Failed                         pod/fail-2-imagepull-pod           Error: ImagePullBackOff
+19m         Warning   Failed                         pod/fail-2-imagepull-pod           Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+19m         Warning   Failed                         pod/fail-2-imagepull-pod           Error: ErrImagePull
+17m         Warning   FailedMount                    pod/cc-demo                        MountVolume.SetUp failed for volume "site" : configmap "site-content" not found
+17m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 544474
+16m         Warning   SystemOOM                      node/hw-b-control-plane            System OOM encountered, victim process: local-path-prov, pid: 534371
+13m         Warning   NodeNotReady                   pod/web-557577df75-kf4vb           Node is not ready
+13m         Warning   NodeNotReady                   pod/web-557577df75-pwmpt           Node is not ready
+10m         Warning   Failed                         pod/dns-test                       Error: ErrImagePull
+10m         Warning   Failed                         pod/dns-test                       Failed to pull image "registry.k8s.io/e2e-test-images/dnsutils:1.3": rpc error: code = NotFound desc = failed to pull and unpack image "registry.k8s.io/e2e-test-images/dnsutils:1.3": failed to resolve reference "registry.k8s.io/e2e-test-images/dnsutils:1.3": registry.k8s.io/e2e-test-images/dnsutils:1.3: not found
+9m25s       Warning   Failed                         pod/fail-4-dns-failure-pod         Error: ImagePullBackOff
+9m25s       Warning   Failed                         pod/fail-4-dns-failure-pod         Failed to pull image "curlimages/curl:8.6.0": failed to pull and unpack image "docker.io/curlimages/curl:8.6.0": failed to copy: httpReadSeeker: failed open: failed to do request: Get "https://production.cloudfront.docker.com/registry-v2/docker/registry/v2/blobs/sha256/b7/b73b56a85bd3c5e4291bf897c4b4a5eaf7365a77b499756dc5045ba453d58e33/data?Expires=%5BREDACTED%5D&Key-Pair-Id=%5BREDACTED%5D&Signature=%5BREDACTED%5D": dial tcp: lookup production.cloudfront.docker.com on 192.168.65.254:53: server misbehaving
+9m25s       Warning   Failed                         pod/fail-4-dns-failure-pod         Error: ErrImagePull
+8m44s       Warning   Failed                         pod/dns-test                       Error: ImagePullBackOff
+6m14s       Warning   Failed                         pod/dns-test                       Error: ImagePullBackOff
+6m1s        Warning   Failed                         pod/dns-test                       Failed to pull image "registry.k8s.io/e2e-test-images/dnsutils:1.3": rpc error: code = NotFound desc = failed to pull and unpack image "registry.k8s.io/e2e-test-images/dnsutils:1.3": failed to resolve reference "registry.k8s.io/e2e-test-images/dnsutils:1.3": registry.k8s.io/e2e-test-images/dnsutils:1.3: not found
+6m1s        Warning   Failed                         pod/dns-test                       Error: ErrImagePull
+3m28s       Warning   Failed                         pod/config-key-demo                Error: couldn't find key LOGLEVEL in ConfigMap default/app-config
+3m4s        Warning   Failed                         pod/config-cmd-demo                Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: exec: "ngnix": executable file not found in $PATH
+3m3s        Warning   BackOff                        pod/config-cmd-demo                Back-off restarting failed container nginx in pod config-cmd-demo_default(6e8385fb-17ba-4f2b-a090-6ad8d02162c0)
+2m36s       Warning   BackOff                        pod/fail-5-oomkilled-pod           Back-off restarting failed container memory-leaker in pod fail-5-oomkilled-pod_default(065b529b-a3f9-4790-b042-aec93f476dcb)
+108s        Warning   Unhealthy                      pod/api-684f5c94cf-wv2p5           Readiness probe failed: dial tcp 10.244.0.93:8080: connect: connection refused
+69s         Warning   Failed                         pod/fail-2-imagepull-pod           Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to do request: Head "https://registry-1.docker.io/v2/library/yatri-api-service/manifests/v999-invalid-tag-does-not-exist": dial tcp: lookup registry-1.docker.io on 192.168.65.254:53: server misbehaving
+43s         Warning   Failed                         pod/fail-2-imagepull-pod           Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to do request: Head "https://registry-1.docker.io/v2/library/yatri-api-service/manifests/v999-invalid-tag-does-not-exist": dial tcp: lookup registry-1.docker.io on 192.168.65.254:53: no such host
+41s         Warning   BackOff                        pod/fail-5-oomkilled-pod           Back-off restarting failed container memory-leaker in pod fail-5-oomkilled-pod_default(e45c1671-727b-4d8e-af32-e28a792522e7)
+38s         Warning   BackOff                        pod/fail-1-crashloop-pod           Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(db898d22-b065-432b-877d-1e96b01a4fda)
+31s         Warning   Failed                         pod/fail-2-imagepull-pod           Error: ImagePullBackOff
+5s          Warning   Failed                         pod/fail-2-imagepull-pod           Error: ErrImagePull
+5s          Warning   Failed                         pod/fail-2-imagepull-pod           Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+
+# Each one was diagnosed and fixed in its own transcript (02, 03, 04, 07, 10). Apply all five fixes at once:
+$ kubectl delete pods -l tier=triage-gauntlet --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-1-crashloop-pod" force deleted from default namespace
+pod "fail-2-imagepull-pod" force deleted from default namespace
+pod "fail-3-pending-pod" force deleted from default namespace
+pod "fail-4-dns-failure-pod" force deleted from default namespace
+pod "fail-5-oomkilled-pod" force deleted from default namespace
+
+$ kubectl apply -f fixes/postgres-db.yaml
+namespace/production created
+deployment.apps/postgres-db created
+service/postgres-db created
+
+$ kubectl -n production rollout status deployment/postgres-db --timeout=240s
+Waiting for deployment "postgres-db" rollout to finish: 0 of 1 updated replicas are available...
+deployment "postgres-db" successfully rolled out
+
+$ kubectl apply -f fixes/scenario-1-crashloop-fixed.yaml -f fixes/scenario-2-imagepull-fixed.yaml -f fixes/scenario-3-pending-fixed.yaml -f fixes/scenario-4-dns-fixed.yaml -f fixes/scenario-5-oomkilled-fixed.yaml
+pod/fail-1-crashloop-pod created
+pod/fail-2-imagepull-pod created
+pod/fail-3-pending-pod created
+pod/fail-4-dns-failure-pod created
+pod/fail-5-oomkilled-pod created
+
+$ kubectl wait --for=condition=Ready pods -l tier=triage-gauntlet --timeout=240s
+pod/fail-1-crashloop-pod condition met
+pod/fail-2-imagepull-pod condition met
+pod/fail-3-pending-pod condition met
+pod/fail-4-dns-failure-pod condition met
+pod/fail-5-oomkilled-pod condition met
+
+$ kubectl get pods -l tier=triage-gauntlet -o wide
+NAME                     READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+fail-1-crashloop-pod     1/1     Running   0          22s   10.244.0.99    hw-b-control-plane   <none>           <none>
+fail-2-imagepull-pod     1/1     Running   0          22s   10.244.0.100   hw-b-control-plane   <none>           <none>
+fail-3-pending-pod       1/1     Running   0          22s   10.244.0.101   hw-b-control-plane   <none>           <none>
+fail-4-dns-failure-pod   1/1     Running   0          22s   10.244.0.102   hw-b-control-plane   <none>           <none>
+fail-5-oomkilled-pod     1/1     Running   0          22s   10.244.0.103   hw-b-control-plane   <none>           <none>
+
+$ kubectl logs fail-4-dns-failure-pod
+Attempting connection to internal database...
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+
+Name:	postgres-db.production.svc.cluster.local
+Address: 10.96.33.212
+
+postgres-db.production.svc.cluster.local (10.96.33.212:5432) open
+Process sleeping...
+
+$ kubectl delete pods -l tier=triage-gauntlet --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-1-crashloop-pod" force deleted from default namespace
+pod "fail-2-imagepull-pod" force deleted from default namespace
+pod "fail-3-pending-pod" force deleted from default namespace
+pod "fail-4-dns-failure-pod" force deleted from default namespace
+pod "fail-5-oomkilled-pod" force deleted from default namespace
+
+$ kubectl delete -f fixes/postgres-db.yaml
+namespace "production" deleted
+deployment.apps "postgres-db" deleted from production namespace
+service "postgres-db" deleted from production namespace
+

@@ -1,0 +1,63 @@
+# ===== ContainerCreating: Pod mounts a ConfigMap that doesn't exist (own-issues/containercreating-*.yaml) =====
+$ kubectl apply -f own-issues/containercreating-broken.yaml
+pod/cc-demo created
+
+22:34:44 cc-demo   0/1   Pending   0     0s
+22:34:49 cc-demo   0/1   ContainerCreating   0     5s
+22:34:54 cc-demo   0/1   ContainerCreating   0     10s
+22:34:59 cc-demo   0/1   ContainerCreating   0     15s
+22:35:04 cc-demo   0/1   ContainerCreating   0     21s
+22:35:10 cc-demo   0/1   ContainerCreating   0     26s
+22:35:15 cc-demo   0/1   ContainerCreating   0     31s
+22:35:20 cc-demo   0/1   ContainerCreating   0     36s
+
+$ kubectl get pod cc-demo -o wide
+NAME      READY   STATUS              RESTARTS   AGE   IP       NODE                 NOMINATED NODE   READINESS GATES
+cc-demo   0/1     ContainerCreating   0          41s   <none>   hw-b-control-plane   <none>           <none>
+
+$ kubectl describe pod cc-demo | sed -n '/Events:/,$p'
+Events:
+  Type     Reason       Age               From               Message
+  ----     ------       ----              ----               -------
+  Normal   Scheduled    40s               default-scheduler  Successfully assigned default/cc-demo to hw-b-control-plane
+  Warning  FailedMount  9s (x7 over 41s)  kubelet            MountVolume.SetUp failed for volume "site" : configmap "site-content" not found
+
+$ kubectl get configmap site-content
+Error from server (NotFound): configmaps "site-content" not found
+
+$ kubectl get events --field-selector involvedObject.name=cc-demo,reason=FailedMount
+LAST SEEN   TYPE      REASON        OBJECT        MESSAGE
+9s          Warning   FailedMount   pod/cc-demo   MountVolume.SetUp failed for volume "site" : configmap "site-content" not found
+
+# ROOT CAUSE: volume 'site' refers to ConfigMap site-content, which does not exist. The pod IS scheduled (NODE is set, IP still <none>), but kubelet can't build the volume, so the container is never created - the status stays ContainerCreating and the events say FailedMount.
+# FIX: create the ConfigMap. The pod doesn't need to be recreated: kubelet keeps retrying the mount.
+$ kubectl apply -f own-issues/containercreating-fixed.yaml
+configmap/site-content created
+
+$ kubectl wait --for=condition=Ready pod/cc-demo --timeout=180s
+I1007 22:36:41.550767   20367 reflector.go:664] "Warning: watch ended with error" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured" err="an error on the server (\"unable to decode an event from the watch stream: http2: client connection lost\") has prevented the request from succeeding"
+pod/cc-demo condition met
+
+# VERIFY
+$ kubectl get pod cc-demo
+NAME      READY   STATUS    RESTARTS   AGE
+cc-demo   1/1     Running   0          2m44s
+
+$ kubectl exec cc-demo -- curl -s http://localhost/
+<h1>served from ConfigMap site-content</h1>
+
+$ kubectl describe pod cc-demo | sed -n '/Events:/,$p'
+Events:
+  Type     Reason       Age                    From               Message
+  ----     ------       ----                   ----               -------
+  Normal   Scheduled    2m57s                  default-scheduler  Successfully assigned default/cc-demo to hw-b-control-plane
+  Warning  FailedMount  2m25s (x7 over 2m57s)  kubelet            MountVolume.SetUp failed for volume "site" : configmap "site-content" not found
+  Normal   Pulled       112s                   kubelet            spec.containers{nginx}: Container image "nginx:1.27" already present on machine and can be accessed by the pod
+  Normal   Created      111s                   kubelet            spec.containers{nginx}: Container created
+  Normal   Started      50s                    kubelet            spec.containers{nginx}: Container started
+
+$ kubectl delete -f own-issues/containercreating-broken.yaml -f own-issues/containercreating-fixed.yaml --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "cc-demo" force deleted from default namespace
+configmap "site-content" force deleted from default namespace
+

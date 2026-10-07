@@ -1,0 +1,13 @@
+# Step 8 of the mini project: the Service with a deliberately wrong selector
+# (copy of ../../mini-project/service.yaml with app: wrong-app).
+apiVersion: v1
+kind: Service
+metadata:
+  name: troubleshooting-service
+spec:
+  selector:
+    app: wrong-app
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

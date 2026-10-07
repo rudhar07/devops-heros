@@ -1,0 +1,8 @@
+# Fix: create the missing ConfigMap (the Pod spec itself was fine).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: site-content
+data:
+  index.html: |
+    <h1>served from ConfigMap site-content</h1>

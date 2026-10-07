@@ -1,0 +1,77 @@
+# ===== Networking 2: Service targetPort doesn't match containerPort (own-issues/net-targetport-*.yaml) =====
+$ kubectl apply -f own-issues/net-targetport-broken.yaml
+deployment.apps/shop created
+service/shop created
+
+$ kubectl rollout status deployment/shop --timeout=180s
+Waiting for deployment "shop" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "shop" rollout to finish: 1 of 2 updated replicas are available...
+deployment "shop" successfully rolled out
+
+# IDENTIFY
+$ kubectl get pods -l app=shop -o wide
+NAME                    READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+shop-74b8fb5545-6v9dl   1/1     Running   0          1s    10.244.0.85   hw-b-control-plane   <none>           <none>
+shop-74b8fb5545-wjnmc   1/1     Running   0          1s    10.244.0.84   hw-b-control-plane   <none>           <none>
+
+$ kubectl exec client -- wget -qO- -T 3 http://shop
+wget: download timed out
+command terminated with exit code 1
+
+# INVESTIGATE: endpoints exist (so the selector is fine), but look at the port in them
+$ kubectl get endpoints shop
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME   ENDPOINTS                           AGE
+shop   10.244.0.84:8080,10.244.0.85:8080   4s
+
+$ kubectl describe svc shop
+Name:                     shop
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=shop
+Type:                     ClusterIP
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.84.158
+IPs:                      10.96.84.158
+Port:                     <unset>  80/TCP
+TargetPort:               8080/TCP
+Endpoints:                10.244.0.84:8080,10.244.0.85:8080
+Session Affinity:         None
+Internal Traffic Policy:  Cluster
+Events:                   <none>
+
+# Hit one pod directly on 8080 and on 80:
+$ kubectl exec client -- wget -qO- -T 3 http://10.244.0.85:8080
+wget: can't connect to remote host (10.244.0.85): Connection refused
+command terminated with exit code 1
+
+$ kubectl exec client -- wget -qO- -T 3 http://10.244.0.85:80 | head -4
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+
+# ROOT CAUSE: Service targetPort is 8080 but nginx listens on 80. kube-proxy forwards to podIP:8080 where nothing listens -> connection refused.
+# FIX: targetPort: 80 (own-issues/net-targetport-fixed.yaml). Service ports can be changed in place.
+$ kubectl apply -f own-issues/net-targetport-fixed.yaml
+deployment.apps/shop unchanged
+service/shop configured
+
+# VERIFY
+$ kubectl get endpoints shop
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME   ENDPOINTS                       AGE
+shop   10.244.0.84:80,10.244.0.85:80   4s
+
+$ kubectl exec client -- wget -qO- -T 3 http://shop | head -4
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+
+$ kubectl delete -f own-issues/net-targetport-fixed.yaml
+deployment.apps "shop" deleted from default namespace
+service "shop" deleted from default namespace
+

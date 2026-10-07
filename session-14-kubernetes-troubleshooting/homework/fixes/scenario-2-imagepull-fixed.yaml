@@ -1,0 +1,16 @@
+# Fix for ../../scenarios/scenario-2-imagepull/broken.yaml
+# Root cause: "yatri-api-service" resolves to docker.io/library/yatri-api-service, which does not
+# exist (and the tag is invalid). There is no published image for this app, so I point it at a
+# real, existing image. In a real team the fix is the correct registry/repo:tag (and an
+# imagePullSecret if the registry is private).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-2-imagepull-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: imagepull
+spec:
+  containers:
+    - name: web-app
+      image: nginx:alpine

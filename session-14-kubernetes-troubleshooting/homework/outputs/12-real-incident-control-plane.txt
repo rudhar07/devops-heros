@@ -1,0 +1,130 @@
+# Unplanned, real incident while I was working (around 22:10 local / 16:40 UTC).
+# kubectl top suddenly said 'Metrics API not available' and a new pod hit ErrImagePull.
+$ kubectl -n kube-system get pods
+NAME                                         READY   STATUS             RESTARTS      AGE
+coredns-559f6c778d-q5w5p                     1/1     Running            0             18m
+coredns-559f6c778d-tsc7w                     1/1     Running            0             18m
+etcd-hw-b-control-plane                      1/1     Running            0             18m
+kindnet-tmvl4                                1/1     Running            0             18m
+kube-apiserver-hw-b-control-plane            1/1     Running            0             18m
+kube-controller-manager-hw-b-control-plane   0/1     CrashLoopBackOff   3 (14s ago)   18m
+kube-proxy-vzkjt                             1/1     Running            0             18m
+kube-scheduler-hw-b-control-plane            0/1     CrashLoopBackOff   3 (10s ago)   18m
+metrics-server-84c99cb944-kkw88              0/1     Running            2 (74s ago)   18m
+
+$ kubectl -n kube-system logs kube-scheduler-hw-b-control-plane --previous --tail=3
+I1007 16:41:55.628613       1 server.go:281] "[graceful-termination] secure server has stopped listening"
+I1007 16:41:55.628623       1 server.go:283] "[graceful-termination] secure server is exiting"
+E1007 16:41:55.628634       1 server.go:337] "Leaderelection lost"
+
+$ kubectl -n kube-system logs kube-controller-manager-hw-b-control-plane --previous | grep -iE 'leader|timeout|deadline' | tail -5
+I1007 16:41:35.170017       1 leaderelection.go:272] "Successfully acquired lease" lock="kube-system/kube-controller-manager"
+I1007 16:41:35.170008       1 event.go:395] "Event occurred" object="kube-system/kube-controller-manager" fieldPath="" kind="Lease" apiVersion="coordination.k8s.io/v1" type="Normal" reason="LeaderElection" message="hw-b-control-plane_c70f891c-d6cf-4aa2-8f91-8a684d91f8ad became leader"
+E1007 16:41:48.147379       1 leaderelection.go:473] "Error retrieving lease lock" err="context deadline exceeded" lock="kube-system/kube-controller-manager"
+I1007 16:41:49.533155       1 leaderelection.go:304] "Failed to renew lease" lock="kube-system/kube-controller-manager" err="context deadline exceeded"
+E1007 16:41:51.178808       1 controllermanager.go:413] "leaderelection lost/stopped"
+
+$ kubectl -n kube-system logs metrics-server-84c99cb944-kkw88 --previous | tail -5
+I1007 16:40:50.047104       1 configmap_cafile_content.go:226] "Shutting down controller" name="client-ca::kube-system::extension-apiserver-authentication::client-ca-file"
+I1007 16:40:50.047798       1 configmap_cafile_content.go:226] "Shutting down controller" name="client-ca::kube-system::extension-apiserver-authentication::requestheader-client-ca-file"
+I1007 16:40:50.047013       1 dynamic_serving_content.go:149] "Shutting down controller" name="serving-cert::/tmp/apiserver.crt::/tmp/apiserver.key"
+I1007 16:40:50.106278       1 secure_serving.go:262] Stopped listening on [::]:10250
+I1007 16:40:50.112747       1 server.go:192] "Failed probe" probe="metric-storage-ready" err="no metrics to serve"
+
+$ kubectl get events -n yatri --field-selector reason=Failed
+LAST SEEN   TYPE      REASON   OBJECT                              MESSAGE
+109s        Warning   Failed   pod/yatri-backend-cbc55c649-28v56   Failed to pull image "python:3.11-alpine3.19": failed to pull and unpack image "docker.io/library/python:3.11-alpine3.19": failed to resolve reference "docker.io/library/python:3.11-alpine3.19": failed to authorize: failed to fetch anonymous token: Get "https://auth.docker.io/token?scope=%5BREDACTED%5D&service=%5BREDACTED%5D": dial tcp: lookup auth.docker.io on 192.168.65.254:53: server misbehaving
+109s        Warning   Failed   pod/yatri-backend-cbc55c649-28v56   Error: ErrImagePull
+108s        Warning   Failed   pod/yatri-backend-cbc55c649-28v56   Error: ImagePullBackOff
+99s         Warning   Failed   pod/yatri-backend-cbc55c649-q6fdh   Failed to pull image "python:3.11-alpine3.19": failed to pull and unpack image "docker.io/library/python:3.11-alpine3.19": failed to resolve reference "docker.io/library/python:3.11-alpine3.19": failed to authorize: failed to fetch anonymous token: Get "https://auth.docker.io/token?scope=%5BREDACTED%5D&service=%5BREDACTED%5D": dial tcp: lookup auth.docker.io on 192.168.65.254:53: server misbehaving
+99s         Warning   Failed   pod/yatri-backend-cbc55c649-q6fdh   Error: ErrImagePull
+94s         Warning   Failed   pod/yatri-backend-cbc55c649-q6fdh   Error: ImagePullBackOff
+
+$ docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}'
+hw-d-control-plane 22.80% 534.3MiB / 7.749GiB
+hw-a-control-plane 11.00% 628.6MiB / 7.749GiB
+hw-b-control-plane 16.20% 716.8MiB / 7.749GiB
+adobe-illustrator 1.10% 587.4MiB / 7.749GiB
+mailchimp 0.70% 4.132GiB / 7.749GiB
+grafana 2.08% 258.2MiB / 7.749GiB
+
+$ kubectl top nodes
+error: metrics not available yet
+
+$ kubectl -n kube-system logs etcd-hw-b-control-plane --tail=200 | grep -iE 'took too long' | tail -3
+{"level":"warn","ts":"2026-10-07T16:41:51.926194Z","caller":"txn/util.go:93","msg":"apply request took too long","took":"396.562625ms","expected-duration":"100ms","prefix":"read-only range ","request":"limit:1 serializable:true keys_only:true","response":"range_response_count:0 size:5"}
+{"level":"warn","ts":"2026-10-07T16:41:52.800205Z","caller":"txn/util.go:93","msg":"apply request took too long","took":"464.251708ms","expected-duration":"100ms","prefix":"","request":"header:<ID:1158728125057342740> lease_revoke:<id:1014a1172d4c1cb4>","response":"size:28"}
+{"level":"warn","ts":"2026-10-07T16:41:53.041048Z","caller":"txn/util.go:93","msg":"apply request took too long","took":"680.114209ms","expected-duration":"100ms","prefix":"read-only range ","request":"limit:1 keys_only:true","response":"range_response_count:0 size:5"}
+
+$ docker exec hw-b-control-plane sh -c 'cat /proc/loadavg; free -m'
+64.86 64.20 31.44 1/1902 419686
+               total        used        free      shared  buff/cache   available
+Mem:            7935        7761          79          30         317         173
+Swap:           1023        1023           0
+
+# Mitigation on MY single-node cluster: turn off leader election for the scheduler and controller-manager.
+# With one replica each there is nobody to fail over to, and the lease renewals were timing out because etcd was starved.
+# (Edits the static-pod manifests inside the kind node container; kubelet restarts the pods by itself.)
+$ docker exec hw-b-control-plane sed -i 's/--leader-elect=true/--leader-elect=false/' /etc/kubernetes/manifests/kube-scheduler.yaml
+
+$ docker exec hw-b-control-plane sed -i 's/--leader-elect=true/--leader-elect=false/' /etc/kubernetes/manifests/kube-controller-manager.yaml
+
+$ docker exec hw-b-control-plane grep -H leader-elect /etc/kubernetes/manifests/kube-scheduler.yaml /etc/kubernetes/manifests/kube-controller-manager.yaml
+/etc/kubernetes/manifests/kube-scheduler.yaml:    - --leader-elect=false
+/etc/kubernetes/manifests/kube-controller-manager.yaml:    - --leader-elect=false
+
+$ kubectl -n kube-system get pods
+NAME                                         READY   STATUS    RESTARTS       AGE
+coredns-559f6c778d-q5w5p                     1/1     Running   0              27m
+coredns-559f6c778d-tsc7w                     1/1     Running   0              27m
+etcd-hw-b-control-plane                      1/1     Running   0              27m
+kindnet-tmvl4                                1/1     Running   0              27m
+kube-apiserver-hw-b-control-plane            1/1     Running   0              27m
+kube-controller-manager-hw-b-control-plane   1/1     Running   0              46s
+kube-proxy-vzkjt                             1/1     Running   0              27m
+kube-scheduler-hw-b-control-plane            1/1     Running   0              43s
+metrics-server-84c99cb944-kkw88              1/1     Running   4 (3m9s ago)   27m
+
+# Later, more evidence (events on the node object):
+$ kubectl get events --field-selector involvedObject.kind=Node --sort-by=.lastTimestamp
+LAST SEEN   TYPE      REASON                    OBJECT                    MESSAGE
+62m         Normal    Starting                  node/hw-b-control-plane   
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 23591
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 31830
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 37020
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 37186
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 31827
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 37283
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 37284
+62m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: python, pid: 37365
+62m         Normal    NodeAllocatableEnforced   node/hw-b-control-plane   Updated Node Allocatable limit across pods
+62m         Normal    Starting                  node/hw-b-control-plane   Starting kubelet.
+62m         Normal    RegisteredNode            node/hw-b-control-plane   Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+52m         Normal    RegisteredNode            node/hw-b-control-plane   Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+47m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 71512
+46m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 516631
+46m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 511500
+45m         Normal    RegisteredNode            node/hw-b-control-plane   Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+45m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 517706
+42m         Normal    RegisteredNode            node/hw-b-control-plane   Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+40m         Normal    RegisteredNode            node/hw-b-control-plane   Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+38m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 523705
+35m         Normal    RegisteredNode            node/hw-b-control-plane   Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+34m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 524942
+29m         Normal    NodeNotReady              node/hw-b-control-plane   Node hw-b-control-plane status is now: NodeNotReady
+26m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 550297
+25m         Normal    RegisteredNode            node/hw-b-control-plane   Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+19m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 544474
+19m         Warning   SystemOOM                 node/hw-b-control-plane   System OOM encountered, victim process: local-path-prov, pid: 534371
+16m         Normal    NodeNotReady              node/hw-b-control-plane   Node hw-b-control-plane status is now: NodeNotReady
+16m         Normal    NodeHasSufficientPID      node/hw-b-control-plane   Node hw-b-control-plane status is now: NodeHasSufficientPID
+16m         Normal    NodeHasNoDiskPressure     node/hw-b-control-plane   Node hw-b-control-plane status is now: NodeHasNoDiskPressure
+16m         Normal    NodeReady                 node/hw-b-control-plane   Node hw-b-control-plane status is now: NodeReady
+16m         Normal    NodeHasSufficientMemory   node/hw-b-control-plane   Node hw-b-control-plane status is now: NodeHasSufficientMemory
+
+$ docker exec hw-b-control-plane sh -c 'cat /proc/loadavg; free -m'
+3.38 5.74 31.94 4/1390 443952
+               total        used        free      shared  buff/cache   available
+Mem:            7935        2993         113          37        5065        4942
+Swap:           1023          36         987
+

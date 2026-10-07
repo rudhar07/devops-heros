@@ -1,0 +1,77 @@
+# ===== OOMKilled: scenarios/scenario-5-oomkilled =====
+$ kubectl apply -f ../scenarios/scenario-5-oomkilled/broken.yaml
+pod/fail-5-oomkilled-pod created
+
+22:50:09 fail-5-oomkilled-pod   0/1   ContainerCreating   0     0s
+22:50:13 fail-5-oomkilled-pod   0/1   OOMKilled   1 (4s ago)   4s
+22:50:17 fail-5-oomkilled-pod   0/1   OOMKilled   1 (8s ago)   8s
+22:50:21 fail-5-oomkilled-pod   0/1   OOMKilled   1 (12s ago)   12s
+22:50:25 fail-5-oomkilled-pod   0/1   OOMKilled   2 (15s ago)   16s
+22:50:29 fail-5-oomkilled-pod   0/1   OOMKilled   2 (19s ago)   20s
+
+$ kubectl get pod fail-5-oomkilled-pod
+NAME                   READY   STATUS      RESTARTS      AGE
+fail-5-oomkilled-pod   0/1     OOMKilled   2 (23s ago)   24s
+
+$ kubectl describe pod fail-5-oomkilled-pod | sed -n '/State:/,/Restart Count/p;/Limits:/,/Environment/p'
+    State:          Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Wed, 07 Oct 2026 22:50:23 +0530
+      Finished:     Wed, 07 Oct 2026 22:50:23 +0530
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Wed, 07 Oct 2026 22:50:10 +0530
+      Finished:     Wed, 07 Oct 2026 22:50:10 +0530
+    Ready:          False
+    Restart Count:  2
+    Limits:
+      memory:  20Mi
+    Requests:
+      memory:     20Mi
+    Environment:  <none>
+
+$ kubectl get pod fail-5-oomkilled-pod -o jsonpath={.status.containerStatuses[0].lastState.terminated.reason}{" exit="}{.status.containerStatuses[0].lastState.terminated.exitCode}{"\n"}
+OOMKilled exit=137
+
+$ kubectl logs fail-5-oomkilled-pod
+
+$ kubectl describe pod fail-5-oomkilled-pod | sed -n '/Events:/,$p'
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  24s                default-scheduler  Successfully assigned default/fail-5-oomkilled-pod to hw-b-control-plane
+  Normal   Pulled     11s (x3 over 25s)  kubelet            spec.containers{memory-leaker}: Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+  Normal   Created    11s (x3 over 25s)  kubelet            spec.containers{memory-leaker}: Container created
+  Normal   Started    11s (x3 over 25s)  kubelet            spec.containers{memory-leaker}: Container started
+  Warning  BackOff    10s (x2 over 23s)  kubelet            spec.containers{memory-leaker}: Back-off restarting failed container memory-leaker in pod fail-5-oomkilled-pod_default(065b529b-a3f9-4790-b042-aec93f476dcb)
+
+# ROOT CAUSE: the script keeps 100 x 10 MiB chunks in a list (~1000 MiB) but the memory limit is 20Mi. The kernel's cgroup OOM killer kills the process (exit 137 = 128+SIGKILL, reason OOMKilled), kubelet restarts it, it dies again -> CrashLoopBackOff.
+# FIX: fixes/scenario-5-oomkilled-fixed.yaml - process one chunk at a time (no leak) and a realistic 64Mi limit.
+$ kubectl delete pod fail-5-oomkilled-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-5-oomkilled-pod" force deleted from default namespace
+
+$ kubectl apply -f fixes/scenario-5-oomkilled-fixed.yaml
+pod/fail-5-oomkilled-pod created
+
+$ kubectl wait --for=condition=Ready pod/fail-5-oomkilled-pod --timeout=180s
+pod/fail-5-oomkilled-pod condition met
+
+# VERIFY
+$ kubectl get pod fail-5-oomkilled-pod
+NAME                   READY   STATUS    RESTARTS   AGE
+fail-5-oomkilled-pod   1/1     Running   0          15s
+
+$ kubectl logs fail-5-oomkilled-pod
+Processing 100 chunks one at a time...
+Done, processed 1000 MiB without holding it all
+
+$ kubectl top pod fail-5-oomkilled-pod
+Error from server (NotFound): podmetrics.metrics.k8s.io "default/fail-5-oomkilled-pod" not found
+
+$ kubectl delete pod fail-5-oomkilled-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-5-oomkilled-pod" force deleted from default namespace
+

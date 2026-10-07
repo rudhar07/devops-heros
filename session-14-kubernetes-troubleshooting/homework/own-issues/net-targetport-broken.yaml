@@ -1,0 +1,32 @@
+# Pod networking issue 2: Service targetPort doesn't match the port the container listens on.
+# nginx listens on 80; the Service sends traffic to 8080. Endpoints exist, but connections are refused.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shop
+  template:
+    metadata:
+      labels:
+        app: shop
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop
+spec:
+  selector:
+    app: shop
+  ports:
+    - port: 80
+      targetPort: 8080

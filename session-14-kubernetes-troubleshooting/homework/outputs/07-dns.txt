@@ -1,0 +1,251 @@
+# ===== DNS 1: how cluster DNS works here (instructor 09 dns-test pod) =====
+$ kubectl exec dns-test -- cat /etc/resolv.conf
+search default.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:5
+
+$ kubectl exec dns-test -- nslookup web-service
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+** server can't find web-service.cluster.local: NXDOMAIN
+
+Name:	web-service.default.svc.cluster.local
+Address: 10.96.114.245
+
+** server can't find web-service.svc.cluster.local: NXDOMAIN
+
+
+** server can't find web-service.cluster.local: NXDOMAIN
+
+** server can't find web-service.svc.cluster.local: NXDOMAIN
+
+command terminated with exit code 1
+
+$ kubectl exec dns-test -- nslookup web-service.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Name:	web-service.default.svc.cluster.local
+Address: 10.96.114.245
+
+$ kubectl get svc -n kube-system kube-dns
+NAME       TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   53m
+
+$ kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
+NAME                       READY   STATUS    RESTARTS      AGE   IP           NODE                 NOMINATED NODE   READINESS GATES
+coredns-559f6c778d-q5w5p   1/1     Running   1 (17m ago)   53m   10.244.0.2   hw-b-control-plane   <none>           <none>
+coredns-559f6c778d-tsc7w   1/1     Running   1 (17m ago)   53m   10.244.0.3   hw-b-control-plane   <none>           <none>
+
+$ kubectl logs -n kube-system -l k8s-app=kube-dns --tail=5
+# (note added afterwards: my retry helper mis-fired here - it matched the text 'Client.Timeout' inside the CoreDNS log
+#  itself, not a kubectl error. The lines below are the real output of the last attempt.)
+[WARNING] plugin/health: Local health request to "http://:8080/health" failed: Get "http://:8080/health": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+[INFO] plugin/kubernetes: Warning: watch ended with error
+[INFO] plugin/kubernetes: Warning: watch ended with error
+[INFO] plugin/kubernetes: Warning: watch ended with error
+[WARNING] plugin/health: Local health request to "http://:8080/health" took more than 1s: 2.110977543s
+[WARNING] plugin/health: Local health request to "http://:8080/health" failed: Get "http://:8080/health": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+[INFO] plugin/kubernetes: Warning: watch ended with error
+[INFO] plugin/kubernetes: Warning: watch ended with error
+[INFO] plugin/kubernetes: Warning: watch ended with error
+[WARNING] plugin/health: Local health request to "http://:8080/health" failed: Get "http://:8080/health": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+
+# ===== DNS 2: scenarios/scenario-4-dns-failure (wrong hostname) =====
+$ kubectl apply -f ../scenarios/scenario-4-dns-failure/broken.yaml
+pod/fail-4-dns-failure-pod created
+
+$ kubectl wait --for=condition=Ready pod/fail-4-dns-failure-pod --timeout=180s
+pod/fail-4-dns-failure-pod condition met
+
+# IDENTIFY: the pod is Running/Ready, so get/describe look healthy. The problem only shows in the logs.
+$ kubectl get pod fail-4-dns-failure-pod
+NAME                     READY   STATUS    RESTARTS   AGE
+fail-4-dns-failure-pod   1/1     Running   0          1s
+
+$ kubectl logs fail-4-dns-failure-pod
+Attempting connection to internal database...
+Process sleeping...
+
+# curl -s hides the error. Run the same call by hand, without -s:
+$ kubectl exec fail-4-dns-failure-pod -- curl -sS --connect-timeout 3 http://postgres-db-wrong-name.production.svc.cluster.local:5432
+curl: (6) Could not resolve host: postgres-db-wrong-name.production.svc.cluster.local
+command terminated with exit code 6
+
+# INVESTIGATE: is DNS itself working? Yes for a real name, NXDOMAIN for this one:
+$ kubectl exec dns-test -- nslookup kubernetes.default
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Non-authoritative answer:
+
+** server can't find kubernetes.default: NXDOMAIN
+
+command terminated with exit code 1
+
+$ kubectl exec dns-test -- nslookup postgres-db-wrong-name.production.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+** server can't find postgres-db-wrong-name.production.svc.cluster.local: NXDOMAIN
+
+** server can't find postgres-db-wrong-name.production.svc.cluster.local: NXDOMAIN
+
+command terminated with exit code 1
+
+$ kubectl get ns production
+Error from server (NotFound): namespaces "production" not found
+
+$ kubectl get svc -A
+NAMESPACE     NAME             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                  AGE
+default       kubernetes       ClusterIP   10.96.0.1       <none>        443/TCP                  54m
+default       web-service      ClusterIP   10.96.114.245   <none>        80/TCP                   113s
+kube-system   kube-dns         ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   54m
+kube-system   metrics-server   ClusterIP   10.96.222.83    <none>        443/TCP                  54m
+
+# ROOT CAUSE: the hostname is wrong AND there is no namespace 'production' / Service 'postgres-db' at all. CoreDNS is fine; it correctly answers NXDOMAIN for a name that doesn't exist.
+# FIX: create the database Service it should talk to (fixes/postgres-db.yaml) and use the correct name (fixes/scenario-4-dns-fixed.yaml).
+$ kubectl apply -f fixes/postgres-db.yaml
+namespace/production created
+deployment.apps/postgres-db created
+service/postgres-db created
+
+$ kubectl -n production rollout status deployment/postgres-db --timeout=240s
+Waiting for deployment "postgres-db" rollout to finish: 0 of 1 updated replicas are available...
+deployment "postgres-db" successfully rolled out
+
+$ kubectl delete pod fail-4-dns-failure-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-4-dns-failure-pod" force deleted from default namespace
+
+$ kubectl apply -f fixes/scenario-4-dns-fixed.yaml
+pod/fail-4-dns-failure-pod created
+
+$ kubectl wait --for=condition=Ready pod/fail-4-dns-failure-pod --timeout=180s
+pod/fail-4-dns-failure-pod condition met
+
+# VERIFY
+$ kubectl logs fail-4-dns-failure-pod
+Attempting connection to internal database...
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+
+Name:	postgres-db.production.svc.cluster.local
+Address: 10.96.187.120
+
+postgres-db.production.svc.cluster.local (10.96.187.120:5432) open
+Process sleeping...
+
+$ kubectl exec dns-test -- nslookup postgres-db.production.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Name:	postgres-db.production.svc.cluster.local
+Address: 10.96.187.120
+
+$ kubectl -n production get svc,endpoints postgres-db
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME                  TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/postgres-db   ClusterIP   10.96.187.120   <none>        5432/TCP   10s
+
+NAME                    ENDPOINTS          AGE
+endpoints/postgres-db   10.244.0.77:5432   10s
+
+# ===== DNS 3: short name from another namespace =====
+# A pod in namespace 'production' calls 'web-service' (which lives in 'default'):
+$ kubectl -n production run dns-client --image=busybox:1.36 --restart=Never --command -- sleep 600
+pod/dns-client created
+
+$ kubectl -n production wait --for=condition=Ready pod/dns-client --timeout=120s
+pod/dns-client condition met
+
+$ kubectl -n production exec dns-client -- cat /etc/resolv.conf
+search production.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:5
+
+$ kubectl -n production exec dns-client -- nslookup web-service
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+** server can't find web-service.production.svc.cluster.local: NXDOMAIN
+
+** server can't find web-service.cluster.local: NXDOMAIN
+
+** server can't find web-service.svc.cluster.local: NXDOMAIN
+
+** server can't find web-service.svc.cluster.local: NXDOMAIN
+
+** server can't find web-service.production.svc.cluster.local: NXDOMAIN
+
+** server can't find web-service.cluster.local: NXDOMAIN
+
+command terminated with exit code 1
+
+$ kubectl -n production exec dns-client -- wget -qO- -T 3 http://web-service
+wget: bad address 'web-service'
+command terminated with exit code 1
+
+# ROOT CAUSE: the search list starts with production.svc.cluster.local, so 'web-service' becomes web-service.production.svc.cluster.local, which doesn't exist.
+# FIX: use <service>.<namespace> (or the full FQDN).
+$ kubectl -n production exec dns-client -- nslookup web-service.default
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Non-authoritative answer:
+
+** server can't find web-service.default: NXDOMAIN
+
+command terminated with exit code 1
+
+$ kubectl -n production exec dns-client -- wget -qO- -T 3 http://web-service.default | head -4
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+
+$ kubectl -n production delete pod dns-client --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "dns-client" force deleted from production namespace
+
+$ kubectl delete pod fail-4-dns-failure-pod --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "fail-4-dns-failure-pod" force deleted from default namespace
+
+# ===== busybox nslookup quirk (found while doing the above) =====
+# Above, 'nslookup kubernetes.default' and 'nslookup web-service.default' said NXDOMAIN, but 'wget http://web-service.default' worked.
+# busybox's nslookup does not apply the search list to names that already contain a dot. The libc resolver used by wget does.
+# So: don't trust busybox nslookup for partial names. Use the FQDN, or test with the real client (wget/curl/getent).
+$ kubectl exec dns-test -- nslookup kubernetes.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+
+Name:	kubernetes.default.svc.cluster.local
+Address: 10.96.0.1
+
+$ kubectl -n production run dns-client2 --image=busybox:1.36 --restart=Never --command -- sleep 300
+pod/dns-client2 created
+
+$ kubectl -n production wait --for=condition=Ready pod/dns-client2 --timeout=120s
+pod/dns-client2 condition met
+
+$ kubectl -n production exec dns-client2 -- nslookup web-service.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Name:	web-service.default.svc.cluster.local
+Address: 10.96.114.245
+
+$ kubectl -n production exec dns-client2 -- wget -qO- -T 3 http://web-service.default.svc.cluster.local | head -4
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+
+$ kubectl -n production delete pod dns-client2 --grace-period=0 --force
+Warning: Immediate deletion does not wait for confirmation that the running resource has been terminated. The resource may continue to run on the cluster indefinitely.
+pod "dns-client2" force deleted from production namespace
+

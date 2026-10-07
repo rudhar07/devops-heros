@@ -1,0 +1,21 @@
+# Fix for ../../scenarios/scenario-3-pending/broken.yaml
+# Root cause: requests of 500 CPUs / 1000Gi memory; no node can ever fit that.
+# Fix: request what the app really needs.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-3-pending-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: pending
+spec:
+  containers:
+    - name: hungry-app
+      image: nginx:alpine
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "250m"
+          memory: "128Mi"

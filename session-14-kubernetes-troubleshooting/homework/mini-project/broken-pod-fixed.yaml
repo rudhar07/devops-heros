@@ -1,0 +1,10 @@
+# Fix for ../../mini-project/broken-pod.yaml: the tag "this-tag-does-not-exist" is not published
+# for docker.io/library/nginx. Use a real tag.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: project-broken-pod
+spec:
+  containers:
+    - name: app
+      image: nginx:1.27

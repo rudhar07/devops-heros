@@ -1,0 +1,29 @@
+# Fixed: configMapKeyRef key matches the ConfigMap (LOG_LEVEL).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  LOG_LEVEL: debug
+  APP_MODE: demo
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: config-key-demo
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "echo LOG_LEVEL=$LOG_LEVEL APP_MODE=$APP_MODE; sleep 3600"]
+      env:
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: LOG_LEVEL
+        - name: APP_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: APP_MODE

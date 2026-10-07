@@ -1,0 +1,34 @@
+# Fix for ../../scenarios/scenario-5-oomkilled/broken.yaml
+# Root cause: the loop keeps 100 x 10 MiB = ~1000 MiB alive in a list while the limit is 20Mi,
+# so the kernel OOM-kills it (exit 137, reason OOMKilled).
+# Fix (two parts): stop holding every chunk (process one at a time = no leak) and give the
+# container a realistic limit for a Python process (64Mi, 20Mi is too small for CPython + a 10 MiB buffer).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-5-oomkilled-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: oomkilled
+spec:
+  containers:
+    - name: memory-leaker
+      image: python:3.11-alpine
+      command:
+        - "python3"
+        - "-c"
+        - |
+          import time
+          print("Processing 100 chunks one at a time...", flush=True)
+          total = 0
+          for i in range(100):
+              chunk = b"x" * (10 * 1024 * 1024)
+              total += len(chunk)
+              del chunk
+          print(f"Done, processed {total // (1024*1024)} MiB without holding it all", flush=True)
+          time.sleep(3600)
+      resources:
+        requests:
+          memory: "32Mi"
+        limits:
+          memory: "64Mi"

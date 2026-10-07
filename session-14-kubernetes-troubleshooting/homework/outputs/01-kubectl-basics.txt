@@ -1,0 +1,1159 @@
+# Deploy the demo pods from folders 01-05
+$ kubectl apply -f ../01-kubectl-get/pod.yaml -f ../02-kubectl-describe/demo-pod.yaml -f ../03-kubectl-logs/pod.yaml -f ../04-kubectl-exec/pod.yaml -f ../05-events/pod.yaml
+pod/get-demo created
+pod/describe-demo created
+pod/logs-demo created
+pod/exec-demo created
+pod/events-demo created
+
+$ kubectl wait --for=condition=Ready pod/get-demo pod/describe-demo pod/logs-demo pod/exec-demo pod/events-demo --timeout=120s
+pod/get-demo condition met
+pod/describe-demo condition met
+pod/logs-demo condition met
+pod/exec-demo condition met
+pod/events-demo condition met
+
+# ===== kubectl get =====
+$ kubectl get pods
+NAME            READY   STATUS    RESTARTS   AGE
+describe-demo   1/1     Running   0          1s
+events-demo     1/1     Running   0          1s
+exec-demo       1/1     Running   0          1s
+get-demo        1/1     Running   0          2s
+logs-demo       1/1     Running   0          1s
+
+$ kubectl get pods -o wide
+NAME            READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+describe-demo   1/1     Running   0          1s    10.244.0.111   hw-b-control-plane   <none>           <none>
+events-demo     1/1     Running   0          1s    10.244.0.112   hw-b-control-plane   <none>           <none>
+exec-demo       1/1     Running   0          1s    10.244.0.114   hw-b-control-plane   <none>           <none>
+get-demo        1/1     Running   0          2s    10.244.0.110   hw-b-control-plane   <none>           <none>
+logs-demo       1/1     Running   0          1s    10.244.0.113   hw-b-control-plane   <none>           <none>
+
+$ kubectl get pods --show-labels
+NAME            READY   STATUS    RESTARTS   AGE   LABELS
+describe-demo   1/1     Running   0          1s    app=describe-demo
+events-demo     1/1     Running   0          1s    <none>
+exec-demo       1/1     Running   0          1s    <none>
+get-demo        1/1     Running   0          2s    app=get-demo
+logs-demo       1/1     Running   0          1s    <none>
+
+$ kubectl get pods -l app=get-demo
+NAME       READY   STATUS    RESTARTS   AGE
+get-demo   1/1     Running   0          2s
+
+$ kubectl get pod get-demo -o jsonpath={.status.podIP}{"  "}{.spec.nodeName}{"  "}{.status.phase}{"\n"}
+10.244.0.110  hw-b-control-plane  Running
+
+$ kubectl get pod get-demo -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[0].image,QOS:.status.qosClass
+NAME       IMAGE        QOS
+get-demo   nginx:1.27   BestEffort
+
+$ kubectl get pod get-demo -o yaml | head -25
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Pod","metadata":{"annotations":{},"labels":{"app":"get-demo"},"name":"get-demo","namespace":"default"},"spec":{"containers":[{"image":"nginx:1.27","name":"nginx","ports":[{"containerPort":80}]}]}}
+  creationTimestamp: "2026-10-07T17:26:07Z"
+  generation: 1
+  labels:
+    app: get-demo
+  name: get-demo
+  namespace: default
+  resourceVersion: "6184"
+  uid: 47a7a53f-1e28-4b1f-afb8-fbf778661438
+spec:
+  containers:
+  - image: nginx:1.27
+    imagePullPolicy: IfNotPresent
+    name: nginx
+    ports:
+    - containerPort: 80
+      protocol: TCP
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+
+$ kubectl get nodes -o wide
+NAME                 STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION             CONTAINER-RUNTIME
+hw-b-control-plane   Ready    control-plane   62m   v1.37.0   172.18.0.2    <none>        Debian GNU/Linux 13 (trixie)   6.12.76-linuxkit (arm64)   containerd://2.3.4
+
+$ kubectl get all -n kube-system
+NAME                                             READY   STATUS    RESTARTS      AGE
+pod/coredns-559f6c778d-q5w5p                     1/1     Running   1 (26m ago)   62m
+pod/coredns-559f6c778d-tsc7w                     1/1     Running   1 (26m ago)   62m
+pod/etcd-hw-b-control-plane                      1/1     Running   1 (26m ago)   62m
+pod/kindnet-tmvl4                                1/1     Running   0             62m
+pod/kube-apiserver-hw-b-control-plane            1/1     Running   1 (26m ago)   62m
+pod/kube-controller-manager-hw-b-control-plane   1/1     Running   3 (26m ago)   35m
+pod/kube-proxy-vzkjt                             1/1     Running   0             62m
+pod/kube-scheduler-hw-b-control-plane            1/1     Running   1 (26m ago)   35m
+pod/metrics-server-84c99cb944-kkw88              1/1     Running   8 (17m ago)   62m
+
+NAME                     TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)                  AGE
+service/kube-dns         ClusterIP   10.96.0.10     <none>        53/UDP,53/TCP,9153/TCP   62m
+service/metrics-server   ClusterIP   10.96.222.83   <none>        443/TCP                  62m
+
+NAME                        DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+daemonset.apps/kindnet      1         1         1       1            1           kubernetes.io/os=linux   62m
+daemonset.apps/kube-proxy   1         1         1       1            1           kubernetes.io/os=linux   62m
+
+NAME                             READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/coredns          2/2     2            2           62m
+deployment.apps/metrics-server   1/1     1            1           62m
+
+NAME                                        DESIRED   CURRENT   READY   AGE
+replicaset.apps/coredns-559f6c778d          2         2         2       62m
+replicaset.apps/metrics-server-6bcd67b6cf   0         0         0       62m
+replicaset.apps/metrics-server-84c99cb944   1         1         1       62m
+
+# ===== kubectl describe =====
+$ kubectl describe pod describe-demo
+Name:             describe-demo
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             hw-b-control-plane/172.18.0.2
+Start Time:       Wed, 07 Oct 2026 22:56:08 +0530
+Labels:           app=describe-demo
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.111
+IPs:
+  IP:  10.244.0.111
+Containers:
+  nginx:
+    Container ID:   containerd://cd3762fc0c73987d8ac78effafec68542d957c773a0fdb2aa9800dfa5aa866c1
+    Image:          nginx:1.27
+    Image ID:       docker.io/library/nginx@sha256:6784fb0834aa7dbbe12e3d7471e69c290df3e6ba810dc38b34ae33d3c1c05f7d
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Wed, 07 Oct 2026 22:56:09 +0530
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-29cdf (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-29cdf:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  2s    default-scheduler  Successfully assigned default/describe-demo to hw-b-control-plane
+  Normal  Pulled     2s    kubelet            spec.containers{nginx}: Container image "nginx:1.27" already present on machine and can be accessed by the pod
+  Normal  Created    2s    kubelet            spec.containers{nginx}: Container created
+  Normal  Started    1s    kubelet            spec.containers{nginx}: Container started
+
+$ kubectl describe node hw-b-control-plane | sed -n '/Allocated resources/,/Events/p'
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests    Limits
+  --------           --------    ------
+  cpu                1250m (8%)  500m (3%)
+  memory             746Mi (9%)  852Mi (10%)
+  ephemeral-storage  0 (0%)      0 (0%)
+  hugepages-1Gi      0 (0%)      0 (0%)
+  hugepages-2Mi      0 (0%)      0 (0%)
+  hugepages-32Mi     0 (0%)      0 (0%)
+  hugepages-64Ki     0 (0%)      0 (0%)
+Events:
+
+# ===== kubectl logs =====
+$ kubectl logs logs-demo
+Application started
+Connecting to database...
+Database connection successful
+Application is running
+Application is healthy
+
+$ kubectl logs logs-demo --tail=2
+Application is running
+Application is healthy
+
+$ kubectl logs logs-demo --timestamps --tail=3
+2026-10-07T17:26:09.040747798Z Database connection successful
+2026-10-07T17:26:09.040749298Z Application is running
+2026-10-07T17:26:09.040749881Z Application is healthy
+
+$ kubectl logs logs-demo --since=10s
+Application started
+Connecting to database...
+Database connection successful
+Application is running
+Application is healthy
+
+$ kubectl logs -l app=get-demo --tail=3
+2026/10/07 17:26:09 [notice] 1#1: start worker process 45
+2026/10/07 17:26:09 [notice] 1#1: start worker process 46
+2026/10/07 17:26:09 [notice] 1#1: start worker process 47
+
+# ===== kubectl exec =====
+$ kubectl exec exec-demo -- hostname
+exec-demo
+
+$ kubectl exec exec-demo -- cat /etc/os-release
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+VERSION_CODENAME=bookworm
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+
+$ kubectl exec exec-demo -- curl -s -o /dev/null -w HTTP %{http_code}\n http://localhost
+HTTP 200
+
+$ kubectl exec exec-demo -- sh -c ls /usr/share/nginx/html; nginx -v
+50x.html
+index.html
+nginx version: nginx/1.27.5
+
+$ kubectl exec exec-demo -- cat /etc/resolv.conf
+search default.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:5
+
+# Interactive shell (kubectl exec -it exec-demo -- sh) is the same thing with a TTY; I used one-shot commands so the output can be captured.
+# ===== events =====
+$ kubectl get events --sort-by=.lastTimestamp
+LAST SEEN   TYPE      REASON                         OBJECT                                      MESSAGE
+4s          Normal    Scheduled                      pod/describe-demo                           Successfully assigned default/describe-demo to hw-b-control-plane
+33m         Normal    Scheduled                      pod/crash-demo                              Successfully assigned default/crash-demo to hw-b-control-plane
+17m         Normal    Scheduled                      pod/web-557577df75-pwmpt                    Successfully assigned default/web-557577df75-pwmpt to hw-b-control-plane
+17m         Normal    Scheduled                      pod/web-557577df75-kf4vb                    Successfully assigned default/web-557577df75-kf4vb to hw-b-control-plane
+9m59s       Normal    Scheduled                      pod/web-557577df75-j27wp                    Successfully assigned default/web-557577df75-j27wp to hw-b-control-plane
+2m29s       Normal    Scheduled                      pod/troubleshooting-app-59d4957864-z7ln9    Successfully assigned default/troubleshooting-app-59d4957864-z7ln9 to hw-b-control-plane
+2m29s       Normal    Scheduled                      pod/troubleshooting-app-59d4957864-pn7nh    Successfully assigned default/troubleshooting-app-59d4957864-pn7nh to hw-b-control-plane
+6m46s       Normal    Scheduled                      pod/api-7b6758986b-pfb7j                    Successfully assigned default/api-7b6758986b-pfb7j to hw-b-control-plane
+9m13s       Normal    Scheduled                      pod/dns-test                                Successfully assigned default/dns-test to hw-b-control-plane
+9m59s       Normal    Scheduled                      pod/dns-test                                Successfully assigned default/dns-test to hw-b-control-plane
+17m         Normal    Scheduled                      pod/dns-test                                Successfully assigned default/dns-test to hw-b-control-plane
+52m         Normal    Scheduled                      pod/hpa-demo-5d6676989b-m24df               Successfully assigned default/hpa-demo-5d6676989b-m24df to hw-b-control-plane
+45m         Normal    Scheduled                      pod/events-demo                             Successfully assigned default/events-demo to hw-b-control-plane
+5m2s        Normal    Scheduled                      pod/api-f96b66575-vv5cm                     Successfully assigned default/api-f96b66575-vv5cm to hw-b-control-plane
+41m         Normal    Scheduled                      pod/describe-demo                           Successfully assigned default/describe-demo to hw-b-control-plane
+33m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+41m         Normal    Scheduled                      pod/events-demo                             Successfully assigned default/events-demo to hw-b-control-plane
+45m         Normal    Scheduled                      pod/describe-demo                           Successfully assigned default/describe-demo to hw-b-control-plane
+6m49s       Normal    Scheduled                      pod/api-f96b66575-zwttr                     Successfully assigned default/api-f96b66575-zwttr to hw-b-control-plane
+4s          Normal    Scheduled                      pod/events-demo                             Successfully assigned default/events-demo to hw-b-control-plane
+25m         Normal    Scheduled                      pod/crash-demo                              Successfully assigned default/crash-demo to hw-b-control-plane
+6m46s       Normal    Scheduled                      pod/shop-74b8fb5545-wjnmc                   Successfully assigned default/shop-74b8fb5545-wjnmc to hw-b-control-plane
+6m46s       Normal    Scheduled                      pod/shop-74b8fb5545-6v9dl                   Successfully assigned default/shop-74b8fb5545-6v9dl to hw-b-control-plane
+2m          Normal    Scheduled                      pod/project-broken-pod                      Successfully assigned default/project-broken-pod to hw-b-control-plane
+2m25s       Normal    Scheduled                      pod/project-broken-pod                      Successfully assigned default/project-broken-pod to hw-b-control-plane
+21m         Normal    Scheduled                      pod/pending-demo                            Successfully assigned default/pending-demo to hw-b-control-plane
+21m         Warning   FailedScheduling               pod/pending-demo                            0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+4s          Normal    Scheduled                      pod/logs-demo                               Successfully assigned default/logs-demo to hw-b-control-plane
+41m         Normal    Scheduled                      pod/logs-demo                               Successfully assigned default/logs-demo to hw-b-control-plane
+45m         Normal    Scheduled                      pod/logs-demo                               Successfully assigned default/logs-demo to hw-b-control-plane
+32m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+33m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+31m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+21m         Normal    Scheduled                      pod/cc-demo                                 Successfully assigned default/cc-demo to hw-b-control-plane
+25m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+24m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+24m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+36m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+4m29s       Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+2m55s       Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+6m49s       Normal    Scheduled                      pod/client                                  Successfully assigned default/client to hw-b-control-plane
+23m         Normal    Scheduled                      pod/fail-2-imagepull-pod                    Successfully assigned default/fail-2-imagepull-pod to hw-b-control-plane
+22m         Normal    Scheduled                      pod/fail-2-imagepull-pod                    Successfully assigned default/fail-2-imagepull-pod to hw-b-control-plane
+37m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+4m29s       Normal    Scheduled                      pod/fail-2-imagepull-pod                    Successfully assigned default/fail-2-imagepull-pod to hw-b-control-plane
+6m28s       Normal    Scheduled                      pod/config-cmd-demo                         Successfully assigned default/config-cmd-demo to hw-b-control-plane
+2m55s       Normal    Scheduled                      pod/fail-2-imagepull-pod                    Successfully assigned default/fail-2-imagepull-pod to hw-b-control-plane
+21m         Warning   FailedScheduling               pod/fail-3-pending-pod                      0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+21m         Normal    Scheduled                      pod/fail-3-pending-pod                      Successfully assigned default/fail-3-pending-pod to hw-b-control-plane
+4m29s       Warning   FailedScheduling               pod/fail-3-pending-pod                      0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+6m3s        Normal    Scheduled                      pod/config-cmd-demo                         Successfully assigned default/config-cmd-demo to hw-b-control-plane
+4m26s       Warning   FailedScheduling               pod/fail-3-pending-pod                      0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+37m         Normal    Scheduled                      pod/fail-1-crashloop-pod                    Successfully assigned default/fail-1-crashloop-pod to hw-b-control-plane
+2m55s       Normal    Scheduled                      pod/fail-3-pending-pod                      Successfully assigned default/fail-3-pending-pod to hw-b-control-plane
+23m         Normal    Scheduled                      pod/image-demo                              Successfully assigned default/image-demo to hw-b-control-plane
+6m41s       Normal    Scheduled                      pod/config-key-demo                         Successfully assigned default/config-key-demo to hw-b-control-plane
+23m         Normal    Scheduled                      pod/image-demo                              Successfully assigned default/image-demo to hw-b-control-plane
+5m          Normal    Scheduled                      pod/api-684f5c94cf-wv2p5                    Successfully assigned default/api-684f5c94cf-wv2p5 to hw-b-control-plane
+6m29s       Normal    Scheduled                      pod/config-key-demo                         Successfully assigned default/config-key-demo to hw-b-control-plane
+12m         Normal    Scheduled                      pod/fail-4-dns-failure-pod                  Successfully assigned default/fail-4-dns-failure-pod to hw-b-control-plane
+11m         Normal    Scheduled                      pod/fail-4-dns-failure-pod                  Successfully assigned default/fail-4-dns-failure-pod to hw-b-control-plane
+4s          Normal    Scheduled                      pod/exec-demo                               Successfully assigned default/exec-demo to hw-b-control-plane
+8m8s        Normal    Scheduled                      pod/fail-4-dns-failure-pod                  Successfully assigned default/fail-4-dns-failure-pod to hw-b-control-plane
+37m         Normal    Scheduled                      pod/crash-demo                              Successfully assigned default/crash-demo to hw-b-control-plane
+62m         Normal    Starting                       node/hw-b-control-plane                     
+4s          Normal    Scheduled                      pod/get-demo                                Successfully assigned default/get-demo to hw-b-control-plane
+41m         Normal    Scheduled                      pod/get-demo                                Successfully assigned default/get-demo to hw-b-control-plane
+45m         Normal    Scheduled                      pod/get-demo                                Successfully assigned default/get-demo to hw-b-control-plane
+34m         Normal    Scheduled                      pod/crash-demo                              Successfully assigned default/crash-demo to hw-b-control-plane
+45m         Normal    Scheduled                      pod/exec-demo                               Successfully assigned default/exec-demo to hw-b-control-plane
+7m59s       Normal    Scheduled                      pod/fail-4-dns-failure-pod                  Successfully assigned default/fail-4-dns-failure-pod to hw-b-control-plane
+9m59s       Normal    Scheduled                      pod/web-557577df75-rrvpc                    Successfully assigned default/web-557577df75-rrvpc to hw-b-control-plane
+4m29s       Normal    Scheduled                      pod/fail-4-dns-failure-pod                  Successfully assigned default/fail-4-dns-failure-pod to hw-b-control-plane
+26m         Normal    Scheduled                      pod/crash-demo                              Successfully assigned default/crash-demo to hw-b-control-plane
+2m55s       Normal    Scheduled                      pod/fail-5-oomkilled-pod                    Successfully assigned default/fail-5-oomkilled-pod to hw-b-control-plane
+4m29s       Normal    Scheduled                      pod/fail-5-oomkilled-pod                    Successfully assigned default/fail-5-oomkilled-pod to hw-b-control-plane
+5m38s       Normal    Scheduled                      pod/fail-5-oomkilled-pod                    Successfully assigned default/fail-5-oomkilled-pod to hw-b-control-plane
+6m3s        Normal    Scheduled                      pod/fail-5-oomkilled-pod                    Successfully assigned default/fail-5-oomkilled-pod to hw-b-control-plane
+32m         Normal    Scheduled                      pod/crash-demo                              Successfully assigned default/crash-demo to hw-b-control-plane
+31m         Normal    Scheduled                      pod/crash-demo                              Successfully assigned default/crash-demo to hw-b-control-plane
+41m         Normal    Scheduled                      pod/exec-demo                               Successfully assigned default/exec-demo to hw-b-control-plane
+2m55s       Normal    Scheduled                      pod/fail-4-dns-failure-pod                  Successfully assigned default/fail-4-dns-failure-pod to hw-b-control-plane
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 31827
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 37283
+62m         Normal    Starting                       node/hw-b-control-plane                     Starting kubelet.
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 23591
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 31830
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 37020
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 37284
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 37365
+62m         Normal    NodeAllocatableEnforced        node/hw-b-control-plane                     Updated Node Allocatable limit across pods
+62m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: python, pid: 37186
+62m         Normal    RegisteredNode                 node/hw-b-control-plane                     Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+61m         Normal    Scheduled                      pod/emptydir-demo                           Successfully assigned default/emptydir-demo to hw-b-control-plane
+61m         Normal    Pulling                        pod/emptydir-demo                           Pulling image "nginx:1.27"
+60m         Normal    Pulled                         pod/emptydir-demo                           Successfully pulled image "nginx:1.27" in 21.069s (21.069s including waiting). Image size: 68857691 bytes.
+60m         Normal    Created                        pod/emptydir-demo                           Container created
+60m         Normal    Started                        pod/emptydir-demo                           Container started
+60m         Normal    Killing                        pod/emptydir-demo                           Stopping container app
+60m         Normal    Scheduled                      pod/emptydir-demo                           Successfully assigned default/emptydir-demo to hw-b-control-plane
+60m         Normal    Created                        pod/emptydir-demo                           Container created
+60m         Normal    Pulled                         pod/emptydir-demo                           Container image "nginx:1.27" already present on machine and can be accessed by the pod
+60m         Normal    Pulling                        pod/emptydir-shared                         Pulling image "busybox:1.36"
+60m         Normal    Started                        pod/emptydir-demo                           Container started
+60m         Normal    Scheduled                      pod/emptydir-shared                         Successfully assigned default/emptydir-shared to hw-b-control-plane
+60m         Normal    Created                        pod/emptydir-shared                         Container created
+60m         Normal    Pulled                         pod/emptydir-shared                         Successfully pulled image "busybox:1.36" in 5.54s (5.54s including waiting). Image size: 1906887 bytes.
+60m         Normal    Started                        pod/emptydir-shared                         Container started
+60m         Normal    Created                        pod/emptydir-shared                         Container created
+60m         Normal    Pulled                         pod/emptydir-shared                         Container image "nginx:1.27" already present on machine and can be accessed by the pod
+60m         Normal    Started                        pod/emptydir-shared                         Container started
+60m         Normal    Killing                        pod/emptydir-demo                           Stopping container app
+60m         Normal    Killing                        pod/emptydir-shared                         Stopping container web
+60m         Normal    Killing                        pod/emptydir-shared                         Stopping container writer
+59m         Normal    Created                        pod/hostpath-demo                           Container created
+59m         Normal    Pulled                         pod/hostpath-demo                           Container image "nginx:1.27" already present on machine and can be accessed by the pod
+59m         Normal    Started                        pod/hostpath-demo                           Container started
+59m         Normal    Scheduled                      pod/hostpath-demo                           Successfully assigned default/hostpath-demo to hw-b-control-plane
+59m         Normal    Killing                        pod/hostpath-demo                           Stopping container app
+59m         Normal    Started                        pod/hostpath-demo                           Container started
+59m         Normal    Created                        pod/hostpath-demo                           Container created
+59m         Normal    Pulled                         pod/hostpath-demo                           Container image "nginx:1.27" already present on machine and can be accessed by the pod
+59m         Normal    Scheduled                      pod/hostpath-demo                           Successfully assigned default/hostpath-demo to hw-b-control-plane
+59m         Normal    Killing                        pod/hostpath-demo                           Stopping container app
+59m         Normal    Pulled                         pod/storage-demo                            Container image "nginx:1.27" already present on machine and can be accessed by the pod
+59m         Normal    WaitForFirstConsumer           persistentvolumeclaim/student-pvc           waiting for first consumer to be created before binding
+59m         Normal    Scheduled                      pod/storage-demo                            Successfully assigned default/storage-demo to hw-b-control-plane
+59m         Normal    Created                        pod/storage-demo                            Container created
+59m         Normal    Started                        pod/storage-demo                            Container started
+59m         Normal    Killing                        pod/storage-demo                            Stopping container app
+59m         Normal    Scheduled                      pod/storage-demo                            Successfully assigned default/storage-demo to hw-b-control-plane
+59m         Normal    Pulled                         pod/storage-demo                            Container image "nginx:1.27" already present on machine and can be accessed by the pod
+59m         Normal    Started                        pod/storage-demo                            Container started
+59m         Normal    Killing                        pod/storage-demo                            Stopping container app
+59m         Normal    Created                        pod/storage-demo                            Container created
+59m         Normal    Provisioning                   persistentvolumeclaim/dynamic-pvc           External provisioner is provisioning volume for claim "default/dynamic-pvc"
+59m         Normal    WaitForFirstConsumer           persistentvolumeclaim/dynamic-pvc           waiting for first consumer to be created before binding
+59m         Normal    ExternalProvisioning           persistentvolumeclaim/dynamic-pvc           Waiting for a volume to be created either by the external provisioner 'rancher.io/local-path' or manually by the system administrator. If volume creation is delayed, please verify that the provisioner is running and correctly registered.
+59m         Normal    ProvisioningSucceeded          persistentvolumeclaim/dynamic-pvc           Successfully provisioned volume pvc-ba4558a4-7935-49ff-ae76-6c7abeba4a87
+59m         Normal    Scheduled                      pod/dynamic-demo                            Successfully assigned default/dynamic-demo to hw-b-control-plane
+59m         Normal    Started                        pod/dynamic-demo                            Container started
+59m         Normal    Created                        pod/dynamic-demo                            Container created
+59m         Normal    Pulled                         pod/dynamic-demo                            Container image "busybox:1.36" already present on machine and can be accessed by the pod
+59m         Normal    Killing                        pod/dynamic-demo                            Stopping container app
+58m         Normal    SuccessfulCreate               replicaset/hpa-demo-5d6676989b              Created pod: hpa-demo-5d6676989b-f9cgn
+58m         Normal    ScalingReplicaSet              deployment/hpa-demo                         Scaled up replica set hpa-demo-5d6676989b from 0 to 1
+58m         Normal    Scheduled                      pod/hpa-demo-5d6676989b-f9cgn               Successfully assigned default/hpa-demo-5d6676989b-f9cgn to hw-b-control-plane
+58m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo            invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+58m         Normal    Started                        pod/hpa-demo-5d6676989b-f9cgn               Container started
+58m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo            failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+58m         Normal    Pulled                         pod/hpa-demo-5d6676989b-f9cgn               Container image "nginx:1.27" already present on machine and can be accessed by the pod
+58m         Normal    Created                        pod/hpa-demo-5d6676989b-f9cgn               Container created
+57m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo            failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+57m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo            invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+57m         Normal    ScalingReplicaSet              deployment/load-generator                   Scaled up replica set load-generator-866cd7486d from 0 to 1
+57m         Normal    SuccessfulCreate               replicaset/load-generator-866cd7486d        Created pod: load-generator-866cd7486d-chngx
+57m         Normal    Scheduled                      pod/load-generator-866cd7486d-chngx         Successfully assigned default/load-generator-866cd7486d-chngx to hw-b-control-plane
+57m         Normal    Pulled                         pod/load-generator-866cd7486d-chngx         Container image "busybox:1.36" already present on machine and can be accessed by the pod
+57m         Normal    Started                        pod/load-generator-866cd7486d-chngx         Container started
+57m         Normal    Created                        pod/load-generator-866cd7486d-chngx         Container created
+54m         Normal    Scheduled                      pod/load-generator-866cd7486d-w27sg         Successfully assigned default/load-generator-866cd7486d-w27sg to hw-b-control-plane
+54m         Normal    Scheduled                      pod/load-generator-866cd7486d-wgg4j         Successfully assigned default/load-generator-866cd7486d-wgg4j to hw-b-control-plane
+54m         Normal    SuccessfulCreate               replicaset/load-generator-866cd7486d        Created pod: load-generator-866cd7486d-w27sg
+54m         Normal    SuccessfulCreate               replicaset/load-generator-866cd7486d        Created pod: load-generator-866cd7486d-wgg4j
+54m         Normal    ScalingReplicaSet              deployment/load-generator                   Scaled up replica set load-generator-866cd7486d from 1 to 3
+54m         Normal    Started                        pod/load-generator-866cd7486d-w27sg         Container started
+54m         Normal    Created                        pod/load-generator-866cd7486d-w27sg         Container created
+54m         Normal    Pulled                         pod/load-generator-866cd7486d-w27sg         Container image "busybox:1.36" already present on machine and can be accessed by the pod
+54m         Normal    Pulled                         pod/load-generator-866cd7486d-wgg4j         Container image "busybox:1.36" already present on machine and can be accessed by the pod
+54m         Normal    Created                        pod/load-generator-866cd7486d-wgg4j         Container created
+54m         Normal    Started                        pod/load-generator-866cd7486d-wgg4j         Container started
+54m         Normal    ScalingReplicaSet              deployment/hpa-demo                         Scaled up replica set hpa-demo-5d6676989b from 1 to 3
+54m         Normal    Scheduled                      pod/hpa-demo-5d6676989b-9mmwh               Successfully assigned default/hpa-demo-5d6676989b-9mmwh to hw-b-control-plane
+54m         Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo            New size: 3; reason: cpu resource utilization (percentage of request) above target
+54m         Normal    Scheduled                      pod/hpa-demo-5d6676989b-7zsxt               Successfully assigned default/hpa-demo-5d6676989b-7zsxt to hw-b-control-plane
+54m         Normal    SuccessfulCreate               replicaset/hpa-demo-5d6676989b              Created pod: hpa-demo-5d6676989b-7zsxt
+54m         Normal    SuccessfulCreate               replicaset/hpa-demo-5d6676989b              Created pod: hpa-demo-5d6676989b-9mmwh
+54m         Normal    Pulled                         pod/hpa-demo-5d6676989b-7zsxt               Container image "nginx:1.27" already present on machine and can be accessed by the pod
+54m         Normal    Pulled                         pod/hpa-demo-5d6676989b-9mmwh               Container image "nginx:1.27" already present on machine and can be accessed by the pod
+54m         Normal    Created                        pod/hpa-demo-5d6676989b-7zsxt               Container created
+54m         Normal    Created                        pod/hpa-demo-5d6676989b-9mmwh               Container created
+54m         Normal    Started                        pod/hpa-demo-5d6676989b-9mmwh               Container started
+54m         Normal    Started                        pod/hpa-demo-5d6676989b-7zsxt               Container started
+53m         Normal    RegisteredNode                 node/hw-b-control-plane                     Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+52m         Normal    SuccessfulCreate               replicaset/hpa-demo-5d6676989b              Created pod: hpa-demo-5d6676989b-m24df
+52m         Normal    ScalingReplicaSet              deployment/hpa-demo                         Scaled up replica set hpa-demo-5d6676989b from 3 to 4
+52m         Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo            New size: 4; reason: cpu resource utilization (percentage of request) above target
+52m         Normal    Created                        pod/hpa-demo-5d6676989b-m24df               Container created
+52m         Normal    Pulled                         pod/hpa-demo-5d6676989b-m24df               Container image "nginx:1.27" already present on machine and can be accessed by the pod
+52m         Normal    Started                        pod/hpa-demo-5d6676989b-m24df               Container started
+51m         Normal    Killing                        pod/load-generator-866cd7486d-chngx         Stopping container busybox
+51m         Normal    Killing                        pod/load-generator-866cd7486d-wgg4j         Stopping container busybox
+51m         Normal    Killing                        pod/load-generator-866cd7486d-w27sg         Stopping container busybox
+50m         Normal    SuccessfulDelete               replicaset/hpa-demo-5d6676989b              Deleted pod: hpa-demo-5d6676989b-7zsxt
+50m         Normal    Killing                        pod/hpa-demo-5d6676989b-7zsxt               Stopping container nginx
+50m         Normal    ScalingReplicaSet              deployment/hpa-demo                         Scaled down replica set hpa-demo-5d6676989b from 4 to 3
+50m         Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo            New size: 3; reason: All metrics below target
+49m         Normal    SuccessfulRescale              horizontalpodautoscaler/hpa-demo            New size: 1; reason: All metrics below target
+49m         Normal    Killing                        pod/hpa-demo-5d6676989b-9mmwh               Stopping container nginx
+49m         Normal    Killing                        pod/hpa-demo-5d6676989b-m24df               Stopping container nginx
+49m         Normal    ScalingReplicaSet              deployment/hpa-demo                         Scaled down replica set hpa-demo-5d6676989b from 3 to 1
+49m         Normal    SuccessfulDelete               replicaset/hpa-demo-5d6676989b              Deleted pod: hpa-demo-5d6676989b-9mmwh
+49m         Normal    SuccessfulDelete               replicaset/hpa-demo-5d6676989b              Deleted pod: hpa-demo-5d6676989b-m24df
+48m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 71512
+47m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 516631
+46m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 511500
+46m         Normal    RegisteredNode                 node/hw-b-control-plane                     Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+46m         Normal    Killing                        pod/hpa-demo-5d6676989b-f9cgn               Stopping container nginx
+45m         Normal    Created                        pod/exec-demo                               Container created
+45m         Normal    Created                        pod/logs-demo                               Container created
+45m         Normal    Pulled                         pod/logs-demo                               Container image "busybox:1.36" already present on machine and can be accessed by the pod
+45m         Normal    Pulled                         pod/describe-demo                           Container image "nginx:1.27" already present on machine and can be accessed by the pod
+45m         Normal    Created                        pod/describe-demo                           Container created
+45m         Normal    Pulled                         pod/events-demo                             Container image "nginx:1.27" already present on machine and can be accessed by the pod
+45m         Normal    Created                        pod/events-demo                             Container created
+45m         Normal    Created                        pod/get-demo                                Container created
+45m         Normal    Pulled                         pod/get-demo                                Container image "nginx:1.27" already present on machine and can be accessed by the pod
+45m         Normal    Pulled                         pod/exec-demo                               Container image "nginx:1.27" already present on machine and can be accessed by the pod
+45m         Normal    Started                        pod/logs-demo                               Container started
+45m         Normal    Started                        pod/get-demo                                Container started
+45m         Normal    Started                        pod/exec-demo                               Container started
+45m         Normal    Started                        pod/describe-demo                           Container started
+45m         Normal    Started                        pod/events-demo                             Container started
+45m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 517706
+43m         Normal    Killing                        pod/events-demo                             Stopping container nginx
+43m         Normal    Killing                        pod/describe-demo                           Stopping container nginx
+43m         Normal    Killing                        pod/exec-demo                               Stopping container nginx
+43m         Normal    Killing                        pod/logs-demo                               Stopping container app
+43m         Normal    Killing                        pod/get-demo                                Stopping container nginx
+43m         Normal    RegisteredNode                 node/hw-b-control-plane                     Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+41m         Normal    Pulled                         pod/describe-demo                           Container image "nginx:1.27" already present on machine and can be accessed by the pod
+41m         Normal    Created                        pod/describe-demo                           Container created
+41m         Normal    Pulled                         pod/events-demo                             Container image "nginx:1.27" already present on machine and can be accessed by the pod
+41m         Normal    Created                        pod/events-demo                             Container created
+41m         Normal    Created                        pod/exec-demo                               Container created
+41m         Normal    Pulled                         pod/exec-demo                               Container image "nginx:1.27" already present on machine and can be accessed by the pod
+41m         Normal    Pulled                         pod/get-demo                                Container image "nginx:1.27" already present on machine and can be accessed by the pod
+41m         Normal    Created                        pod/get-demo                                Container created
+41m         Normal    Pulled                         pod/logs-demo                               Container image "busybox:1.36" already present on machine and can be accessed by the pod
+41m         Normal    Created                        pod/logs-demo                               Container created
+41m         Normal    Started                        pod/exec-demo                               Container started
+41m         Normal    Started                        pod/get-demo                                Container started
+41m         Normal    Started                        pod/events-demo                             Container started
+41m         Normal    Started                        pod/describe-demo                           Container started
+41m         Normal    Started                        pod/logs-demo                               Container started
+40m         Normal    RegisteredNode                 node/hw-b-control-plane                     Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+40m         Normal    Killing                        pod/describe-demo                           Stopping container nginx
+40m         Normal    Killing                        pod/get-demo                                Stopping container nginx
+40m         Normal    Killing                        pod/logs-demo                               Stopping container app
+40m         Normal    Killing                        pod/events-demo                             Stopping container nginx
+40m         Normal    Killing                        pod/exec-demo                               Stopping container nginx
+38m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 523705
+37m         Normal    Killing                        pod/crash-demo                              Stopping container app
+37m         Normal    Pulled                         pod/crash-demo                              Container image "busybox:1.36" already present on machine and can be accessed by the pod
+37m         Normal    Created                        pod/crash-demo                              Container created
+37m         Normal    Started                        pod/crash-demo                              Container started
+37m         Normal    Pulling                        pod/fail-1-crashloop-pod                    Pulling image "python:3.11-alpine"
+37m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Successfully pulled image "python:3.11-alpine" in 12.089s (12.089s including waiting). Image size: 23808448 bytes.
+37m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+37m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+37m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+37m         Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(a5ce478d-cff4-4722-857b-5ae57d906ae6)
+37m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+37m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+37m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+37m         Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(9d813c46-0f12-4174-bc95-3c5f82efdba9)
+36m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+36m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+36m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+36m         Normal    Killing                        pod/fail-1-crashloop-pod                    Stopping container python-app
+35m         Normal    RegisteredNode                 node/hw-b-control-plane                     Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+34m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 524942
+34m         Normal    Pulled                         pod/crash-demo                              Container image "busybox:1.36" already present on machine and can be accessed by the pod
+34m         Normal    Created                        pod/crash-demo                              Container created
+34m         Normal    Started                        pod/crash-demo                              Container started
+34m         Warning   BackOff                        pod/crash-demo                              Back-off restarting failed container app in pod crash-demo_default(adae2672-9d24-4a6d-b171-1f35c2bc734a)
+33m         Normal    Created                        pod/crash-demo                              Container created
+33m         Normal    Pulled                         pod/crash-demo                              Container image "busybox:1.36" already present on machine and can be accessed by the pod
+33m         Normal    Started                        pod/crash-demo                              Container started
+33m         Normal    Killing                        pod/crash-demo                              Stopping container app
+33m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+33m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+33m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+33m         Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(de2f6988-3956-4c39-adc7-af12a2b74569)
+33m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+33m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+33m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+33m         Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(eb127ea0-07e6-4541-9d79-a60aa084f64f)
+32m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+32m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+32m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+32m         Normal    Killing                        pod/fail-1-crashloop-pod                    Stopping container python-app
+31m         Normal    Created                        pod/crash-demo                              Container created
+31m         Normal    Started                        pod/crash-demo                              Container started
+31m         Normal    Pulled                         pod/crash-demo                              Container image "busybox:1.36" already present on machine and can be accessed by the pod
+31m         Warning   BackOff                        pod/crash-demo                              Back-off restarting failed container app in pod crash-demo_default(62c2bfa5-c13f-400b-ab4e-dcae48f6830b)
+31m         Normal    Created                        pod/crash-demo                              Container created
+31m         Normal    Pulled                         pod/crash-demo                              Container image "busybox:1.36" already present on machine and can be accessed by the pod
+31m         Normal    Started                        pod/crash-demo                              Container started
+31m         Normal    Killing                        pod/crash-demo                              Stopping container app
+29m         Normal    NodeNotReady                   node/hw-b-control-plane                     Node hw-b-control-plane status is now: NodeNotReady
+26m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 550297
+26m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+26m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+26m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+26m         Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(12e477a1-78e9-404b-b433-25bcb65cb25e)
+26m         Normal    RegisteredNode                 node/hw-b-control-plane                     Node hw-b-control-plane event: Registered Node hw-b-control-plane in Controller
+25m         Normal    Created                        pod/crash-demo                              Container created
+25m         Normal    Started                        pod/crash-demo                              Container started
+25m         Normal    Pulled                         pod/crash-demo                              Container image "busybox:1.36" already present on machine and can be accessed by the pod
+25m         Warning   BackOff                        pod/crash-demo                              Back-off restarting failed container app in pod crash-demo_default(3d11127d-dcfd-4f9d-a8cf-0f0d4f7dd16b)
+25m         Normal    Created                        pod/crash-demo                              Container created
+25m         Normal    Pulled                         pod/crash-demo                              Container image "busybox:1.36" already present on machine and can be accessed by the pod
+25m         Normal    Killing                        pod/crash-demo                              Stopping container app
+25m         Normal    Started                        pod/crash-demo                              Container started
+25m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+25m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+25m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+25m         Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(38d1f38e-b497-49c6-a2a8-fc4cd46f5126)
+24m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+24m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+24m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+24m         Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(d206086e-a865-4117-b539-152f16988bbe)
+24m         Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+24m         Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+24m         Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+24m         Normal    Killing                        pod/fail-1-crashloop-pod                    Stopping container python-app
+23m         Warning   Failed                         pod/image-demo                              Error: ImagePullBackOff
+23m         Normal    BackOff                        pod/image-demo                              Back-off pulling image "nginx:this-image-does-not-exist"
+23m         Normal    Pulling                        pod/image-demo                              Pulling image "nginx:this-image-does-not-exist"
+23m         Warning   Failed                         pod/image-demo                              Error: ErrImagePull
+23m         Warning   Failed                         pod/image-demo                              Failed to pull image "nginx:this-image-does-not-exist": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:this-image-does-not-exist": failed to resolve reference "docker.io/library/nginx:this-image-does-not-exist": docker.io/library/nginx:this-image-does-not-exist: not found
+23m         Normal    Created                        pod/image-demo                              Container created
+23m         Normal    Pulled                         pod/image-demo                              Container image "nginx:1.27" already present on machine and can be accessed by the pod
+23m         Normal    Started                        pod/image-demo                              Container started
+23m         Normal    Killing                        pod/image-demo                              Stopping container app
+23m         Normal    Pulled                         pod/image-demo                              Container image "nginx:1.27" already present on machine and can be accessed by the pod
+23m         Normal    Created                        pod/image-demo                              Container created
+23m         Normal    Started                        pod/image-demo                              Container started
+23m         Normal    Killing                        pod/image-demo                              Stopping container app
+23m         Normal    BackOff                        pod/fail-2-imagepull-pod                    Back-off pulling image "yatri-api-service:v999-invalid-tag-does-not-exist"
+23m         Warning   Failed                         pod/fail-2-imagepull-pod                    Error: ImagePullBackOff
+22m         Normal    Pulling                        pod/fail-2-imagepull-pod                    Pulling image "yatri-api-service:v999-invalid-tag-does-not-exist"
+22m         Warning   Failed                         pod/fail-2-imagepull-pod                    Error: ErrImagePull
+22m         Warning   Failed                         pod/fail-2-imagepull-pod                    Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+22m         Normal    Pulling                        pod/fail-2-imagepull-pod                    Pulling image "nginx:alpine"
+22m         Normal    Created                        pod/fail-2-imagepull-pod                    Container created
+22m         Normal    Pulled                         pod/fail-2-imagepull-pod                    Successfully pulled image "nginx:alpine" in 28.253s (28.253s including waiting). Image size: 26260874 bytes.
+22m         Normal    Started                        pod/fail-2-imagepull-pod                    Container started
+22m         Normal    Killing                        pod/fail-2-imagepull-pod                    Stopping container web-app
+21m         Normal    Pulled                         pod/pending-demo                            Container image "nginx:1.27" already present on machine and can be accessed by the pod
+21m         Normal    Started                        pod/pending-demo                            Container started
+21m         Normal    Created                        pod/pending-demo                            Container created
+21m         Normal    Killing                        pod/pending-demo                            Stopping container nginx
+21m         Normal    Pulled                         pod/fail-3-pending-pod                      Container image "nginx:alpine" already present on machine and can be accessed by the pod
+21m         Normal    Created                        pod/fail-3-pending-pod                      Container created
+21m         Normal    Started                        pod/fail-3-pending-pod                      Container started
+21m         Normal    Killing                        pod/fail-3-pending-pod                      Stopping container hungry-app
+20m         Warning   FailedMount                    pod/cc-demo                                 MountVolume.SetUp failed for volume "site" : configmap "site-content" not found
+20m         Normal    Pulled                         pod/cc-demo                                 Container image "nginx:1.27" already present on machine and can be accessed by the pod
+20m         Normal    Created                        pod/cc-demo                                 Container created
+20m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 544474
+20m         Warning   SystemOOM                      node/hw-b-control-plane                     System OOM encountered, victim process: local-path-prov, pid: 534371
+19m         Normal    Started                        pod/cc-demo                                 Container started
+18m         Normal    TaintManagerEviction           pod/cc-demo                                 Cancelling deletion of Pod default/cc-demo
+18m         Normal    Killing                        pod/cc-demo                                 Stopping container nginx
+17m         Normal    ScalingReplicaSet              deployment/web                              Scaled up replica set web-557577df75 from 0 to 2
+17m         Normal    SuccessfulCreate               replicaset/web-557577df75                   Created pod: web-557577df75-pwmpt
+17m         Normal    SuccessfulCreate               replicaset/web-557577df75                   Created pod: web-557577df75-kf4vb
+17m         Normal    Created                        pod/web-557577df75-kf4vb                    Container created
+17m         Normal    Created                        pod/web-557577df75-pwmpt                    Container created
+17m         Normal    Pulled                         pod/web-557577df75-kf4vb                    Container image "nginx:1.27" already present on machine and can be accessed by the pod
+17m         Normal    NodeNotReady                   node/hw-b-control-plane                     Node hw-b-control-plane status is now: NodeNotReady
+17m         Normal    Pulled                         pod/web-557577df75-pwmpt                    Container image "nginx:1.27" already present on machine and can be accessed by the pod
+17m         Normal    Started                        pod/web-557577df75-kf4vb                    Container started
+17m         Normal    Started                        pod/web-557577df75-pwmpt                    Container started
+16m         Warning   NodeNotReady                   pod/web-557577df75-pwmpt                    Node is not ready
+16m         Warning   NodeNotReady                   pod/web-557577df75-kf4vb                    Node is not ready
+16m         Normal    NodeHasSufficientMemory        node/hw-b-control-plane                     Node hw-b-control-plane status is now: NodeHasSufficientMemory
+16m         Normal    NodeHasNoDiskPressure          node/hw-b-control-plane                     Node hw-b-control-plane status is now: NodeHasNoDiskPressure
+16m         Normal    NodeHasSufficientPID           node/hw-b-control-plane                     Node hw-b-control-plane status is now: NodeHasSufficientPID
+16m         Normal    NodeReady                      node/hw-b-control-plane                     Node hw-b-control-plane status is now: NodeReady
+14m         Normal    Pulling                        pod/dns-test                                Pulling image "registry.k8s.io/e2e-test-images/dnsutils:1.3"
+13m         Warning   Failed                         pod/dns-test                                Failed to pull image "registry.k8s.io/e2e-test-images/dnsutils:1.3": rpc error: code = NotFound desc = failed to pull and unpack image "registry.k8s.io/e2e-test-images/dnsutils:1.3": failed to resolve reference "registry.k8s.io/e2e-test-images/dnsutils:1.3": registry.k8s.io/e2e-test-images/dnsutils:1.3: not found
+13m         Warning   Failed                         pod/dns-test                                Error: ErrImagePull
+12m         Warning   Failed                         pod/fail-4-dns-failure-pod                  Error: ImagePullBackOff
+12m         Warning   Failed                         pod/fail-4-dns-failure-pod                  Error: ErrImagePull
+12m         Normal    BackOff                        pod/fail-4-dns-failure-pod                  Back-off pulling image "curlimages/curl:8.6.0"
+12m         Warning   Failed                         pod/fail-4-dns-failure-pod                  Failed to pull image "curlimages/curl:8.6.0": failed to pull and unpack image "docker.io/curlimages/curl:8.6.0": failed to copy: httpReadSeeker: failed open: failed to do request: Get "https://production.cloudfront.docker.com/registry-v2/docker/registry/v2/blobs/sha256/b7/b73b56a85bd3c5e4291bf897c4b4a5eaf7365a77b499756dc5045ba453d58e33/data?Expires=%5BREDACTED%5D&Key-Pair-Id=%5BREDACTED%5D&Signature=%5BREDACTED%5D": dial tcp: lookup production.cloudfront.docker.com on 192.168.65.254:53: server misbehaving
+12m         Normal    Pulling                        pod/fail-4-dns-failure-pod                  Pulling image "curlimages/curl:8.6.0"
+12m         Normal    Started                        pod/fail-4-dns-failure-pod                  Container started
+12m         Normal    Pulled                         pod/fail-4-dns-failure-pod                  Successfully pulled image "curlimages/curl:8.6.0" in 10.654s (10.654s including waiting). Image size: 7548838 bytes.
+12m         Normal    Created                        pod/fail-4-dns-failure-pod                  Container created
+11m         Warning   Failed                         pod/dns-test                                Error: ImagePullBackOff
+11m         Normal    BackOff                        pod/dns-test                                Back-off pulling image "registry.k8s.io/e2e-test-images/dnsutils:1.3"
+11m         Normal    Killing                        pod/fail-4-dns-failure-pod                  Stopping container client
+11m         Normal    Pulled                         pod/fail-4-dns-failure-pod                  Container image "busybox:1.36" already present on machine and can be accessed by the pod
+11m         Normal    Created                        pod/fail-4-dns-failure-pod                  Container created
+11m         Normal    Started                        pod/fail-4-dns-failure-pod                  Container started
+11m         Normal    Killing                        pod/fail-4-dns-failure-pod                  Stopping container client
+10m         Normal    Killing                        pod/web-557577df75-pwmpt                    Stopping container nginx
+10m         Normal    Killing                        pod/web-557577df75-kf4vb                    Stopping container nginx
+9m59s       Normal    SuccessfulCreate               replicaset/web-557577df75                   Created pod: web-557577df75-j27wp
+9m59s       Normal    SuccessfulCreate               replicaset/web-557577df75                   Created pod: web-557577df75-rrvpc
+9m59s       Normal    Pulled                         pod/web-557577df75-j27wp                    Container image "nginx:1.27" already present on machine and can be accessed by the pod
+9m59s       Normal    Pulled                         pod/web-557577df75-rrvpc                    Container image "nginx:1.27" already present on machine and can be accessed by the pod
+9m59s       Normal    ScalingReplicaSet              deployment/web                              Scaled up replica set web-557577df75 from 0 to 2
+9m58s       Normal    Started                        pod/web-557577df75-rrvpc                    Container started
+9m58s       Normal    Created                        pod/web-557577df75-j27wp                    Container created
+9m58s       Normal    Created                        pod/web-557577df75-rrvpc                    Container created
+9m58s       Normal    Started                        pod/web-557577df75-j27wp                    Container started
+9m26s       Warning   Failed                         pod/dns-test                                Error: ImagePullBackOff
+9m26s       Normal    BackOff                        pod/dns-test                                Back-off pulling image "registry.k8s.io/e2e-test-images/dnsutils:1.3"
+9m15s       Normal    Pulling                        pod/dns-test                                Pulling image "registry.k8s.io/e2e-test-images/dnsutils:1.3"
+9m13s       Warning   Failed                         pod/dns-test                                Error: ErrImagePull
+9m13s       Warning   Failed                         pod/dns-test                                Failed to pull image "registry.k8s.io/e2e-test-images/dnsutils:1.3": rpc error: code = NotFound desc = failed to pull and unpack image "registry.k8s.io/e2e-test-images/dnsutils:1.3": failed to resolve reference "registry.k8s.io/e2e-test-images/dnsutils:1.3": registry.k8s.io/e2e-test-images/dnsutils:1.3: not found
+9m12s       Normal    Pulled                         pod/dns-test                                Container image "busybox:1.36" already present on machine and can be accessed by the pod
+9m12s       Normal    Created                        pod/dns-test                                Container created
+9m12s       Normal    Started                        pod/dns-test                                Container started
+8m8s        Normal    Pulled                         pod/fail-4-dns-failure-pod                  Container image "curlimages/curl:8.6.0" already present on machine and can be accessed by the pod
+8m8s        Normal    Created                        pod/fail-4-dns-failure-pod                  Container created
+8m8s        Normal    Started                        pod/fail-4-dns-failure-pod                  Container started
+7m59s       Normal    Created                        pod/fail-4-dns-failure-pod                  Container created
+7m59s       Normal    Started                        pod/fail-4-dns-failure-pod                  Container started
+7m59s       Normal    Pulled                         pod/fail-4-dns-failure-pod                  Container image "busybox:1.36" already present on machine and can be accessed by the pod
+7m59s       Normal    Killing                        pod/fail-4-dns-failure-pod                  Stopping container client
+7m44s       Normal    Killing                        pod/fail-4-dns-failure-pod                  Stopping container client
+6m50s       Normal    Killing                        pod/web-557577df75-rrvpc                    Stopping container nginx
+6m50s       Normal    Killing                        pod/web-557577df75-j27wp                    Stopping container nginx
+6m49s       Normal    Started                        pod/client                                  Container started
+6m49s       Normal    SuccessfulCreate               replicaset/api-f96b66575                    Created pod: api-f96b66575-zwttr
+6m49s       Normal    Created                        pod/api-f96b66575-zwttr                     Container created
+6m49s       Normal    Pulled                         pod/api-f96b66575-zwttr                     Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+6m49s       Normal    ScalingReplicaSet              deployment/api                              Scaled up replica set api-f96b66575 from 0 to 1
+6m49s       Normal    Created                        pod/client                                  Container created
+6m49s       Normal    Pulled                         pod/client                                  Container image "busybox:1.36" already present on machine and can be accessed by the pod
+6m48s       Normal    Started                        pod/api-f96b66575-zwttr                     Container started
+6m47s       Normal    SuccessfulCreate               replicaset/api-7b6758986b                   Created pod: api-7b6758986b-pfb7j
+6m47s       Normal    ScalingReplicaSet              deployment/api                              Scaled up replica set api-7b6758986b from 0 to 1
+6m46s       Normal    SuccessfulCreate               replicaset/shop-74b8fb5545                  Created pod: shop-74b8fb5545-6v9dl
+6m46s       Normal    ScalingReplicaSet              deployment/shop                             Scaled up replica set shop-74b8fb5545 from 0 to 2
+6m46s       Normal    SuccessfulCreate               replicaset/shop-74b8fb5545                  Created pod: shop-74b8fb5545-wjnmc
+6m46s       Normal    ScalingReplicaSet              deployment/api                              Scaled down replica set api-f96b66575 from 1 to 0
+6m46s       Normal    SuccessfulDelete               replicaset/api-f96b66575                    Deleted pod: api-f96b66575-zwttr
+6m46s       Normal    Killing                        pod/api-f96b66575-zwttr                     Stopping container api
+6m46s       Normal    Pulled                         pod/api-7b6758986b-pfb7j                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+6m46s       Normal    Created                        pod/api-7b6758986b-pfb7j                    Container created
+6m46s       Normal    Started                        pod/api-7b6758986b-pfb7j                    Container started
+6m45s       Normal    Killing                        pod/api-7b6758986b-pfb7j                    Stopping container api
+6m45s       Normal    Pulled                         pod/shop-74b8fb5545-wjnmc                   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+6m45s       Normal    Started                        pod/shop-74b8fb5545-6v9dl                   Container started
+6m45s       Normal    Started                        pod/shop-74b8fb5545-wjnmc                   Container started
+6m45s       Normal    Created                        pod/shop-74b8fb5545-wjnmc                   Container created
+6m45s       Normal    Pulled                         pod/shop-74b8fb5545-6v9dl                   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+6m45s       Normal    Created                        pod/shop-74b8fb5545-6v9dl                   Container created
+6m42s       Normal    Killing                        pod/shop-74b8fb5545-6v9dl                   Stopping container nginx
+6m42s       Normal    Killing                        pod/shop-74b8fb5545-wjnmc                   Stopping container nginx
+6m40s       Normal    Pulled                         pod/config-key-demo                         Container image "busybox:1.36" already present on machine and can be accessed by the pod
+6m40s       Warning   Failed                         pod/config-key-demo                         Error: couldn't find key LOGLEVEL in ConfigMap default/app-config
+6m29s       Normal    Started                        pod/config-key-demo                         Container started
+6m29s       Normal    Pulled                         pod/config-key-demo                         Container image "busybox:1.36" already present on machine and can be accessed by the pod
+6m29s       Normal    Created                        pod/config-key-demo                         Container created
+6m28s       Normal    Killing                        pod/config-key-demo                         Stopping container app
+6m16s       Normal    Pulled                         pod/config-cmd-demo                         Container image "nginx:1.27" already present on machine and can be accessed by the pod
+6m16s       Normal    Created                        pod/config-cmd-demo                         Container created
+6m16s       Warning   Failed                         pod/config-cmd-demo                         Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: exec: "ngnix": executable file not found in $PATH
+6m15s       Warning   BackOff                        pod/config-cmd-demo                         Back-off restarting failed container nginx in pod config-cmd-demo_default(6e8385fb-17ba-4f2b-a090-6ad8d02162c0)
+6m3s        Normal    Killing                        pod/config-cmd-demo                         Stopping container nginx
+6m3s        Normal    Created                        pod/config-cmd-demo                         Container created
+6m3s        Normal    Started                        pod/config-cmd-demo                         Container started
+6m3s        Normal    Pulled                         pod/config-cmd-demo                         Container image "nginx:1.27" already present on machine and can be accessed by the pod
+5m49s       Normal    Pulled                         pod/fail-5-oomkilled-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+5m49s       Normal    Started                        pod/fail-5-oomkilled-pod                    Container started
+5m49s       Normal    Created                        pod/fail-5-oomkilled-pod                    Container created
+5m48s       Warning   BackOff                        pod/fail-5-oomkilled-pod                    Back-off restarting failed container memory-leaker in pod fail-5-oomkilled-pod_default(065b529b-a3f9-4790-b042-aec93f476dcb)
+5m38s       Normal    Created                        pod/fail-5-oomkilled-pod                    Container created
+5m38s       Normal    Pulled                         pod/fail-5-oomkilled-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+5m38s       Normal    Started                        pod/fail-5-oomkilled-pod                    Container started
+5m22s       Normal    Killing                        pod/fail-5-oomkilled-pod                    Stopping container memory-leaker
+5m3s        Normal    ScalingReplicaSet              deployment/api                              Scaled up replica set api-f96b66575 from 0 to 1
+5m2s        Normal    Started                        pod/api-f96b66575-vv5cm                     Container started
+5m2s        Normal    Pulled                         pod/api-f96b66575-vv5cm                     Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+5m2s        Normal    SuccessfulCreate               replicaset/api-f96b66575                    Created pod: api-f96b66575-vv5cm
+5m2s        Normal    Created                        pod/api-f96b66575-vv5cm                     Container created
+5m          Normal    Started                        pod/api-684f5c94cf-wv2p5                    Container started
+5m          Normal    SuccessfulCreate               replicaset/api-684f5c94cf                   Created pod: api-684f5c94cf-wv2p5
+5m          Warning   Unhealthy                      pod/api-684f5c94cf-wv2p5                    Readiness probe failed: dial tcp 10.244.0.93:8080: connect: connection refused
+5m          Normal    Created                        pod/api-684f5c94cf-wv2p5                    Container created
+5m          Normal    Pulled                         pod/api-684f5c94cf-wv2p5                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+5m          Normal    ScalingReplicaSet              deployment/api                              Scaled up replica set api-684f5c94cf from 0 to 1
+4m58s       Normal    SuccessfulDelete               replicaset/api-f96b66575                    Deleted pod: api-f96b66575-vv5cm
+4m58s       Normal    Killing                        pod/api-f96b66575-vv5cm                     Stopping container api
+4m58s       Normal    ScalingReplicaSet              deployment/api                              Scaled down replica set api-f96b66575 from 1 to 0
+4m57s       Normal    Killing                        pod/api-684f5c94cf-wv2p5                    Stopping container api
+4m29s       Normal    Started                        pod/fail-4-dns-failure-pod                  Container started
+4m29s       Normal    Pulled                         pod/fail-4-dns-failure-pod                  Container image "curlimages/curl:8.6.0" already present on machine and can be accessed by the pod
+4m29s       Normal    Created                        pod/fail-4-dns-failure-pod                  Container created
+4m21s       Warning   Failed                         pod/fail-2-imagepull-pod                    Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to do request: Head "https://registry-1.docker.io/v2/library/yatri-api-service/manifests/v999-invalid-tag-does-not-exist": dial tcp: lookup registry-1.docker.io on 192.168.65.254:53: server misbehaving
+3m55s       Warning   Failed                         pod/fail-2-imagepull-pod                    Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to do request: Head "https://registry-1.docker.io/v2/library/yatri-api-service/manifests/v999-invalid-tag-does-not-exist": dial tcp: lookup registry-1.docker.io on 192.168.65.254:53: no such host
+3m54s       Normal    Pulled                         pod/fail-5-oomkilled-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+3m54s       Normal    Created                        pod/fail-5-oomkilled-pod                    Container created
+3m54s       Normal    Started                        pod/fail-5-oomkilled-pod                    Container started
+3m53s       Warning   BackOff                        pod/fail-5-oomkilled-pod                    Back-off restarting failed container memory-leaker in pod fail-5-oomkilled-pod_default(e45c1671-727b-4d8e-af32-e28a792522e7)
+3m51s       Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+3m51s       Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+3m51s       Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+3m50s       Warning   BackOff                        pod/fail-1-crashloop-pod                    Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(db898d22-b065-432b-877d-1e96b01a4fda)
+3m28s       Normal    Pulling                        pod/fail-2-imagepull-pod                    Pulling image "yatri-api-service:v999-invalid-tag-does-not-exist"
+3m17s       Warning   Failed                         pod/fail-2-imagepull-pod                    Error: ErrImagePull
+3m17s       Warning   Failed                         pod/fail-2-imagepull-pod                    Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+3m5s        Normal    BackOff                        pod/fail-2-imagepull-pod                    Back-off pulling image "yatri-api-service:v999-invalid-tag-does-not-exist"
+3m5s        Warning   Failed                         pod/fail-2-imagepull-pod                    Error: ImagePullBackOff
+3m2s        Normal    Killing                        pod/fail-4-dns-failure-pod                  Stopping container client
+2m55s       Normal    Created                        pod/fail-4-dns-failure-pod                  Container created
+2m55s       Normal    Started                        pod/fail-3-pending-pod                      Container started
+2m55s       Normal    Started                        pod/fail-5-oomkilled-pod                    Container started
+2m55s       Normal    Created                        pod/fail-5-oomkilled-pod                    Container created
+2m55s       Normal    Pulled                         pod/fail-1-crashloop-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+2m55s       Normal    Created                        pod/fail-1-crashloop-pod                    Container created
+2m55s       Normal    Started                        pod/fail-1-crashloop-pod                    Container started
+2m55s       Normal    Pulled                         pod/fail-5-oomkilled-pod                    Container image "python:3.11-alpine" already present on machine and can be accessed by the pod
+2m55s       Normal    Started                        pod/fail-4-dns-failure-pod                  Container started
+2m55s       Normal    Pulled                         pod/fail-4-dns-failure-pod                  Container image "busybox:1.36" already present on machine and can be accessed by the pod
+2m55s       Normal    Created                        pod/fail-3-pending-pod                      Container created
+2m55s       Normal    Pulled                         pod/fail-3-pending-pod                      Container image "nginx:alpine" already present on machine and can be accessed by the pod
+2m55s       Normal    Started                        pod/fail-2-imagepull-pod                    Container started
+2m55s       Normal    Pulled                         pod/fail-2-imagepull-pod                    Container image "nginx:alpine" already present on machine and can be accessed by the pod
+2m55s       Normal    Created                        pod/fail-2-imagepull-pod                    Container created
+2m34s       Normal    Killing                        pod/fail-5-oomkilled-pod                    Stopping container memory-leaker
+2m34s       Normal    Killing                        pod/fail-2-imagepull-pod                    Stopping container web-app
+2m34s       Normal    Killing                        pod/fail-1-crashloop-pod                    Stopping container python-app
+2m34s       Normal    Killing                        pod/fail-3-pending-pod                      Stopping container hungry-app
+2m34s       Normal    Killing                        pod/fail-4-dns-failure-pod                  Stopping container client
+2m29s       Normal    Created                        pod/troubleshooting-app-59d4957864-z7ln9    Container created
+2m29s       Normal    SuccessfulCreate               replicaset/troubleshooting-app-59d4957864   Created pod: troubleshooting-app-59d4957864-z7ln9
+2m29s       Normal    Pulled                         pod/troubleshooting-app-59d4957864-z7ln9    Container image "nginx:1.27" already present on machine and can be accessed by the pod
+2m29s       Normal    Pulled                         pod/troubleshooting-app-59d4957864-pn7nh    Container image "nginx:1.27" already present on machine and can be accessed by the pod
+2m29s       Normal    Started                        pod/troubleshooting-app-59d4957864-z7ln9    Container started
+2m29s       Normal    Created                        pod/troubleshooting-app-59d4957864-pn7nh    Container created
+2m29s       Normal    SuccessfulCreate               replicaset/troubleshooting-app-59d4957864   Created pod: troubleshooting-app-59d4957864-pn7nh
+2m29s       Normal    Started                        pod/troubleshooting-app-59d4957864-pn7nh    Container started
+2m29s       Normal    ScalingReplicaSet              deployment/troubleshooting-app              Scaled up replica set troubleshooting-app-59d4957864 from 0 to 2
+2m21s       Warning   Failed                         pod/project-broken-pod                      Error: ImagePullBackOff
+2m21s       Normal    BackOff                        pod/project-broken-pod                      Back-off pulling image "nginx:this-tag-does-not-exist"
+2m9s        Normal    Pulling                        pod/project-broken-pod                      Pulling image "nginx:this-tag-does-not-exist"
+2m5s        Warning   Failed                         pod/project-broken-pod                      Error: ErrImagePull
+2m5s        Warning   Failed                         pod/project-broken-pod                      Failed to pull image "nginx:this-tag-does-not-exist": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:this-tag-does-not-exist": failed to resolve reference "docker.io/library/nginx:this-tag-does-not-exist": docker.io/library/nginx:this-tag-does-not-exist: not found
+119s        Normal    Started                        pod/project-broken-pod                      Container started
+119s        Normal    Pulled                         pod/project-broken-pod                      Container image "nginx:1.27" already present on machine and can be accessed by the pod
+119s        Normal    Created                        pod/project-broken-pod                      Container created
+56s         Normal    Killing                        pod/troubleshooting-app-59d4957864-pn7nh    Stopping container app
+56s         Normal    Killing                        pod/project-broken-pod                      Stopping container app
+56s         Normal    Killing                        pod/troubleshooting-app-59d4957864-z7ln9    Stopping container app
+55s         Normal    Killing                        pod/client                                  Stopping container client
+29s         Normal    Killing                        pod/dns-test                                Stopping container dns-test
+4s          Normal    Pulled                         pod/get-demo                                Container image "nginx:1.27" already present on machine and can be accessed by the pod
+4s          Normal    Pulled                         pod/events-demo                             Container image "nginx:1.27" already present on machine and can be accessed by the pod
+4s          Normal    Created                        pod/describe-demo                           Container created
+4s          Normal    Pulled                         pod/logs-demo                               Container image "busybox:1.36" already present on machine and can be accessed by the pod
+4s          Normal    Created                        pod/exec-demo                               Container created
+4s          Normal    Pulled                         pod/describe-demo                           Container image "nginx:1.27" already present on machine and can be accessed by the pod
+4s          Normal    Created                        pod/events-demo                             Container created
+4s          Normal    Created                        pod/logs-demo                               Container created
+4s          Normal    Pulled                         pod/exec-demo                               Container image "nginx:1.27" already present on machine and can be accessed by the pod
+4s          Normal    Created                        pod/get-demo                                Container created
+3s          Normal    Started                        pod/get-demo                                Container started
+3s          Normal    Started                        pod/events-demo                             Container started
+3s          Normal    Started                        pod/exec-demo                               Container started
+3s          Normal    Started                        pod/describe-demo                           Container started
+3s          Normal    Started                        pod/logs-demo                               Container started
+
+$ kubectl get events --field-selector involvedObject.name=events-demo
+LAST SEEN   TYPE     REASON      OBJECT            MESSAGE
+45m         Normal   Scheduled   pod/events-demo   Successfully assigned default/events-demo to hw-b-control-plane
+45m         Normal   Pulled      pod/events-demo   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+45m         Normal   Created     pod/events-demo   Container created
+45m         Normal   Started     pod/events-demo   Container started
+43m         Normal   Killing     pod/events-demo   Stopping container nginx
+41m         Normal   Scheduled   pod/events-demo   Successfully assigned default/events-demo to hw-b-control-plane
+41m         Normal   Pulled      pod/events-demo   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+41m         Normal   Created     pod/events-demo   Container created
+41m         Normal   Started     pod/events-demo   Container started
+40m         Normal   Killing     pod/events-demo   Stopping container nginx
+5s          Normal   Scheduled   pod/events-demo   Successfully assigned default/events-demo to hw-b-control-plane
+5s          Normal   Pulled      pod/events-demo   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+5s          Normal   Created     pod/events-demo   Container created
+4s          Normal   Started     pod/events-demo   Container started
+
+$ kubectl events --for pod/events-demo
+LAST SEEN   TYPE     REASON      OBJECT            MESSAGE
+45m         Normal   Scheduled   Pod/events-demo   Successfully assigned default/events-demo to hw-b-control-plane
+45m         Normal   Pulled      Pod/events-demo   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+45m         Normal   Created     Pod/events-demo   Container created
+45m         Normal   Started     Pod/events-demo   Container started
+43m         Normal   Killing     Pod/events-demo   Stopping container nginx
+41m         Normal   Pulled      Pod/events-demo   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+41m         Normal   Created     Pod/events-demo   Container created
+41m         Normal   Scheduled   Pod/events-demo   Successfully assigned default/events-demo to hw-b-control-plane
+41m         Normal   Started     Pod/events-demo   Container started
+40m         Normal   Killing     Pod/events-demo   Stopping container nginx
+5s          Normal   Pulled      Pod/events-demo   Container image "nginx:1.27" already present on machine and can be accessed by the pod
+5s          Normal   Created     Pod/events-demo   Container created
+5s          Normal   Scheduled   Pod/events-demo   Successfully assigned default/events-demo to hw-b-control-plane
+4s          Normal   Started     Pod/events-demo   Container started
+
+$ kubectl get events --field-selector type=Warning -A
+NAMESPACE            LAST SEEN   TYPE      REASON                         OBJECT                                           MESSAGE
+default              5m1s        Warning   Unhealthy                      pod/api-684f5c94cf-wv2p5                         Readiness probe failed: dial tcp 10.244.0.93:8080: connect: connection refused
+default              20m         Warning   FailedMount                    pod/cc-demo                                      MountVolume.SetUp failed for volume "site" : configmap "site-content" not found
+default              6m17s       Warning   Failed                         pod/config-cmd-demo                              Error: failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: exec: "ngnix": executable file not found in $PATH
+default              6m16s       Warning   BackOff                        pod/config-cmd-demo                              Back-off restarting failed container nginx in pod config-cmd-demo_default(6e8385fb-17ba-4f2b-a090-6ad8d02162c0)
+default              6m41s       Warning   Failed                         pod/config-key-demo                              Error: couldn't find key LOGLEVEL in ConfigMap default/app-config
+default              34m         Warning   BackOff                        pod/crash-demo                                   Back-off restarting failed container app in pod crash-demo_default(adae2672-9d24-4a6d-b171-1f35c2bc734a)
+default              31m         Warning   BackOff                        pod/crash-demo                                   Back-off restarting failed container app in pod crash-demo_default(62c2bfa5-c13f-400b-ab4e-dcae48f6830b)
+default              25m         Warning   BackOff                        pod/crash-demo                                   Back-off restarting failed container app in pod crash-demo_default(3d11127d-dcfd-4f9d-a8cf-0f0d4f7dd16b)
+default              13m         Warning   Failed                         pod/dns-test                                     Failed to pull image "registry.k8s.io/e2e-test-images/dnsutils:1.3": rpc error: code = NotFound desc = failed to pull and unpack image "registry.k8s.io/e2e-test-images/dnsutils:1.3": failed to resolve reference "registry.k8s.io/e2e-test-images/dnsutils:1.3": registry.k8s.io/e2e-test-images/dnsutils:1.3: not found
+default              13m         Warning   Failed                         pod/dns-test                                     Error: ErrImagePull
+default              11m         Warning   Failed                         pod/dns-test                                     Error: ImagePullBackOff
+default              9m14s       Warning   Failed                         pod/dns-test                                     Failed to pull image "registry.k8s.io/e2e-test-images/dnsutils:1.3": rpc error: code = NotFound desc = failed to pull and unpack image "registry.k8s.io/e2e-test-images/dnsutils:1.3": failed to resolve reference "registry.k8s.io/e2e-test-images/dnsutils:1.3": registry.k8s.io/e2e-test-images/dnsutils:1.3: not found
+default              9m14s       Warning   Failed                         pod/dns-test                                     Error: ErrImagePull
+default              9m27s       Warning   Failed                         pod/dns-test                                     Error: ImagePullBackOff
+default              37m         Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(a5ce478d-cff4-4722-857b-5ae57d906ae6)
+default              37m         Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(9d813c46-0f12-4174-bc95-3c5f82efdba9)
+default              33m         Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(de2f6988-3956-4c39-adc7-af12a2b74569)
+default              33m         Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(eb127ea0-07e6-4541-9d79-a60aa084f64f)
+default              26m         Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(12e477a1-78e9-404b-b433-25bcb65cb25e)
+default              25m         Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(38d1f38e-b497-49c6-a2a8-fc4cd46f5126)
+default              24m         Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(d206086e-a865-4117-b539-152f16988bbe)
+default              3m51s       Warning   BackOff                        pod/fail-1-crashloop-pod                         Back-off restarting failed container python-app in pod fail-1-crashloop-pod_default(db898d22-b065-432b-877d-1e96b01a4fda)
+default              22m         Warning   Failed                         pod/fail-2-imagepull-pod                         Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+default              22m         Warning   Failed                         pod/fail-2-imagepull-pod                         Error: ErrImagePull
+default              23m         Warning   Failed                         pod/fail-2-imagepull-pod                         Error: ImagePullBackOff
+default              4m22s       Warning   Failed                         pod/fail-2-imagepull-pod                         Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to do request: Head "https://registry-1.docker.io/v2/library/yatri-api-service/manifests/v999-invalid-tag-does-not-exist": dial tcp: lookup registry-1.docker.io on 192.168.65.254:53: server misbehaving
+default              3m18s       Warning   Failed                         pod/fail-2-imagepull-pod                         Error: ErrImagePull
+default              3m6s        Warning   Failed                         pod/fail-2-imagepull-pod                         Error: ImagePullBackOff
+default              3m56s       Warning   Failed                         pod/fail-2-imagepull-pod                         Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to do request: Head "https://registry-1.docker.io/v2/library/yatri-api-service/manifests/v999-invalid-tag-does-not-exist": dial tcp: lookup registry-1.docker.io on 192.168.65.254:53: no such host
+default              3m18s       Warning   Failed                         pod/fail-2-imagepull-pod                         Failed to pull image "yatri-api-service:v999-invalid-tag-does-not-exist": failed to pull and unpack image "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": failed to resolve reference "docker.io/library/yatri-api-service:v999-invalid-tag-does-not-exist": pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed
+default              21m         Warning   FailedScheduling               pod/fail-3-pending-pod                           0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+default              4m30s       Warning   FailedScheduling               pod/fail-3-pending-pod                           0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+default              4m27s       Warning   FailedScheduling               pod/fail-3-pending-pod                           0/1 nodes are available: 1 Insufficient cpu, 1 Insufficient memory. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+default              12m         Warning   Failed                         pod/fail-4-dns-failure-pod                       Failed to pull image "curlimages/curl:8.6.0": failed to pull and unpack image "docker.io/curlimages/curl:8.6.0": failed to copy: httpReadSeeker: failed open: failed to do request: Get "https://production.cloudfront.docker.com/registry-v2/docker/registry/v2/blobs/sha256/b7/b73b56a85bd3c5e4291bf897c4b4a5eaf7365a77b499756dc5045ba453d58e33/data?Expires=%5BREDACTED%5D&Key-Pair-Id=%5BREDACTED%5D&Signature=%5BREDACTED%5D": dial tcp: lookup production.cloudfront.docker.com on 192.168.65.254:53: server misbehaving
+default              12m         Warning   Failed                         pod/fail-4-dns-failure-pod                       Error: ErrImagePull
+default              12m         Warning   Failed                         pod/fail-4-dns-failure-pod                       Error: ImagePullBackOff
+default              5m49s       Warning   BackOff                        pod/fail-5-oomkilled-pod                         Back-off restarting failed container memory-leaker in pod fail-5-oomkilled-pod_default(065b529b-a3f9-4790-b042-aec93f476dcb)
+default              3m54s       Warning   BackOff                        pod/fail-5-oomkilled-pod                         Back-off restarting failed container memory-leaker in pod fail-5-oomkilled-pod_default(e45c1671-727b-4d8e-af32-e28a792522e7)
+default              58m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo                 failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+default              58m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo                 invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+default              57m         Warning   FailedGetResourceMetric        horizontalpodautoscaler/hpa-demo                 failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+default              57m         Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/hpa-demo                 invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 23591
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 31830
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 37020
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 37186
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 31827
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 37283
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 37284
+default              62m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: python, pid: 37365
+default              48m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 71512
+default              47m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 516631
+default              46m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 511500
+default              45m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 517706
+default              38m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 523705
+default              34m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 524942
+default              26m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 550297
+default              20m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 544474
+default              20m         Warning   SystemOOM                      node/hw-b-control-plane                          System OOM encountered, victim process: local-path-prov, pid: 534371
+default              23m         Warning   Failed                         pod/image-demo                                   Failed to pull image "nginx:this-image-does-not-exist": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:this-image-does-not-exist": failed to resolve reference "docker.io/library/nginx:this-image-does-not-exist": docker.io/library/nginx:this-image-does-not-exist: not found
+default              23m         Warning   Failed                         pod/image-demo                                   Error: ErrImagePull
+default              23m         Warning   Failed                         pod/image-demo                                   Error: ImagePullBackOff
+default              21m         Warning   FailedScheduling               pod/pending-demo                                 0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+default              2m6s        Warning   Failed                         pod/project-broken-pod                           Failed to pull image "nginx:this-tag-does-not-exist": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/library/nginx:this-tag-does-not-exist": failed to resolve reference "docker.io/library/nginx:this-tag-does-not-exist": docker.io/library/nginx:this-tag-does-not-exist: not found
+default              2m6s        Warning   Failed                         pod/project-broken-pod                           Error: ErrImagePull
+default              2m22s       Warning   Failed                         pod/project-broken-pod                           Error: ImagePullBackOff
+default              16m         Warning   NodeNotReady                   pod/web-557577df75-kf4vb                         Node is not ready
+default              16m         Warning   NodeNotReady                   pod/web-557577df75-pwmpt                         Node is not ready
+kube-system          62m         Warning   FailedScheduling               pod/coredns-559f6c778d-q5w5p                     0/1 nodes are available: 1 node(s) had untolerated taint(s). preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+kube-system          26m         Warning   Unhealthy                      pod/coredns-559f6c778d-q5w5p                     Readiness probe failed: Get "http://10.244.0.2:8181/ready": dial tcp 10.244.0.2:8181: connect: connection refused
+kube-system          20m         Warning   Unhealthy                      pod/coredns-559f6c778d-q5w5p                     Readiness probe failed: Get "http://10.244.0.2:8181/ready": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          30m         Warning   Unhealthy                      pod/coredns-559f6c778d-q5w5p                     Liveness probe failed: Get "http://10.244.0.2:8080/health": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          16m         Warning   NodeNotReady                   pod/coredns-559f6c778d-q5w5p                     Node is not ready
+kube-system          62m         Warning   FailedScheduling               pod/coredns-559f6c778d-tsc7w                     0/1 nodes are available: 1 node(s) had untolerated taint(s). preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+kube-system          26m         Warning   Unhealthy                      pod/coredns-559f6c778d-tsc7w                     Readiness probe failed: Get "http://10.244.0.3:8181/ready": dial tcp 10.244.0.3:8181: connect: connection refused
+kube-system          20m         Warning   Unhealthy                      pod/coredns-559f6c778d-tsc7w                     Readiness probe failed: Get "http://10.244.0.3:8181/ready": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          30m         Warning   Unhealthy                      pod/coredns-559f6c778d-tsc7w                     Liveness probe failed: Get "http://10.244.0.3:8080/health": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          16m         Warning   NodeNotReady                   pod/coredns-559f6c778d-tsc7w                     Node is not ready
+kube-system          20m         Warning   Unhealthy                      pod/etcd-hw-b-control-plane                      Readiness probe failed: Get "http://127.0.0.1:2381/readyz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          28m         Warning   Unhealthy                      pod/etcd-hw-b-control-plane                      Liveness probe failed: Get "http://127.0.0.1:2381/livez": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          26m         Warning   Unhealthy                      pod/etcd-hw-b-control-plane                      Readiness probe failed: Get "http://127.0.0.1:2381/readyz": dial tcp 127.0.0.1:2381: connect: connection refused
+kube-system          26m         Warning   Unhealthy                      pod/etcd-hw-b-control-plane                      Readiness probe failed: HTTP probe failed with statuscode: 503
+kube-system          17m         Warning   NodeNotReady                   pod/etcd-hw-b-control-plane                      Node is not ready
+kube-system          17m         Warning   NodeNotReady                   pod/kindnet-tmvl4                                Node is not ready
+kube-system          26m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Readiness probe failed: HTTP probe failed with statuscode: 500
+kube-system          38m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Readiness probe failed: Get "https://172.18.0.2:6443/readyz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          31m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Liveness probe failed: Get "https://172.18.0.2:6443/livez": net/http: TLS handshake timeout
+kube-system          31m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Readiness probe failed: Get "https://172.18.0.2:6443/readyz": net/http: TLS handshake timeout
+kube-system          44m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Readiness probe failed: Get "https://172.18.0.2:6443/readyz": context deadline exceeded
+kube-system          20m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Readiness probe failed: Get "https://172.18.0.2:6443/readyz": net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+kube-system          34m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Liveness probe failed: HTTP probe failed with statuscode: 500
+kube-system          38m         Warning   Unhealthy                      pod/kube-apiserver-hw-b-control-plane            Liveness probe failed: Get "https://172.18.0.2:6443/livez": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          17m         Warning   NodeNotReady                   pod/kube-apiserver-hw-b-control-plane            Node is not ready
+kube-system          62m         Warning   NodeNotReady                   pod/kube-controller-manager-hw-b-control-plane   Node is not ready
+kube-system          42m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": EOF
+kube-system          47m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": http2: server sent GOAWAY and closed the connection; LastStreamID=1, ErrCode=NO_ERROR, debug=""
+kube-system          37m         Warning   BackOff                        pod/kube-controller-manager-hw-b-control-plane   Back-off restarting failed container kube-controller-manager in pod kube-controller-manager-hw-b-control-plane_kube-system(1d4fbf2c4c1e9911a3f154e7f86eec43)
+kube-system          38m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": net/http: TLS handshake timeout
+kube-system          44m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": read tcp 127.0.0.1:55984->127.0.0.1:10257: read: connection reset by peer
+kube-system          38m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": dial tcp 127.0.0.1:10257: connect: connection refused
+kube-system          17m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": net/http: TLS handshake timeout
+kube-system          29m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
+kube-system          26m         Warning   BackOff                        pod/kube-controller-manager-hw-b-control-plane   Back-off restarting failed container kube-controller-manager in pod kube-controller-manager-hw-b-control-plane_kube-system(7078119ab5b9a4fae90c7d774a77a000)
+kube-system          20m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+kube-system          17m         Warning   NodeNotReady                   pod/kube-controller-manager-hw-b-control-plane   Node is not ready
+kube-system          17m         Warning   Unhealthy                      pod/kube-controller-manager-hw-b-control-plane   Liveness probe failed: Get "https://127.0.0.1:10257/healthz": net/http: TLS handshake timeout (Client.Timeout exceeded while awaiting headers)
+kube-system          17m         Warning   NodeNotReady                   pod/kube-proxy-vzkjt                             Node is not ready
+kube-system          42m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Readiness probe failed: Get "https://127.0.0.1:10259/readyz": dial tcp 127.0.0.1:10259: connect: connection refused
+kube-system          38m         Warning   BackOff                        pod/kube-scheduler-hw-b-control-plane            Back-off restarting failed container kube-scheduler in pod kube-scheduler-hw-b-control-plane_kube-system(7742b31475af272a42ff940bcf5b79f0)
+kube-system          45m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Readiness probe failed: Get "https://127.0.0.1:10259/readyz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          45m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Liveness probe failed: Get "https://127.0.0.1:10259/livez": net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+kube-system          31m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Readiness probe failed: Get "https://127.0.0.1:10259/readyz": context deadline exceeded
+kube-system          20m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Liveness probe failed: Get "https://127.0.0.1:10259/livez": net/http: TLS handshake timeout
+kube-system          27m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Readiness probe failed: Get "https://127.0.0.1:10259/readyz": net/http: TLS handshake timeout
+kube-system          29m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Liveness probe failed: Get "https://127.0.0.1:10259/livez": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          29m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Readiness probe failed: Get "https://127.0.0.1:10259/readyz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          26m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Readiness probe failed: HTTP probe failed with statuscode: 500
+kube-system          26m         Warning   Unhealthy                      pod/kube-scheduler-hw-b-control-plane            Readiness probe failed: Get "https://127.0.0.1:10259/readyz": dial tcp 127.0.0.1:10259: connect: connection refused
+kube-system          16m         Warning   NodeNotReady                   pod/kube-scheduler-hw-b-control-plane            Node is not ready
+kube-system          61m         Warning   Unhealthy                      pod/metrics-server-6bcd67b6cf-b6xkx              Readiness probe failed: HTTP probe failed with statuscode: 500
+kube-system          45m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Readiness probe failed: Get "https://10.244.0.6:10250/readyz": net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+kube-system          31m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Liveness probe failed: Get "https://10.244.0.6:10250/livez": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          20m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Readiness probe failed: Get "https://10.244.0.6:10250/readyz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+kube-system          45m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Readiness probe failed: Get "https://10.244.0.6:10250/readyz": net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
+kube-system          39m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Readiness probe failed: Get "https://10.244.0.6:10250/readyz": context deadline exceeded
+kube-system          47m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Liveness probe failed: Get "https://10.244.0.6:10250/livez": net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+kube-system          47m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Liveness probe failed: Get "https://10.244.0.6:10250/livez": context deadline exceeded
+kube-system          46m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Readiness probe failed: HTTP probe failed with statuscode: 500
+kube-system          46m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Readiness probe failed: Get "https://10.244.0.6:10250/readyz": dial tcp 10.244.0.6:10250: connect: connection refused
+kube-system          42m         Warning   Unhealthy                      pod/metrics-server-84c99cb944-kkw88              Liveness probe failed: Get "https://10.244.0.6:10250/livez": net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
+kube-system          17m         Warning   NodeNotReady                   pod/metrics-server-84c99cb944-kkw88              Node is not ready
+local-path-storage   62m         Warning   FailedScheduling               pod/local-path-provisioner-75f7fc7dc5-pt6kx      0/1 nodes are available: 1 node(s) had untolerated taint(s). preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+local-path-storage   26m         Warning   BackOff                        pod/local-path-provisioner-75f7fc7dc5-pt6kx      Back-off restarting failed container local-path-provisioner in pod local-path-provisioner-75f7fc7dc5-pt6kx_local-path-storage(8a94119e-30e5-49c5-88de-c402d49ff3c3)
+local-path-storage   17m         Warning   NodeNotReady                   pod/local-path-provisioner-75f7fc7dc5-pt6kx      Node is not ready
+yatri                2s          Warning   FailedGetResourceMetric        horizontalpodautoscaler/yatri-backend-hpa        failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+yatri                2s          Warning   FailedComputeMetricsReplicas   horizontalpodautoscaler/yatri-backend-hpa        invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: unable to get metrics for resource cpu: no metrics returned from resource metrics API
+
+# ===== kubectl explain =====
+$ kubectl explain pod.spec.restartPolicy
+KIND:       Pod
+VERSION:    v1
+
+FIELD: restartPolicy <string>
+ENUM:
+    Always
+    Never
+    OnFailure
+
+DESCRIPTION:
+    Restart policy for all containers within the pod. One of Always, OnFailure,
+    Never. In some contexts, only a subset of those values may be permitted.
+    Default to Always. More info:
+    https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy
+    
+    Possible enum values:
+     - `"Always"`
+     - `"Never"`
+     - `"OnFailure"`
+    
+
+$ kubectl explain deployment.spec.strategy
+GROUP:      apps
+KIND:       Deployment
+VERSION:    v1
+
+FIELD: strategy <DeploymentStrategy>
+
+
+DESCRIPTION:
+    The deployment strategy to use to replace existing pods with new ones.
+    DeploymentStrategy describes how to replace existing pods with new ones.
+    
+FIELDS:
+  rollingUpdate	<RollingUpdateDeployment>
+    Rolling update config params. Present only if DeploymentStrategyType =
+    RollingUpdate.
+
+  type	<string>
+  enum: Recreate, RollingUpdate
+    Type of deployment. Can be "Recreate" or "RollingUpdate". Default is
+    RollingUpdate.
+    
+    Possible enum values:
+     - `"Recreate"` Kill all existing pods before creating new ones.
+     - `"RollingUpdate"` Replace the old ReplicaSets by new one using rolling
+    update i.e gradually scale down the old ReplicaSets and scale up the new
+    one.
+
+$ kubectl explain pod.spec.containers.livenessProbe | head -30
+KIND:       Pod
+VERSION:    v1
+
+FIELD: livenessProbe <Probe>
+
+
+DESCRIPTION:
+    Periodic probe of container liveness. Container will be restarted if the
+    probe fails. Cannot be updated. More info:
+    https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#container-probes
+    Probe describes a health check to be performed against a container to
+    determine whether it is alive or ready to receive traffic.
+    
+FIELDS:
+  exec	<ExecAction>
+    Exec specifies a command to execute in the container.
+
+  failureThreshold	<integer>
+    Minimum consecutive failures for the probe to be considered failed after
+    having succeeded. Defaults to 3. Minimum value is 1.
+
+  grpc	<GRPCAction>
+    GRPC specifies a GRPC HealthCheckRequest.
+
+  httpGet	<HTTPGetAction>
+    HTTPGet specifies an HTTP GET request to perform.
+
+  initialDelaySeconds	<integer>
+    Number of seconds after the container has started before liveness probes are
+    initiated. More info:
+
+$ kubectl explain pod.spec --recursive | head -20
+KIND:       Pod
+VERSION:    v1
+
+FIELD: spec <PodSpec>
+
+
+DESCRIPTION:
+    Specification of the desired behavior of the pod. More info:
+    https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+    PodSpec is a description of a pod.
+    
+FIELDS:
+  activeDeadlineSeconds	<integer>
+  affinity	<Affinity>
+    nodeAffinity	<NodeAffinity>
+      preferredDuringSchedulingIgnoredDuringExecution	<[]PreferredSchedulingTerm>
+        preference	<NodeSelectorTerm> -required-
+          matchExpressions	<[]NodeSelectorRequirement>
+            key	<string> -required-
+            operator	<string> -required-
+
+# ===== kubectl top (needs metrics-server) =====
+$ kubectl top nodes
+NAME                 CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+hw-b-control-plane   491m         3%       883Mi           11%         
+
+$ kubectl top pods
+error: metrics not available yet
+
+$ kubectl top pods -A --sort-by=memory
+NAMESPACE            NAME                                         CPU(cores)   MEMORY(bytes)   
+kube-system          kube-apiserver-hw-b-control-plane            99m          308Mi           
+kube-system          kube-controller-manager-hw-b-control-plane   39m          69Mi            
+kube-system          etcd-hw-b-control-plane                      47m          61Mi            
+kube-system          kube-scheduler-hw-b-control-plane            37m          38Mi            
+kube-system          metrics-server-84c99cb944-kkw88              13m          35Mi            
+kube-system          kube-proxy-vzkjt                             7m           28Mi            
+kube-system          kindnet-tmvl4                                4m           20Mi            
+kube-system          coredns-559f6c778d-q5w5p                     6m           18Mi            
+yatri                yatri-backend-cbc55c649-xr8w7                20m          17Mi            
+kube-system          coredns-559f6c778d-tsc7w                     20m          17Mi            
+yatri                yatri-backend-cbc55c649-vzgsh                14m          16Mi            
+local-path-storage   local-path-provisioner-75f7fc7dc5-pt6kx      1m           12Mi            
+
+$ kubectl top pod exec-demo --containers
+Error from server (NotFound): podmetrics.metrics.k8s.io "default/exec-demo" not found
+
+# kubectl top again ~1 minute later (metrics-server scrapes every 15s and needs a couple of samples for brand-new pods):
+$ kubectl top pods
+NAME            CPU(cores)   MEMORY(bytes)   
+describe-demo   8m           12Mi            
+events-demo     6m           12Mi            
+exec-demo       26m          22Mi            
+get-demo        0m           13Mi            
+logs-demo       1m           1Mi             
+
+$ kubectl top pod exec-demo --containers
+POD         NAME    CPU(cores)   MEMORY(bytes)   
+exec-demo   nginx   26m          22Mi            
+
+$ kubectl top pods -A --sort-by=cpu
+NAMESPACE            NAME                                         CPU(cores)   MEMORY(bytes)   
+kube-system          kube-apiserver-hw-b-control-plane            398m         314Mi           
+kube-system          etcd-hw-b-control-plane                      94m          61Mi            
+kube-system          kube-controller-manager-hw-b-control-plane   60m          71Mi            
+kube-system          kube-scheduler-hw-b-control-plane            29m          39Mi            
+default              exec-demo                                    26m          22Mi            
+kube-system          metrics-server-84c99cb944-kkw88              24m          30Mi            
+yatri                yatri-backend-cbc55c649-vzgsh                14m          16Mi            
+kube-system          coredns-559f6c778d-tsc7w                     10m          16Mi            
+default              describe-demo                                8m           12Mi            
+default              events-demo                                  6m           12Mi            
+kube-system          coredns-559f6c778d-q5w5p                     6m           18Mi            
+kube-system          kube-proxy-vzkjt                             6m           21Mi            
+kube-system          kindnet-tmvl4                                5m           20Mi            
+local-path-storage   local-path-provisioner-75f7fc7dc5-pt6kx      2m           12Mi            
+yatri                yatri-backend-cbc55c649-xr8w7                2m           17Mi            
+default              logs-demo                                    1m           1Mi             
+default              get-demo                                     0m           13Mi            
+
+# Note: in this cluster 'get events --sort-by=.lastTimestamp' is not fully ordered (newer events set eventTime, not lastTimestamp). 'kubectl events' sorts correctly:
+$ kubectl events | tail -8
+20s                     Normal    Scheduled                      Pod/logs-demo                               Successfully assigned default/logs-demo to hw-b-control-plane
+20s                     Normal    Scheduled                      Pod/exec-demo                               Successfully assigned default/exec-demo to hw-b-control-plane
+20s                     Normal    Scheduled                      Pod/events-demo                             Successfully assigned default/events-demo to hw-b-control-plane
+19s                     Normal    Started                        Pod/events-demo                             Container started
+19s                     Normal    Started                        Pod/get-demo                                Container started
+19s                     Normal    Started                        Pod/logs-demo                               Container started
+19s                     Normal    Started                        Pod/describe-demo                           Container started
+19s                     Normal    Started                        Pod/exec-demo                               Container started
+
