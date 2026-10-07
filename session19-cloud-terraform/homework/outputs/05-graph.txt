@@ -1,0 +1,31 @@
+$ terraform graph > outputs/graph.dot; echo "exit code: $?"; wc -l outputs/graph.dot
+exit code: 0
+      52 outputs/graph.dot
+
+$ head -8 outputs/graph.dot
+digraph G {
+  rankdir = "RL";
+  node [shape = rect, fontname = "sans-serif"];
+  "data.aws_ami.al2023" [label="data.aws_ami.al2023"];
+  "data.aws_availability_zones.available" [label="data.aws_availability_zones.available"];
+  "data.aws_iam_policy_document.ec2_assume" [label="data.aws_iam_policy_document.ec2_assume"];
+  "data.aws_iam_policy_document.read_assets" [label="data.aws_iam_policy_document.read_assets"];
+  "aws_iam_instance_profile.web" [label="aws_iam_instance_profile.web"];
+
+$ grep -c -- '->' outputs/graph.dot
+26
+
+$ grep -E '"aws_instance.web" ->' outputs/graph.dot
+  "aws_instance.web" -> "data.aws_ami.al2023";
+  "aws_instance.web" -> "aws_iam_instance_profile.web";
+  "aws_instance.web" -> "aws_route_table_association.public";
+  "aws_instance.web" -> "aws_s3_object.index";
+  "aws_instance.web" -> "aws_security_group.web";
+
+$ grep -E '"aws_route_table_association.public" ->|"aws_route_table.public" ->|"aws_subnet.public" ->' outputs/graph.dot
+  "aws_route_table.public" -> "aws_internet_gateway.main";
+  "aws_route_table_association.public" -> "aws_route_table.public";
+  "aws_route_table_association.public" -> "aws_subnet.public";
+  "aws_subnet.public" -> "data.aws_availability_zones.available";
+  "aws_subnet.public" -> "aws_vpc.main";
+

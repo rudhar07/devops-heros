@@ -1,0 +1,720 @@
+$ terraform plan -destroy -no-color | grep -E "^  # |^Plan:"
+  # aws_iam_instance_profile.web will be destroyed
+  # aws_iam_role.web will be destroyed
+  # aws_iam_role_policy.read_assets will be destroyed
+  # aws_instance.web will be destroyed
+  # aws_internet_gateway.main will be destroyed
+  # aws_route_table.private will be destroyed
+  # aws_route_table.public will be destroyed
+  # aws_route_table_association.private will be destroyed
+  # aws_route_table_association.public will be destroyed
+  # aws_s3_bucket.assets will be destroyed
+  # aws_s3_bucket_public_access_block.assets will be destroyed
+  # aws_s3_bucket_server_side_encryption_configuration.assets will be destroyed
+  # aws_s3_bucket_versioning.assets will be destroyed
+  # aws_s3_object.index will be destroyed
+  # aws_security_group.web will be destroyed
+  # aws_subnet.private will be destroyed
+  # aws_subnet.public will be destroyed
+  # aws_vpc.main will be destroyed
+Plan: 0 to add, 0 to change, 18 to destroy.
+
+$ terraform destroy -auto-approve -no-color
+data.aws_availability_zones.available: Reading...
+data.aws_iam_policy_document.ec2_assume: Reading...
+data.aws_ami.al2023: Reading...
+aws_vpc.main: Refreshing state... [id=vpc-f1cc7a5f7a3f5f535]
+aws_s3_bucket.assets: Refreshing state... [id=rudhar-s19-web-assets-10143]
+data.aws_iam_policy_document.ec2_assume: Read complete after 0s [id=2851119427]
+aws_iam_role.web: Refreshing state... [id=s19-web-ec2-role]
+data.aws_availability_zones.available: Read complete after 1s [id=ap-south-1]
+data.aws_ami.al2023: Read complete after 1s [id=ami-0ff5003538b60d5ec]
+aws_iam_instance_profile.web: Refreshing state... [id=s19-web-ec2-profile]
+aws_route_table.private: Refreshing state... [id=rtb-a291f2a0b5da15efa]
+aws_subnet.public: Refreshing state... [id=subnet-186a11a16ef49091c]
+aws_subnet.private: Refreshing state... [id=subnet-6dbf0d351ad1e6bee]
+aws_internet_gateway.main: Refreshing state... [id=igw-1a63abbeeb160ece9]
+aws_security_group.web: Refreshing state... [id=sg-184ee2cd204ac1dcc]
+aws_route_table.public: Refreshing state... [id=rtb-64953ee769a74339d]
+aws_route_table_association.private: Refreshing state... [id=rtbassoc-4e4df72a8a6bad1e5]
+aws_route_table_association.public: Refreshing state... [id=rtbassoc-d68f9e9418fec3ae5]
+aws_s3_bucket_server_side_encryption_configuration.assets: Refreshing state... [id=rudhar-s19-web-assets-10143]
+aws_s3_bucket_public_access_block.assets: Refreshing state... [id=rudhar-s19-web-assets-10143]
+aws_s3_bucket_versioning.assets: Refreshing state... [id=rudhar-s19-web-assets-10143]
+data.aws_iam_policy_document.read_assets: Reading...
+aws_s3_object.index: Refreshing state... [id=rudhar-s19-web-assets-10143/site/index.html]
+data.aws_iam_policy_document.read_assets: Read complete after 0s [id=3039934712]
+aws_iam_role_policy.read_assets: Refreshing state... [id=s19-web-ec2-role:read-assets]
+aws_instance.web: Refreshing state... [id=i-64322a6970fd09dc1]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  - destroy
+
+Terraform will perform the following actions:
+
+  # aws_iam_instance_profile.web will be destroyed
+  - resource "aws_iam_instance_profile" "web" {
+      - arn         = "arn:aws:iam::000000000000:instance-profile/s19-web-ec2-profile" -> null
+      - create_date = "2026-10-07T16:32:03Z" -> null
+      - id          = "s19-web-ec2-profile" -> null
+      - name        = "s19-web-ec2-profile" -> null
+      - path        = "/" -> null
+      - role        = "s19-web-ec2-role" -> null
+      - tags        = {} -> null
+      - tags_all    = {
+          - "ManagedBy" = "Terraform"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - unique_id   = "vzch3gufg1rvdepzhdd4" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_iam_role.web will be destroyed
+  - resource "aws_iam_role" "web" {
+      - arn                   = "arn:aws:iam::000000000000:role/s19-web-ec2-role" -> null
+      - assume_role_policy    = jsonencode(
+            {
+              - Statement = [
+                  - {
+                      - Action    = "sts:AssumeRole"
+                      - Effect    = "Allow"
+                      - Principal = {
+                          - Service = "ec2.amazonaws.com"
+                        }
+                    },
+                ]
+              - Version   = "2012-10-17"
+            }
+        ) -> null
+      - create_date           = "2026-10-07T16:32:02Z" -> null
+      - force_detach_policies = false -> null
+      - id                    = "s19-web-ec2-role" -> null
+      - managed_policy_arns   = [] -> null
+      - max_session_duration  = 3600 -> null
+      - name                  = "s19-web-ec2-role" -> null
+      - path                  = "/" -> null
+      - tags                  = {} -> null
+      - tags_all              = {
+          - "ManagedBy" = "Terraform"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - unique_id             = "AROAQAAAAAAANMIER676L" -> null
+        # (3 unchanged attributes hidden)
+
+      - inline_policy {
+          - name   = "read-assets" -> null
+          - policy = jsonencode(
+                {
+                  - Statement = [
+                      - {
+                          - Action   = "s3:ListBucket"
+                          - Effect   = "Allow"
+                          - Resource = "arn:aws:s3:::rudhar-s19-web-assets-10143"
+                          - Sid      = "ListAssetsBucket"
+                        },
+                      - {
+                          - Action   = "s3:GetObject"
+                          - Effect   = "Allow"
+                          - Resource = "arn:aws:s3:::rudhar-s19-web-assets-10143/*"
+                          - Sid      = "ReadAssets"
+                        },
+                    ]
+                  - Version   = "2012-10-17"
+                }
+            ) -> null
+        }
+    }
+
+  # aws_iam_role_policy.read_assets will be destroyed
+  - resource "aws_iam_role_policy" "read_assets" {
+      - id          = "s19-web-ec2-role:read-assets" -> null
+      - name        = "read-assets" -> null
+      - policy      = jsonencode(
+            {
+              - Statement = [
+                  - {
+                      - Action   = "s3:ListBucket"
+                      - Effect   = "Allow"
+                      - Resource = "arn:aws:s3:::rudhar-s19-web-assets-10143"
+                      - Sid      = "ListAssetsBucket"
+                    },
+                  - {
+                      - Action   = "s3:GetObject"
+                      - Effect   = "Allow"
+                      - Resource = "arn:aws:s3:::rudhar-s19-web-assets-10143/*"
+                      - Sid      = "ReadAssets"
+                    },
+                ]
+              - Version   = "2012-10-17"
+            }
+        ) -> null
+      - role        = "s19-web-ec2-role" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_instance.web will be destroyed
+  - resource "aws_instance" "web" {
+      - ami                                  = "ami-0ff5003538b60d5ec" -> null
+      - arn                                  = "arn:aws:ec2:ap-south-1::instance/i-64322a6970fd09dc1" -> null
+      - associate_public_ip_address          = true -> null
+      - availability_zone                    = "ap-south-1a" -> null
+      - disable_api_stop                     = false -> null
+      - disable_api_termination              = false -> null
+      - ebs_optimized                        = false -> null
+      - force_destroy                        = false -> null
+      - get_password_data                    = false -> null
+      - hibernation                          = false -> null
+      - iam_instance_profile                 = "s19-web-ec2-profile" -> null
+      - id                                   = "i-64322a6970fd09dc1" -> null
+      - instance_initiated_shutdown_behavior = "stop" -> null
+      - instance_state                       = "running" -> null
+      - instance_type                        = "t3.micro" -> null
+      - ipv6_address_count                   = 0 -> null
+      - ipv6_addresses                       = [] -> null
+      - monitoring                           = false -> null
+      - placement_partition_number           = 0 -> null
+      - primary_network_interface_id         = "eni-b04d9ad25dc916a76" -> null
+      - private_dns                          = "ip-10-20-1-4.ap-south-1.compute.internal" -> null
+      - private_ip                           = "10.20.1.4" -> null
+      - public_dns                           = "ec2-54-214-196-113.ap-south-1.compute.amazonaws.com" -> null
+      - public_ip                            = "54.214.196.113" -> null
+      - region                               = "ap-south-1" -> null
+      - secondary_private_ips                = [] -> null
+      - security_groups                      = [] -> null
+      - source_dest_check                    = true -> null
+      - subnet_id                            = "subnet-186a11a16ef49091c" -> null
+      - tags                                 = {
+          - "Name" = "s19-web-server"
+        } -> null
+      - tags_all                             = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-server"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - tenancy                              = "default" -> null
+      - user_data                            = <<-EOT
+            #!/bin/bash
+            dnf install -y nginx
+            aws s3 cp s3://rudhar-s19-web-assets-10143/site/index.html /usr/share/nginx/html/index.html
+            systemctl enable --now nginx
+        EOT -> null
+      - user_data_replace_on_change          = true -> null
+      - vpc_security_group_ids               = [
+          - "sg-184ee2cd204ac1dcc",
+        ] -> null
+        # (8 unchanged attributes hidden)
+
+      - credit_specification {
+          - cpu_credits = "standard" -> null
+        }
+
+      - metadata_options {
+          - http_endpoint               = "enabled" -> null
+          - http_protocol_ipv6          = "disabled" -> null
+          - http_put_response_hop_limit = 1 -> null
+          - http_tokens                 = "required" -> null
+          - instance_metadata_tags      = "disabled" -> null
+        }
+
+      - primary_network_interface {
+          - delete_on_termination = false -> null
+          - network_interface_id  = "eni-b04d9ad25dc916a76" -> null
+        }
+
+      - root_block_device {
+          - delete_on_termination = true -> null
+          - device_name           = "/dev/xvda" -> null
+          - encrypted             = true -> null
+          - iops                  = 3000 -> null
+          - kms_key_id            = "arn:aws:kms:ap-south-1:000000000000:key/5cceec84-4b4a-4373-b0e3-5ba196d2be39" -> null
+          - tags                  = {} -> null
+          - tags_all              = {
+              - "ManagedBy" = "Terraform"
+              - "Owner"     = "rudhar-bajaj"
+              - "Project"   = "s19-web"
+              - "Session"   = "19"
+            } -> null
+          - throughput            = 0 -> null
+          - volume_id             = "vol-f934573165079bed7" -> null
+          - volume_size           = 8 -> null
+          - volume_type           = "gp3" -> null
+        }
+    }
+
+  # aws_internet_gateway.main will be destroyed
+  - resource "aws_internet_gateway" "main" {
+      - arn      = "arn:aws:ec2:ap-south-1:000000000000:internet-gateway/igw-1a63abbeeb160ece9" -> null
+      - id       = "igw-1a63abbeeb160ece9" -> null
+      - owner_id = "000000000000" -> null
+      - region   = "ap-south-1" -> null
+      - tags     = {
+          - "Name" = "s19-web-igw"
+        } -> null
+      - tags_all = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-igw"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - vpc_id   = "vpc-f1cc7a5f7a3f5f535" -> null
+    }
+
+  # aws_route_table.private will be destroyed
+  - resource "aws_route_table" "private" {
+      - arn              = "arn:aws:ec2:ap-south-1:000000000000:route-table/rtb-a291f2a0b5da15efa" -> null
+      - id               = "rtb-a291f2a0b5da15efa" -> null
+      - owner_id         = "000000000000" -> null
+      - propagating_vgws = [] -> null
+      - region           = "ap-south-1" -> null
+      - route            = [] -> null
+      - tags             = {
+          - "Name" = "s19-web-private-rt"
+        } -> null
+      - tags_all         = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-private-rt"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - vpc_id           = "vpc-f1cc7a5f7a3f5f535" -> null
+    }
+
+  # aws_route_table.public will be destroyed
+  - resource "aws_route_table" "public" {
+      - arn              = "arn:aws:ec2:ap-south-1:000000000000:route-table/rtb-64953ee769a74339d" -> null
+      - id               = "rtb-64953ee769a74339d" -> null
+      - owner_id         = "000000000000" -> null
+      - propagating_vgws = [] -> null
+      - region           = "ap-south-1" -> null
+      - route            = [
+          - {
+              - cidr_block                 = "0.0.0.0/0"
+              - gateway_id                 = "igw-1a63abbeeb160ece9"
+                # (12 unchanged attributes hidden)
+            },
+        ] -> null
+      - tags             = {
+          - "Name" = "s19-web-public-rt"
+        } -> null
+      - tags_all         = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-public-rt"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - vpc_id           = "vpc-f1cc7a5f7a3f5f535" -> null
+    }
+
+  # aws_route_table_association.private will be destroyed
+  - resource "aws_route_table_association" "private" {
+      - id             = "rtbassoc-4e4df72a8a6bad1e5" -> null
+      - region         = "ap-south-1" -> null
+      - route_table_id = "rtb-a291f2a0b5da15efa" -> null
+      - subnet_id      = "subnet-6dbf0d351ad1e6bee" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_route_table_association.public will be destroyed
+  - resource "aws_route_table_association" "public" {
+      - id             = "rtbassoc-d68f9e9418fec3ae5" -> null
+      - region         = "ap-south-1" -> null
+      - route_table_id = "rtb-64953ee769a74339d" -> null
+      - subnet_id      = "subnet-186a11a16ef49091c" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_s3_bucket.assets will be destroyed
+  - resource "aws_s3_bucket" "assets" {
+      - arn                         = "arn:aws:s3:::rudhar-s19-web-assets-10143" -> null
+      - bucket                      = "rudhar-s19-web-assets-10143" -> null
+      - bucket_domain_name          = "rudhar-s19-web-assets-10143.s3.amazonaws.com" -> null
+      - bucket_namespace            = "global" -> null
+      - bucket_region               = "ap-south-1" -> null
+      - bucket_regional_domain_name = "rudhar-s19-web-assets-10143.s3.ap-south-1.amazonaws.com" -> null
+      - force_destroy               = true -> null
+      - hosted_zone_id              = "Z11RGJOFQNVJUP" -> null
+      - id                          = "rudhar-s19-web-assets-10143" -> null
+      - object_lock_enabled         = false -> null
+      - region                      = "ap-south-1" -> null
+      - request_payer               = "BucketOwner" -> null
+      - tags                        = {
+          - "Name" = "rudhar-s19-web-assets-10143"
+        } -> null
+      - tags_all                    = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "rudhar-s19-web-assets-10143"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+        # (3 unchanged attributes hidden)
+
+      - grant {
+          - id          = "75aa57f09aa0c8caeab4f8c24e99d10f8e7faeebf76c078efc7c6caea54ba06a" -> null
+          - permissions = [
+              - "FULL_CONTROL",
+            ] -> null
+          - type        = "CanonicalUser" -> null
+            # (1 unchanged attribute hidden)
+        }
+
+      - server_side_encryption_configuration {
+          - rule {
+              - bucket_key_enabled = false -> null
+
+              - apply_server_side_encryption_by_default {
+                  - sse_algorithm     = "AES256" -> null
+                    # (1 unchanged attribute hidden)
+                }
+            }
+        }
+
+      - versioning {
+          - enabled    = true -> null
+          - mfa_delete = false -> null
+        }
+    }
+
+  # aws_s3_bucket_public_access_block.assets will be destroyed
+  - resource "aws_s3_bucket_public_access_block" "assets" {
+      - block_public_acls       = true -> null
+      - block_public_policy     = true -> null
+      - bucket                  = "rudhar-s19-web-assets-10143" -> null
+      - id                      = "rudhar-s19-web-assets-10143" -> null
+      - ignore_public_acls      = true -> null
+      - region                  = "ap-south-1" -> null
+      - restrict_public_buckets = true -> null
+    }
+
+  # aws_s3_bucket_server_side_encryption_configuration.assets will be destroyed
+  - resource "aws_s3_bucket_server_side_encryption_configuration" "assets" {
+      - bucket                = "rudhar-s19-web-assets-10143" -> null
+      - id                    = "rudhar-s19-web-assets-10143" -> null
+      - region                = "ap-south-1" -> null
+        # (1 unchanged attribute hidden)
+
+      - rule {
+          - blocked_encryption_types = [] -> null
+          - bucket_key_enabled       = false -> null
+
+          - apply_server_side_encryption_by_default {
+              - sse_algorithm     = "AES256" -> null
+                # (1 unchanged attribute hidden)
+            }
+        }
+    }
+
+  # aws_s3_bucket_versioning.assets will be destroyed
+  - resource "aws_s3_bucket_versioning" "assets" {
+      - bucket                = "rudhar-s19-web-assets-10143" -> null
+      - id                    = "rudhar-s19-web-assets-10143" -> null
+      - region                = "ap-south-1" -> null
+        # (1 unchanged attribute hidden)
+
+      - versioning_configuration {
+          - mfa_delete = "Disabled" -> null
+          - status     = "Enabled" -> null
+        }
+    }
+
+  # aws_s3_object.index will be destroyed
+  - resource "aws_s3_object" "index" {
+      - arn                           = "arn:aws:s3:::rudhar-s19-web-assets-10143/site/index.html" -> null
+      - bucket                        = "rudhar-s19-web-assets-10143" -> null
+      - bucket_key_enabled            = false -> null
+      - content                       = <<-EOT
+            <!doctype html>
+            <title>s19-web</title>
+            <h1>Session 19: deployed by Terraform</h1>
+            <p>VPC 10.20.0.0/16, public subnet 10.20.1.0/24, region ap-south-1.</p>
+        EOT -> null
+      - content_type                  = "text/html" -> null
+      - etag                          = "3118e8c7de39807f0b61dbc84f0c4447" -> null
+      - force_destroy                 = false -> null
+      - id                            = "rudhar-s19-web-assets-10143/site/index.html" -> null
+      - key                           = "site/index.html" -> null
+      - metadata                      = {} -> null
+      - region                        = "ap-south-1" -> null
+      - server_side_encryption        = "AES256" -> null
+      - storage_class                 = "STANDARD" -> null
+      - tags                          = {} -> null
+      - tags_all                      = {
+          - "ManagedBy" = "Terraform"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - version_id                    = "AaEXLsqkG05O7OudgVMeTww4kMessqXV" -> null
+        # (13 unchanged attributes hidden)
+    }
+
+  # aws_security_group.web will be destroyed
+  - resource "aws_security_group" "web" {
+      - arn                    = "arn:aws:ec2:ap-south-1:000000000000:security-group/sg-184ee2cd204ac1dcc" -> null
+      - description            = "HTTP/HTTPS from anywhere, SSH from one admin IP" -> null
+      - egress                 = [
+          - {
+              - cidr_blocks      = [
+                  - "0.0.0.0/0",
+                ]
+              - description      = "All outbound IPv4"
+              - from_port        = 0
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "-1"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 0
+            },
+        ] -> null
+      - id                     = "sg-184ee2cd204ac1dcc" -> null
+      - ingress                = [
+          - {
+              - cidr_blocks      = [
+                  - "0.0.0.0/0",
+                ]
+              - description      = "HTTP"
+              - from_port        = 80
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "tcp"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 80
+            },
+          - {
+              - cidr_blocks      = [
+                  - "0.0.0.0/0",
+                ]
+              - description      = "HTTPS"
+              - from_port        = 443
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "tcp"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 443
+            },
+          - {
+              - cidr_blocks      = [
+                  - "203.0.113.10/32",
+                ]
+              - description      = "SSH from the admin IP only"
+              - from_port        = 22
+              - ipv6_cidr_blocks = []
+              - prefix_list_ids  = []
+              - protocol         = "tcp"
+              - security_groups  = []
+              - self             = false
+              - to_port          = 22
+            },
+        ] -> null
+      - name                   = "s19-web-web-sg" -> null
+      - owner_id               = "000000000000" -> null
+      - region                 = "ap-south-1" -> null
+      - revoke_rules_on_delete = false -> null
+      - tags                   = {
+          - "Name" = "s19-web-web-sg"
+        } -> null
+      - tags_all               = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-web-sg"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+      - vpc_id                 = "vpc-f1cc7a5f7a3f5f535" -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # aws_subnet.private will be destroyed
+  - resource "aws_subnet" "private" {
+      - arn                                            = "arn:aws:ec2:ap-south-1:000000000000:subnet/subnet-6dbf0d351ad1e6bee" -> null
+      - assign_ipv6_address_on_creation                = false -> null
+      - availability_zone                              = "ap-south-1b" -> null
+      - availability_zone_id                           = "aps1-az3" -> null
+      - cidr_block                                     = "10.20.2.0/24" -> null
+      - enable_dns64                                   = false -> null
+      - enable_lni_at_device_index                     = 0 -> null
+      - enable_resource_name_dns_a_record_on_launch    = false -> null
+      - enable_resource_name_dns_aaaa_record_on_launch = false -> null
+      - id                                             = "subnet-6dbf0d351ad1e6bee" -> null
+      - ipv6_native                                    = false -> null
+      - map_customer_owned_ip_on_launch                = false -> null
+      - map_public_ip_on_launch                        = false -> null
+      - owner_id                                       = "000000000000" -> null
+      - private_dns_hostname_type_on_launch            = "ip-name" -> null
+      - region                                         = "ap-south-1" -> null
+      - tags                                           = {
+          - "Name" = "s19-web-private-subnet"
+          - "Tier" = "private"
+        } -> null
+      - tags_all                                       = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-private-subnet"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+          - "Tier"      = "private"
+        } -> null
+      - vpc_id                                         = "vpc-f1cc7a5f7a3f5f535" -> null
+        # (4 unchanged attributes hidden)
+    }
+
+  # aws_subnet.public will be destroyed
+  - resource "aws_subnet" "public" {
+      - arn                                            = "arn:aws:ec2:ap-south-1:000000000000:subnet/subnet-186a11a16ef49091c" -> null
+      - assign_ipv6_address_on_creation                = false -> null
+      - availability_zone                              = "ap-south-1a" -> null
+      - availability_zone_id                           = "aps1-az1" -> null
+      - cidr_block                                     = "10.20.1.0/24" -> null
+      - enable_dns64                                   = false -> null
+      - enable_lni_at_device_index                     = 0 -> null
+      - enable_resource_name_dns_a_record_on_launch    = false -> null
+      - enable_resource_name_dns_aaaa_record_on_launch = false -> null
+      - id                                             = "subnet-186a11a16ef49091c" -> null
+      - ipv6_native                                    = false -> null
+      - map_customer_owned_ip_on_launch                = false -> null
+      - map_public_ip_on_launch                        = true -> null
+      - owner_id                                       = "000000000000" -> null
+      - private_dns_hostname_type_on_launch            = "ip-name" -> null
+      - region                                         = "ap-south-1" -> null
+      - tags                                           = {
+          - "Name" = "s19-web-public-subnet"
+          - "Tier" = "public"
+        } -> null
+      - tags_all                                       = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-public-subnet"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+          - "Tier"      = "public"
+        } -> null
+      - vpc_id                                         = "vpc-f1cc7a5f7a3f5f535" -> null
+        # (4 unchanged attributes hidden)
+    }
+
+  # aws_vpc.main will be destroyed
+  - resource "aws_vpc" "main" {
+      - arn                                  = "arn:aws:ec2:ap-south-1:000000000000:vpc/vpc-f1cc7a5f7a3f5f535" -> null
+      - assign_generated_ipv6_cidr_block     = false -> null
+      - cidr_block                           = "10.20.0.0/16" -> null
+      - default_network_acl_id               = "acl-1aefffffe817007be" -> null
+      - default_route_table_id               = "rtb-157ea66403f8a0c05" -> null
+      - default_security_group_id            = "sg-7c5b178d37d4d7c6f" -> null
+      - dhcp_options_id                      = "default" -> null
+      - enable_dns_hostnames                 = true -> null
+      - enable_dns_support                   = true -> null
+      - enable_network_address_usage_metrics = false -> null
+      - id                                   = "vpc-f1cc7a5f7a3f5f535" -> null
+      - instance_tenancy                     = "default" -> null
+      - ipv6_netmask_length                  = 0 -> null
+      - main_route_table_id                  = "rtb-157ea66403f8a0c05" -> null
+      - owner_id                             = "000000000000" -> null
+      - region                               = "ap-south-1" -> null
+      - tags                                 = {
+          - "Name" = "s19-web-vpc"
+        } -> null
+      - tags_all                             = {
+          - "ManagedBy" = "Terraform"
+          - "Name"      = "s19-web-vpc"
+          - "Owner"     = "rudhar-bajaj"
+          - "Project"   = "s19-web"
+          - "Session"   = "19"
+        } -> null
+        # (4 unchanged attributes hidden)
+    }
+
+Plan: 0 to add, 0 to change, 18 to destroy.
+
+Changes to Outputs:
+  - ami_id                  = "ami-0ff5003538b60d5ec" -> null
+  - assets_bucket           = "rudhar-s19-web-assets-10143" -> null
+  - availability_zones_used = [
+      - "ap-south-1a",
+      - "ap-south-1b",
+    ] -> null
+  - instance_id             = "i-64322a6970fd09dc1" -> null
+  - instance_private_ip     = "10.20.1.4" -> null
+  - instance_public_ip      = "54.214.196.113" -> null
+  - private_subnet_id       = "subnet-6dbf0d351ad1e6bee" -> null
+  - public_subnet_id        = "subnet-186a11a16ef49091c" -> null
+  - security_group_id       = "sg-184ee2cd204ac1dcc" -> null
+  - vpc_cidr                = "10.20.0.0/16" -> null
+  - vpc_id                  = "vpc-f1cc7a5f7a3f5f535" -> null
+  - web_url                 = "http://54.214.196.113/" -> null
+aws_s3_bucket_versioning.assets: Destroying... [id=rudhar-s19-web-assets-10143]
+aws_iam_role_policy.read_assets: Destroying... [id=s19-web-ec2-role:read-assets]
+aws_s3_bucket_public_access_block.assets: Destroying... [id=rudhar-s19-web-assets-10143]
+aws_s3_bucket_server_side_encryption_configuration.assets: Destroying... [id=rudhar-s19-web-assets-10143]
+aws_route_table_association.private: Destroying... [id=rtbassoc-4e4df72a8a6bad1e5]
+aws_instance.web: Destroying... [id=i-64322a6970fd09dc1]
+aws_s3_bucket_server_side_encryption_configuration.assets: Destruction complete after 0s
+aws_s3_bucket_versioning.assets: Destruction complete after 0s
+aws_iam_role_policy.read_assets: Destruction complete after 0s
+aws_s3_bucket_public_access_block.assets: Destruction complete after 0s
+aws_route_table_association.private: Destruction complete after 0s
+aws_route_table.private: Destroying... [id=rtb-a291f2a0b5da15efa]
+aws_subnet.private: Destroying... [id=subnet-6dbf0d351ad1e6bee]
+aws_subnet.private: Destruction complete after 0s
+aws_route_table.private: Destruction complete after 0s
+aws_instance.web: Still destroying... [id=i-64322a6970fd09dc1, 00m10s elapsed]
+aws_instance.web: Destruction complete after 10s
+aws_route_table_association.public: Destroying... [id=rtbassoc-d68f9e9418fec3ae5]
+aws_iam_instance_profile.web: Destroying... [id=s19-web-ec2-profile]
+aws_security_group.web: Destroying... [id=sg-184ee2cd204ac1dcc]
+aws_s3_object.index: Destroying... [id=rudhar-s19-web-assets-10143/site/index.html]
+aws_iam_instance_profile.web: Destruction complete after 0s
+aws_route_table_association.public: Destruction complete after 0s
+aws_route_table.public: Destroying... [id=rtb-64953ee769a74339d]
+aws_iam_role.web: Destroying... [id=s19-web-ec2-role]
+aws_subnet.public: Destroying... [id=subnet-186a11a16ef49091c]
+aws_s3_object.index: Destruction complete after 0s
+aws_security_group.web: Destruction complete after 0s
+aws_s3_bucket.assets: Destroying... [id=rudhar-s19-web-assets-10143]
+aws_subnet.public: Destruction complete after 0s
+aws_iam_role.web: Destruction complete after 0s
+aws_s3_bucket.assets: Destruction complete after 0s
+aws_route_table.public: Destruction complete after 0s
+aws_internet_gateway.main: Destroying... [id=igw-1a63abbeeb160ece9]
+aws_internet_gateway.main: Destruction complete after 0s
+aws_vpc.main: Destroying... [id=vpc-f1cc7a5f7a3f5f535]
+aws_vpc.main: Destruction complete after 1s
+
+Destroy complete! Resources: 18 destroyed.
+
+$ terraform state list | wc -l
+       0
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-vpcs --filters Name=tag:Project,Values=s19-web --query 'length(Vpcs)'
+0
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-instances --filters Name=tag:Name,Values=s19-web-server --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name}'
+[
+    {
+        "Id": "i-64322a6970fd09dc1",
+        "State": "terminated"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 s3api head-bucket --bucket rudhar-s19-web-assets-10143; echo "head-bucket exit code: $?"
+
+aws: [ERROR]: An error occurred (404) when calling the HeadBucket operation: Not Found
+head-bucket exit code: 254
+
+$ aws --endpoint-url http://localhost:4566 iam get-role --role-name s19-web-ec2-role; echo "get-role exit code: $?"
+
+aws: [ERROR]: An error occurred (NoSuchEntity) when calling the GetRole operation: Role s19-web-ec2-role not found
+get-role exit code: 254
+

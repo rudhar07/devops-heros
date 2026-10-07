@@ -1,0 +1,39 @@
+# Remote state example (NOT active in this homework, state stays local).
+#
+# To use it: create the bucket once (by hand or in a separate "bootstrap"
+# Terraform project), rename this file to backend.tf, then run
+#   terraform init -migrate-state
+# Terraform copies the local terraform.tfstate into S3.
+#
+# Why:
+#   * one shared copy of state for the whole team / CI instead of a file on
+#     one laptop;
+#   * locking: while one `apply` runs, a second one waits or fails instead of
+#     both writing state at the same time and corrupting it;
+#   * versioning on the bucket = old state versions to roll back to;
+#   * encryption, because state contains every attribute in plain text
+#     (including any secrets a resource returns).
+
+terraform {
+  backend "s3" {
+    bucket  = "rudhar-tfstate-10143"           # versioned + encrypted bucket
+    key     = "session19/web/terraform.tfstate" # one key per project/env
+    region  = "ap-south-1"
+    encrypt = true
+
+    # Terraform >= 1.10: lock with a .tflock object next to the state in S3.
+    use_lockfile = true
+
+    # Older setups lock with a DynamoDB table instead (partition key "LockID",
+    # type S). Still works but is deprecated in favour of use_lockfile:
+    # dynamodb_table = "terraform-locks"
+
+    # Only for LocalStack:
+    # endpoints = { s3 = "http://localhost:4566" }
+    # use_path_style              = true
+    # skip_credentials_validation = true
+    # skip_requesting_account_id  = true
+    # access_key = "test"
+    # secret_key = "test"
+  }
+}

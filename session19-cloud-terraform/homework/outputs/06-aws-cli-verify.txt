@@ -1,0 +1,141 @@
+# AWS CLI against LocalStack 4.14.0 with fake creds (AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-south-1)
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-vpcs --filters Name=tag:Name,Values=s19-web-vpc --query 'Vpcs[].{VpcId:VpcId,Cidr:CidrBlock,State:State}' --output table
+--------------------------------------------------------
+|                     DescribeVpcs                     |
++---------------+------------+-------------------------+
+|     Cidr      |   State    |          VpcId          |
++---------------+------------+-------------------------+
+|  10.20.0.0/16 |  available |  vpc-f1cc7a5f7a3f5f535  |
++---------------+------------+-------------------------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-subnets --filters Name=tag:Project,Values=s19-web --query 'Subnets[].{Name:Tags[?Key==`Name`]|[0].Value,SubnetId:SubnetId,Cidr:CidrBlock,AZ:AvailabilityZone,PublicIpOnLaunch:MapPublicIpOnLaunch}' --output table
+-----------------------------------------------------------------------------------------------------------
+|                                             DescribeSubnets                                             |
++-------------+---------------+-------------------------+-------------------+-----------------------------+
+|     AZ      |     Cidr      |          Name           | PublicIpOnLaunch  |          SubnetId           |
++-------------+---------------+-------------------------+-------------------+-----------------------------+
+|  ap-south-1a|  10.20.1.0/24 |  s19-web-public-subnet  |  True             |  subnet-186a11a16ef49091c   |
+|  ap-south-1b|  10.20.2.0/24 |  s19-web-private-subnet |  False            |  subnet-6dbf0d351ad1e6bee   |
++-------------+---------------+-------------------------+-------------------+-----------------------------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-internet-gateways --filters Name=tag:Name,Values=s19-web-igw --query 'InternetGateways[].{Id:InternetGatewayId,AttachedTo:Attachments[0].VpcId,State:Attachments[0].State}' --output table
+-----------------------------------------------------------------
+|                   DescribeInternetGateways                    |
++------------------------+-------------------------+------------+
+|       AttachedTo       |           Id            |   State    |
++------------------------+-------------------------+------------+
+|  vpc-f1cc7a5f7a3f5f535 |  igw-1a63abbeeb160ece9  |  available |
++------------------------+-------------------------+------------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-route-tables --filters Name=tag:Project,Values=s19-web --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value,Subnet:Associations[0].SubnetId,Routes:join(`, `, Routes[].join(` -> `, [DestinationCidrBlock, GatewayId]))}' --output table
+---------------------------------------------------------------------------------------------------------------
+|                                             DescribeRouteTables                                             |
++--------------------+-----------------------------------------------------------+----------------------------+
+|        Name        |                          Routes                           |          Subnet            |
++--------------------+-----------------------------------------------------------+----------------------------+
+|  s19-web-private-rt|  10.20.0.0/16-> local                                     |  subnet-6dbf0d351ad1e6bee  |
+|  s19-web-public-rt |  10.20.0.0/16-> local, 0.0.0.0/0-> igw-1a63abbeeb160ece9  |  subnet-186a11a16ef49091c  |
++--------------------+-----------------------------------------------------------+----------------------------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-security-groups --filters Name=group-name,Values=s19-web-web-sg --query 'SecurityGroups[].IpPermissions[].{Port:FromPort,Proto:IpProtocol,From:IpRanges[0].CidrIp,Desc:IpRanges[0].Description}' --output table
+--------------------------------------------------------------------
+|                      DescribeSecurityGroups                      |
++-----------------------------+-------------------+-------+--------+
+|            Desc             |       From        | Port  | Proto  |
++-----------------------------+-------------------+-------+--------+
+|  HTTPS                      |  0.0.0.0/0        |  443  |  tcp   |
+|  SSH from the admin IP only |  203.0.113.10/32  |  22   |  tcp   |
+|  HTTP                       |  0.0.0.0/0        |  80   |  tcp   |
++-----------------------------+-------------------+-------+--------+
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-instances --filters Name=tag:Name,Values=s19-web-server --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Type:InstanceType,AMI:ImageId,Subnet:SubnetId,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress,SG:SecurityGroups[0].GroupName,Profile:IamInstanceProfile.Arn}'
+[
+    {
+        "Id": "i-64322a6970fd09dc1",
+        "State": "running",
+        "Type": "t3.micro",
+        "AMI": "ami-0ff5003538b60d5ec",
+        "Subnet": "subnet-186a11a16ef49091c",
+        "PrivateIp": "10.20.1.4",
+        "PublicIp": "54.214.196.113",
+        "SG": "s19-web-web-sg",
+        "Profile": "arn:aws:iam::000000000000:instance-profile/s19-web-ec2-profile"
+    }
+]
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-instance-attribute --instance-id i-64322a6970fd09dc1 --attribute userData --query 'UserData.Value' --output text | base64 -d
+#!/bin/bash
+dnf install -y nginx
+aws s3 cp s3://rudhar-s19-web-assets-10143/site/index.html /usr/share/nginx/html/index.html
+systemctl enable --now nginx
+
+$ aws --endpoint-url http://localhost:4566 ec2 describe-volumes --filters Name=attachment.instance-id,Values=i-64322a6970fd09dc1 --query 'Volumes[].{Id:VolumeId,Size:Size,Type:VolumeType,Encrypted:Encrypted,State:State}' --output table
+------------------------------------------------------------------
+|                         DescribeVolumes                        |
++-----------+-------------------------+-------+---------+--------+
+| Encrypted |           Id            | Size  |  State  | Type   |
++-----------+-------------------------+-------+---------+--------+
+|  True     |  vol-f934573165079bed7  |  8    |  in-use |  gp3   |
++-----------+-------------------------+-------+---------+--------+
+
+$ aws --endpoint-url http://localhost:4566 s3api head-bucket --bucket rudhar-s19-web-assets-10143
+{
+    "BucketArn": "arn:aws:s3:::rudhar-s19-web-assets-10143",
+    "BucketRegion": "ap-south-1"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-bucket-versioning --bucket rudhar-s19-web-assets-10143
+{
+    "Status": "Enabled"
+}
+
+$ aws --endpoint-url http://localhost:4566 s3api get-public-access-block --bucket rudhar-s19-web-assets-10143 --query PublicAccessBlockConfiguration
+{
+    "BlockPublicAcls": true,
+    "IgnorePublicAcls": true,
+    "BlockPublicPolicy": true,
+    "RestrictPublicBuckets": true
+}
+
+$ aws --endpoint-url http://localhost:4566 s3 ls s3://rudhar-s19-web-assets-10143 --recursive
+2026-10-07 22:02:03        154 site/index.html
+
+$ aws --endpoint-url http://localhost:4566 s3 cp s3://rudhar-s19-web-assets-10143/site/index.html -
+<!doctype html>
+<title>s19-web</title>
+<h1>Session 19: deployed by Terraform</h1>
+<p>VPC 10.20.0.0/16, public subnet 10.20.1.0/24, region ap-south-1.</p>
+
+$ aws --endpoint-url http://localhost:4566 iam get-role --role-name s19-web-ec2-role --query 'Role.{Name:RoleName,Trust:AssumeRolePolicyDocument.Statement[0].Principal.Service}'
+{
+    "Name": "s19-web-ec2-role",
+    "Trust": "ec2.amazonaws.com"
+}
+
+$ aws --endpoint-url http://localhost:4566 iam get-role-policy --role-name s19-web-ec2-role --policy-name read-assets --query 'PolicyDocument.Statement[].{Sid:Sid,Action:Action,Resource:Resource}'
+[
+    {
+        "Sid": "ListAssetsBucket",
+        "Action": "s3:ListBucket",
+        "Resource": "arn:aws:s3:::rudhar-s19-web-assets-10143"
+    },
+    {
+        "Sid": "ReadAssets",
+        "Action": "s3:GetObject",
+        "Resource": "arn:aws:s3:::rudhar-s19-web-assets-10143/*"
+    }
+]
+
+# Honest check: the instance is a LocalStack record, not a booted VM. Nothing answers on its public IP:
+
+$ curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://$(terraform output -raw instance_public_ip)/; echo "curl exit code: $?"
+000
+curl exit code: 28
+
+# (54.214.x.x is an address LocalStack made up from an AWS-looking range. curl timed out (exit 28): no VM exists behind it.)
+
+$ docker ps --format '{{.Names}}  {{.Image}}' | grep -i -E 'localstack|ec2' ; echo '(only the LocalStack container itself, no VM/container was started for the instance)'
+hw-localstack  localstack/localstack:4.14.0
+(only the LocalStack container itself, no VM/container was started for the instance)
+

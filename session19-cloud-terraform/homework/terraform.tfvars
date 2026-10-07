@@ -1,0 +1,10 @@
+# No secrets here, safe to commit. Set use_localstack = false for real AWS.
+use_localstack      = true
+aws_region          = "ap-south-1"
+project_name        = "s19-web"
+vpc_cidr            = "10.20.0.0/16"
+public_subnet_cidr  = "10.20.1.0/24"
+private_subnet_cidr = "10.20.2.0/24"
+instance_type       = "t3.micro"
+ssh_allowed_cidr    = "203.0.113.10/32" # placeholder documentation IP, not mine
+bucket_name         = "rudhar-s19-web-assets-10143"
