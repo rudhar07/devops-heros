@@ -411,11 +411,29 @@ pods under load. I would rather find that out on my laptop than in production.
 
 ## Pipeline run on GitHub
 
-<!-- RUN-LINK: filled in after the first push -->
+**Successful run:** https://github.com/rudhar07/devops-heros/actions/runs/37696381478
+(`workflow_dispatch` on `main`, 2026-10-07 22:28 UTC). Result: **success**, all 9 jobs green, in the
+order the homework asks for.
 
-The local outputs above prove each stage works before pushing. This section will link the first real
-run of **Session 17 - DevSecOps Pipeline** on `rudhar07/devops-heros`, and show the security-gate
-summary and the GHCR package.
+| Stage | Job | Result |
+|---|---|---|
+| Build + Unit Test | Build + unit tests | success |
+| SAST | SAST (Bandit) | success |
+| SCA | SCA (pip-audit) | success |
+| Secret Scan | Secret scan (Gitleaks) | success |
+| Docker Build | Docker build | success |
+| Container Image Scan | Image scan (Trivy) | success |
+| Security Gate | Security gate | success |
+| Push Image | Push image to GHCR | success |
+| Deploy to Kubernetes | Deploy to Kubernetes (kind) | success |
+
+The image is published as `ghcr.io/rudhar07/devops-heros/session17-devsecops`. The run page shows the
+security-gate summary, and the scan reports are attached as artifacts.
+
+The first run (triggered by the push, run `37695840571`) failed at `actions/checkout` before any
+scan ran. The merged instructor repo contained a submodule entry with no URL in `.gitmodules`. I
+removed it and re-ran the workflow, which is the green run above. The failing-gate demonstrations
+earlier in this README are the proof that the gates really block bad input.
 
 ## Honest notes / differences from the spec
 

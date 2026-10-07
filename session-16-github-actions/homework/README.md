@@ -280,10 +280,28 @@ variables (`for i in ...`), which I renamed to `_`.
 
 ## Pipeline run on GitHub
 
-<!-- RUN-LINK: filled in after the first push -->
+**Successful run:** https://github.com/rudhar07/devops-heros/actions/runs/37696351828
+(`workflow_dispatch` on `main`, 2026-10-07 22:27 UTC). Result: **success**, all 8 jobs green.
 
-The local outputs above prove each stage works before pushing. This section will link the first real
-run of **Session 16 - CI/CD Pipeline** on `rudhar07/devops-heros`.
+| Job | Result |
+|---|---|
+| Test (Python 3.12) | success |
+| Test (Python 3.13) | success |
+| Test (Python 3.14) | success |
+| Secrets demo (repo secret + GITHUB_TOKEN) | success |
+| Build app + Docker image | success |
+| Smoke-test the image | success |
+| Push image to GHCR | success |
+| Deploy to Kubernetes (kind) | success |
+
+The image is published as `ghcr.io/rudhar07/devops-heros/session16-calculator`. Open the run to see the
+uploaded test-report and build artifacts.
+
+The very first run (triggered by the push, run `37695840404`) failed at `actions/checkout` before any
+of my steps ran. The instructor's repo, which I merged, contained a submodule entry
+(`session-16-github-actions/mini-project 10-33-34-265`) with no URL in `.gitmodules`, and checkout
+aborts on it. I removed that broken entry and re-ran the workflow, which is the green run above. The
+local outputs in this README show each stage working before the push.
 
 ## Honest notes / differences from the spec
 
