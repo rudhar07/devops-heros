@@ -1,0 +1,57 @@
+# ===== --atomic in helm v4 =====
+$ helm upgrade web webapp -f values/v2.yaml --set image.tag=does-not-exist --atomic --timeout 45s
+Flag --atomic has been deprecated, use --rollback-on-failure instead
+level=WARN msg="upgrade failed" name=web error="resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2\ncontext deadline exceeded"
+Error: UPGRADE FAILED: release web failed, and has been rolled back due to rollback-on-failure being set: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2
+context deadline exceeded
+
+# helm v4 renamed --atomic to --rollback-on-failure:
+$ helm upgrade web webapp -f values/v2.yaml --set image.tag=does-not-exist --rollback-on-failure --timeout 60s
+level=WARN msg="upgrade failed" name=web error="resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2\ncontext deadline exceeded"
+Error: UPGRADE FAILED: release web failed, and has been rolled back due to rollback-on-failure being set: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2
+context deadline exceeded
+
+$ helm history web
+REVISION	UPDATED                 	STATUS    	CHART       	APP VERSION	DESCRIPTION                                                                                                      
+1       	Wed Oct  7 22:59:06 2026	superseded	webapp-0.1.0	1.27-alpine	Install complete                                                                                                 
+2       	Wed Oct  7 23:02:11 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+3       	Wed Oct  7 23:05:15 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+4       	Wed Oct  7 23:08:19 2026	superseded	webapp-0.1.0	1.27-alpine	Rollback to 2                                                                                                    
+5       	Wed Oct  7 23:08:34 2026	failed    	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+6       	Wed Oct  7 23:09:19 2026	superseded	webapp-0.1.0	1.27-alpine	Rollback to 4                                                                                                    
+7       	Wed Oct  7 23:09:20 2026	failed    	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+8       	Wed Oct  7 23:10:20 2026	deployed  	webapp-0.1.0	1.27-alpine	Rollback to 6                                                                                                    
+
+$ kubectl get pods -l app.kubernetes.io/instance=web
+NAME                          READY   STATUS        RESTARTS   AGE
+web-webapp-589cbd48c-9nhbr    0/1     Terminating   0          61s
+web-webapp-5c45674457-lz2hk   0/1     Terminating   0          107s
+web-webapp-749b646f69-b9pzw   1/1     Running       0          8m9s
+web-webapp-749b646f69-lpvq6   1/1     Running       0          2m2s
+web-webapp-78bfcd5fcb-t49wb   0/1     Terminating   0          5m6s
+
+$ curl -s http://localhost:30091/ | grep -E '<h1>|<p>'
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=7 image=nginx:does-not-exist replicas=2</p>
+
+# ===== UNINSTALL =====
+$ helm uninstall web
+release "web" uninstalled
+
+$ helm list -a
+Error: unknown shorthand flag: 'a' in -a
+
+$ kubectl get all,configmap -l app.kubernetes.io/instance=web
+NAME                              READY   STATUS        RESTARTS   AGE
+pod/web-webapp-589cbd48c-9nhbr    0/1     Terminating   0          61s
+pod/web-webapp-5c45674457-lz2hk   0/1     Terminating   0          107s
+pod/web-webapp-749b646f69-b9pzw   1/1     Terminating   0          8m9s
+pod/web-webapp-749b646f69-lpvq6   1/1     Terminating   0          2m2s
+pod/web-webapp-78bfcd5fcb-t49wb   0/1     Terminating   0          5m6s
+
+$ kubectl get secrets -l owner=helm,name=web
+No resources found in default namespace.
+
+$ helm history web
+Error: release: not found
+

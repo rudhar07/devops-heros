@@ -1,0 +1,164 @@
+# ===== Failed upgrade with automatic rollback (continues from revision 4 = v2) =====
+# helm v3's --atomic still works in v4 but prints a deprecation warning:
+$ helm upgrade web webapp -f values/v2.yaml --set image.tag=does-not-exist --atomic --timeout 45s
+Flag --atomic has been deprecated, use --rollback-on-failure instead
+level=WARN msg="upgrade failed" name=web error="resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2\ncontext deadline exceeded"
+Error: UPGRADE FAILED: release web failed, and has been rolled back due to rollback-on-failure being set: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2
+context deadline exceeded
+
+# the v4 name is --rollback-on-failure:
+$ helm upgrade web webapp -f values/v2.yaml --set image.tag=does-not-exist --rollback-on-failure --timeout 45s
+level=WARN msg="upgrade failed" name=web error="resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2\ncontext deadline exceeded"
+Error: UPGRADE FAILED: release web failed, and has been rolled back due to rollback-on-failure being set: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: 1/2
+context deadline exceeded
+
+$ helm history web
+REVISION	UPDATED                 	STATUS    	CHART       	APP VERSION	DESCRIPTION                                                                                                      
+1       	Wed Oct  7 23:16:52 2026	superseded	webapp-0.1.0	1.27-alpine	Install complete                                                                                                 
+2       	Wed Oct  7 23:17:06 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+3       	Wed Oct  7 23:17:22 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+4       	Wed Oct  7 23:17:42 2026	superseded	webapp-0.1.0	1.27-alpine	Rollback to 2                                                                                                    
+5       	Wed Oct  7 23:18:10 2026	failed    	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+6       	Wed Oct  7 23:18:56 2026	superseded	webapp-0.1.0	1.27-alpine	Rollback to 4                                                                                                    
+7       	Wed Oct  7 23:18:56 2026	failed    	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+8       	Wed Oct  7 23:19:41 2026	deployed  	webapp-0.1.0	1.27-alpine	Rollback to 6                                                                                                    
+
+$ helm status web
+NAME: web
+LAST DEPLOYED: Wed Oct  7 23:19:41 2026
+NAMESPACE: default
+STATUS: deployed
+REVISION: 8
+DESCRIPTION: Rollback to 6
+RESOURCES:
+==> v1/ServiceAccount
+NAME         AGE
+web-webapp   2m49s
+
+==> v1/ConfigMap
+NAME                       DATA   AGE
+web-webapp-page-c7995bee   1      0s
+
+==> v1/Service
+NAME         TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE
+web-webapp   NodePort   10.96.4.131   <none>        80:30091/TCP   2m49s
+
+==> v1/Deployment
+NAME         READY   UP-TO-DATE   AVAILABLE   AGE
+web-webapp   2/2     2            2           2m48s
+
+==> v1/Pod(related)
+NAME                          READY   STATUS        RESTARTS   AGE
+web-webapp-5fd8fbbccd-tx8vm   0/1     Terminating   0          45s
+web-webapp-6d57d5bff7-sbdg4   1/1     Running       0          108s
+web-webapp-6d57d5bff7-xq25z   1/1     Running       0          119s
+
+
+NOTES:
+1. Get the application URL by running these commands:
+  export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services web-webapp)
+  export NODE_IP=$(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+$ kubectl rollout status deployment/web-webapp --timeout=180s
+deployment "web-webapp" successfully rolled out
+
+$ kubectl get deploy web-webapp -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas,READY:.status.readyReplicas,IMAGE:.spec.template.spec.containers[0].image
+NAME         REPLICAS   READY   IMAGE
+web-webapp   2          2       nginx:1.27-alpine
+
+$ kubectl get pods -l app.kubernetes.io/instance=web
+NAME                          READY   STATUS    RESTARTS   AGE
+web-webapp-6d57d5bff7-sbdg4   1/1     Running   0          112s
+web-webapp-6d57d5bff7-xq25z   1/1     Running   0          2m3s
+
+$ curl -s http://localhost:30091/   (x4, NodePort mapped to my Mac by kind)
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+
+$ helm history web
+REVISION	UPDATED                 	STATUS    	CHART       	APP VERSION	DESCRIPTION                                                                                                      
+1       	Wed Oct  7 23:16:52 2026	superseded	webapp-0.1.0	1.27-alpine	Install complete                                                                                                 
+2       	Wed Oct  7 23:17:06 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+3       	Wed Oct  7 23:17:22 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+4       	Wed Oct  7 23:17:42 2026	superseded	webapp-0.1.0	1.27-alpine	Rollback to 2                                                                                                    
+5       	Wed Oct  7 23:18:10 2026	failed    	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+6       	Wed Oct  7 23:18:56 2026	superseded	webapp-0.1.0	1.27-alpine	Rollback to 4                                                                                                    
+7       	Wed Oct  7 23:18:56 2026	failed    	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+8       	Wed Oct  7 23:19:41 2026	deployed  	webapp-0.1.0	1.27-alpine	Rollback to 6                                                                                                    
+
+# ===== helm list filters in v4 (there is no -a/--all in v4 - see the help text at the end of this file) =====
+$ helm list
+NAME	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART       	APP VERSION
+web 	default  	8       	2026-10-07 23:19:41.550729 +0530 IST	deployed	webapp-0.1.0	1.27-alpine
+
+$ helm list -a
+Error: unknown shorthand flag: 'a' in -a
+
+$ helm list --failed
+NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
+
+$ helm list --deployed
+NAME	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART       	APP VERSION
+web 	default  	8       	2026-10-07 23:19:41.550729 +0530 IST	deployed	webapp-0.1.0	1.27-alpine
+
+# ===== UNINSTALL =====
+$ helm uninstall web --keep-history
+release "web" uninstalled
+
+$ helm list --uninstalled
+NAME	NAMESPACE	REVISION	UPDATED                             	STATUS     	CHART       	APP VERSION
+web 	default  	8       	2026-10-07 23:19:41.550729 +0530 IST	uninstalled	webapp-0.1.0	1.27-alpine
+
+$ helm history web
+REVISION	UPDATED                 	STATUS     	CHART       	APP VERSION	DESCRIPTION                                                                                                      
+1       	Wed Oct  7 23:16:52 2026	superseded 	webapp-0.1.0	1.27-alpine	Install complete                                                                                                 
+2       	Wed Oct  7 23:17:06 2026	superseded 	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+3       	Wed Oct  7 23:17:22 2026	superseded 	webapp-0.1.0	1.27-alpine	Upgrade complete                                                                                                 
+4       	Wed Oct  7 23:17:42 2026	superseded 	webapp-0.1.0	1.27-alpine	Rollback to 2                                                                                                    
+5       	Wed Oct  7 23:18:10 2026	failed     	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+6       	Wed Oct  7 23:18:56 2026	superseded 	webapp-0.1.0	1.27-alpine	Rollback to 4                                                                                                    
+7       	Wed Oct  7 23:18:56 2026	failed     	webapp-0.1.0	1.27-alpine	Upgrade "web" failed: resource Deployment/default/web-webapp not ready. status: InProgress, message: Updated: ...
+8       	Wed Oct  7 23:19:41 2026	uninstalled	webapp-0.1.0	1.27-alpine	Uninstallation complete                                                                                          
+
+$ helm uninstall web
+release "web" uninstalled
+
+$ helm list
+NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
+
+$ kubectl get all,configmap -l app.kubernetes.io/instance=web
+NAME                              READY   STATUS        RESTARTS   AGE
+pod/web-webapp-6d57d5bff7-sbdg4   1/1     Terminating   0          113s
+pod/web-webapp-6d57d5bff7-xq25z   1/1     Terminating   0          2m4s
+
+$ kubectl get secrets -l owner=helm,name=web
+No resources found in default namespace.
+
+$ helm history web
+Error: release: not found
+
+$ helm list --help | head -8
+
+This command lists all of the releases for a specified namespace (uses current namespace context if namespace not specified).
+
+By default, it lists all releases in any status. Individual status filters like '--deployed', '--failed',
+'--pending', '--uninstalled', '--superseded', and '--uninstalling' can be used
+to show only releases in specific states. Such flags can be combined:
+'--deployed --failed'.
+
+
+$ helm upgrade --help | grep -E 'rollback-on-failure|force-replace|server-side|--wait '
+      --force-conflicts                            if set server-side apply will force changes against conflicts
+      --force-replace                              force resource updates by replacement
+      --rollback-on-failure                        if set, Helm will rollback the upgrade to previous success release upon failure. The --wait flag will be defaulted to "watcher" if --rollback-on-failure is set
+      --server-side string                         must be "true", "false" or "auto". Object updates run in the server instead of the client ("auto" defaults the value from the previous chart release's method) (default "auto")
+      --wait WaitStrategy[=watcher]                wait until resources are ready (up to --timeout). Use '--wait' alone for 'watcher' strategy, or specify one of: 'watcher', 'hookOnly', 'legacy'. Default when flag is omitted: 'hookOnly'. (default hookOnly)
+      --wait-for-jobs                              if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful. It will wait for as long as --timeout
+

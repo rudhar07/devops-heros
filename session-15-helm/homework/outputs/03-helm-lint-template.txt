@@ -1,0 +1,332 @@
+# helm lint: static checks of the chart
+$ helm lint webapp
+==> Linting webapp
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, 0 chart(s) failed
+
+$ helm lint webapp -f values/v2.yaml -f values/v3.yaml
+==> Linting webapp
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, 0 chart(s) failed
+
+# helm template: render locally, no cluster needed (trimmed to the ConfigMap + Service)
+$ helm template web webapp | sed -n '/configmap.yaml/,/serviceaccount.yaml/p'
+# Source: webapp/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-webapp-page-68b647ba
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+data:
+  index.html: |
+    <html><body style="font-family:sans-serif;color:#2b6cb0">
+    <h1>Hello from webapp - v1</h1>
+    <p>release=web revision=1 image=nginx:1.26-alpine replicas=1</p>
+    </body></html>
+
+---
+# Source: webapp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+      nodePort: 30091
+  selector:
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+
+---
+# Source: webapp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webapp
+      app.kubernetes.io/instance: web
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: webapp-0.1.0
+        app.kubernetes.io/name: webapp
+        app.kubernetes.io/instance: web
+        app.kubernetes.io/version: "1.27-alpine"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: web-webapp
+      containers:
+        - name: webapp
+          image: "nginx:1.26-alpine"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          volumeMounts:
+            - name: page
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: page
+          configMap:
+            # hashed name: a new page = a new ConfigMap = a new rollout
+            name: web-webapp-page-68b647ba
+---
+# Source: webapp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "web-webapp-test-connection"
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['web-webapp:80']
+  restartPolicy: Never
+
+
+$ helm template web webapp -f values/v3.yaml | grep -E 'replicas:|image:|<h1>'
+    <h1>Hello from webapp - v3</h1>
+  replicas: 3
+          image: "nginx:1.28-alpine"
+      image: busybox
+
+# Render a broken value to see lint/template catch it:
+$ helm template web webapp --set service.type=NodePort --set service.port=abc
+---
+# Source: webapp/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: web-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+
+---
+# Source: webapp/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-webapp-page-68b647ba
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+data:
+  index.html: |
+    <html><body style="font-family:sans-serif;color:#2b6cb0">
+    <h1>Hello from webapp - v1</h1>
+    <p>release=web revision=1 image=nginx:1.26-alpine replicas=1</p>
+    </body></html>
+
+---
+# Source: webapp/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  ports:
+    - port: abc
+      targetPort: http
+      protocol: TCP
+      name: http
+      nodePort: 30091
+  selector:
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+
+---
+# Source: webapp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-webapp
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: webapp
+      app.kubernetes.io/instance: web
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: webapp-0.1.0
+        app.kubernetes.io/name: webapp
+        app.kubernetes.io/instance: web
+        app.kubernetes.io/version: "1.27-alpine"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: web-webapp
+      containers:
+        - name: webapp
+          image: "nginx:1.26-alpine"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: abc
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          volumeMounts:
+            - name: page
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: page
+          configMap:
+            # hashed name: a new page = a new ConfigMap = a new rollout
+            name: web-webapp-page-68b647ba
+---
+# Source: webapp/templates/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "web-webapp-test-connection"
+  labels:
+    helm.sh/chart: webapp-0.1.0
+    app.kubernetes.io/name: webapp
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: "1.27-alpine"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['web-webapp:abc']
+  restartPolicy: Never
+
+# helm lint/template don't know a port must be a number - the text renders fine (above).
+# I expected 'helm install --dry-run=server' to catch it. It does not: (output trimmed to the header)
+$ helm install bad webapp --set service.port=abc --dry-run=server | head -7
+NAME: bad
+LAST DEPLOYED: Wed Oct  7 23:21:13 2026
+NAMESPACE: default
+STATUS: pending-install
+REVISION: 1
+DESCRIPTION: Dry run complete
+HOOKS:
+
+# Validating the rendered objects against the API server does catch it:
+$ helm template bad webapp --set service.port=abc | kubectl apply --dry-run=server -f -
+serviceaccount/bad-webapp created (server dry run)
+configmap/bad-webapp-page-82b112fc created (server dry run)
+pod/bad-webapp-test-connection created (server dry run)
+Error from server (BadRequest): error when creating "STDIN": Service in version "v1" cannot be handled as a Service: json: cannot unmarshal string into Go struct field ServicePort.spec.ports.port of type int32
+Error from server (BadRequest): error when creating "STDIN": Deployment in version "v1" cannot be handled as a Deployment: json: cannot unmarshal string into Go struct field ContainerPort.spec.template.spec.containers.ports.containerPort of type int32
+
+# And a real install fails (Helm records the release as "failed"):
+$ helm install bad webapp --set service.port=abc
+Error: INSTALLATION FAILED: server-side apply failed for object default/bad-webapp /v1, Kind=Service: failed to create typed patch object (default/bad-webapp; /v1, Kind=Service): .spec.ports[port="abc",protocol="TCP"].port: expected numeric (int or float), got string
+server-side apply failed for object default/bad-webapp apps/v1, Kind=Deployment: failed to create typed patch object (default/bad-webapp; apps/v1, Kind=Deployment): .spec.template.spec.containers[name="webapp"].ports[containerPort="abc",protocol="TCP"].containerPort: expected numeric (int or float), got string
+
+$ helm list -q
+bad
+notes-dev
+
+$ helm history bad
+REVISION	UPDATED                 	STATUS	CHART       	APP VERSION	DESCRIPTION                                                                                                                                                                                                                                                                                                            
+1       	Wed Oct  7 23:21:13 2026	failed	webapp-0.1.0	1.27-alpine	Release "bad" failed: server-side apply failed for object default/bad-webapp /v1, Kind=Service: failed to create typed patch object (default/bad-webapp; /v1, Kind=Service): .spec.ports[port="abc",protocol="TCP"].port: expected numeric (int or float), got string                                                  
+        	                        	      	            	           	server-side apply failed for object default/bad...                                                                                                                                                                                                                                                                     
+
+# What did the failed install leave behind?
+$ kubectl get serviceaccount,configmap,service,deployment -l app.kubernetes.io/instance=bad
+NAME                        AGE
+serviceaccount/bad-webapp   7s
+
+NAME                                 DATA   AGE
+configmap/bad-webapp-page-82b112fc   1      7s
+
+$ helm uninstall bad
+release "bad" uninstalled
+
+$ kubectl get serviceaccount,configmap -l app.kubernetes.io/instance=bad
+No resources found in default namespace.
+

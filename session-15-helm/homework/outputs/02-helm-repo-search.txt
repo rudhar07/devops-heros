@@ -1,0 +1,57 @@
+# (helm config/cache dirs point at a private scratch folder, so repos added here don't touch my global helm config)
+# helm repo: manage chart repositories
+$ helm repo list
+no repositories to show
+
+$ helm repo add bitnami https://charts.bitnami.com/bitnami
+"bitnami" has been added to your repositories
+
+$ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+"ingress-nginx" has been added to your repositories
+
+$ helm repo list
+NAME         	URL                                       
+bitnami      	https://charts.bitnami.com/bitnami        
+ingress-nginx	https://kubernetes.github.io/ingress-nginx
+
+$ helm repo update
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "ingress-nginx" chart repository
+...Successfully got an update from the "bitnami" chart repository
+Update Complete. ⎈Happy Helming!⎈
+
+# helm search repo: search the repos I added (local index cache)
+$ helm search repo nginx
+NAME                            	CHART VERSION	APP VERSION	DESCRIPTION                                       
+bitnami/nginx                   	25.2.1       	1.31.6     	NGINX Open Source is a web server that can be a...
+bitnami/nginx-ingress-controller	12.0.7       	1.13.1     	NGINX Ingress Controller is an Ingress controll...
+bitnami/nginx-intel             	2.1.15       	0.4.9      	DEPRECATED NGINX Open Source for Intel is a lig...
+ingress-nginx/ingress-nginx     	4.15.1       	1.15.1     	Ingress controller for Kubernetes using NGINX a...
+
+# --versions lists every version; trimmed with head
+$ helm search repo ingress-nginx/ingress-nginx --versions | head -6
+NAME                       	CHART VERSION	APP VERSION	DESCRIPTION                                       
+ingress-nginx/ingress-nginx	4.15.1       	1.15.1     	Ingress controller for Kubernetes using NGINX a...
+ingress-nginx/ingress-nginx	4.15.0       	1.15.0     	Ingress controller for Kubernetes using NGINX a...
+ingress-nginx/ingress-nginx	4.14.5       	1.14.5     	Ingress controller for Kubernetes using NGINX a...
+ingress-nginx/ingress-nginx	4.14.4       	1.14.4     	Ingress controller for Kubernetes using NGINX a...
+ingress-nginx/ingress-nginx	4.14.3       	1.14.3     	Ingress controller for Kubernetes using NGINX a...
+
+# helm search hub: search Artifact Hub (online)
+$ helm search hub nginx --max-col-width 50 | head -12
+URL                                               	CHART VERSION  	APP VERSION                                     	DESCRIPTION                                       
+https://artifacthub.io/packages/helm/cloudpirat...	0.16.12        	1.31.6                                          	Nginx is a high-performance HTTP server and rev...
+https://artifacthub.io/packages/helm/quench-ngi...	0.0.15         	1.30.5                                          	High-performance web server, reverse proxy, and...
+https://artifacthub.io/packages/helm/krakazyabr...	1.0.0          	1.19.0                                          	Nginx Helm chart for Kubernetes                   
+https://artifacthub.io/packages/helm/dhinesh/nginx	25.2.1         	1.31.6                                          	NGINX Open Source is a web server that can be a...
+https://artifacthub.io/packages/helm/bitnami/nginx	25.2.1         	1.31.6                                          	NGINX Open Source is a web server that can be a...
+https://artifacthub.io/packages/helm/niceos/nginx 	1.31.1+niceos.2	1.31.1                                          	Bitnami-compatible NGINX Helm chart for NiceOS    
+https://artifacthub.io/packages/helm/bitnami-ak...	13.2.12        	1.23.2                                          	NGINX Open Source is a web server that can be a...
+https://artifacthub.io/packages/helm/wiremind/n...	2.1.1          	                                                	An NGINX HTTP server                              
+https://artifacthub.io/packages/helm/ashu-nginx...	0.1.0          	1.16.0                                          	A Helm chart for Kubernetes                       
+https://artifacthub.io/packages/helm/zrepo-test...	5.1.5          	1.16.1                                          	Chart for the nginx server                        
+https://artifacthub.io/packages/helm/cloudnativ...	3.2.0          	1.16.0                                          	Chart for the nginx server                        
+
+$ helm search hub nginx | wc -l
+     305
+

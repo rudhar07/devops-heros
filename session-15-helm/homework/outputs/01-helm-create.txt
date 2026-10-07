@@ -1,0 +1,47 @@
+$ helm version
+version.BuildInfo{Version:"v4.3.0", GitCommit:"bec5b06ed841fe5269972d864d5177944fd5970f", GitTreeState:"clean", GoVersion:"go1.27.1", KubeClientVersion:"v1.37"}
+
+# helm create: scaffold a new chart
+$ helm create webapp
+Creating webapp
+
+$ find webapp -type f
+webapp/Chart.yaml
+webapp/.helmignore
+webapp/templates/deployment.yaml
+webapp/templates/httproute.yaml
+webapp/templates/NOTES.txt
+webapp/templates/ingress.yaml
+webapp/templates/tests/test-connection.yaml
+webapp/templates/service.yaml
+webapp/templates/hpa.yaml
+webapp/templates/serviceaccount.yaml
+webapp/templates/_helpers.tpl
+webapp/values.yaml
+
+$ cat webapp/Chart.yaml
+apiVersion: v2
+name: webapp
+description: A Helm chart for Kubernetes
+
+# A chart can be either an 'application' or a 'library' chart.
+#
+# Application charts are a collection of templates that can be packaged into versioned archives
+# to be deployed.
+#
+# Library charts provide useful utilities or functions for the chart developer. They're included as
+# a dependency of application charts to inject those utilities and functions into the rendering
+# pipeline. Library charts do not define any templates and therefore cannot be deployed.
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates, including the app version.
+# Versions are expected to follow Semantic Versioning (https://semver.org/)
+version: 0.1.0
+
+# This is the version number of the application being deployed. This version number should be
+# incremented each time you make changes to the application. Versions are not expected to
+# follow Semantic Versioning. They should reflect the version the application is using.
+# It is recommended to use it with quotes.
+appVersion: "1.16.0"
+

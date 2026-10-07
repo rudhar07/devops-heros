@@ -1,0 +1,430 @@
+# ===== INSTALL (revision 1: 1 replica, nginx:1.26-alpine, message v1) =====
+$ helm install web webapp
+NAME: web
+LAST DEPLOYED: Wed Oct  7 23:16:52 2026
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+NOTES:
+1. Get the application URL by running these commands:
+  export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services web-webapp)
+  export NODE_IP=$(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+$ helm list
+NAME	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART       	APP VERSION
+web 	default  	1       	2026-10-07 23:16:52.857364 +0530 IST	deployed	webapp-0.1.0	1.27-alpine
+
+$ helm status web
+NAME: web
+LAST DEPLOYED: Wed Oct  7 23:16:52 2026
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+RESOURCES:
+==> v1/ServiceAccount
+NAME         AGE
+web-webapp   1s
+
+==> v1/ConfigMap
+NAME                       DATA   AGE
+web-webapp-page-68b647ba   1      1s
+
+==> v1/Service
+NAME         TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)        AGE
+web-webapp   NodePort   10.96.4.131   <none>        80:30091/TCP   1s
+
+==> v1/Deployment
+NAME         READY   UP-TO-DATE   AVAILABLE   AGE
+web-webapp   0/1     1            0           0s
+
+==> v1/Pod(related)
+NAME                          READY   STATUS              RESTARTS   AGE
+web-webapp-85c759d8df-zkj9s   0/1     ContainerCreating   0          0s
+
+
+NOTES:
+1. Get the application URL by running these commands:
+  export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services web-webapp)
+  export NODE_IP=$(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+$ kubectl rollout status deployment/web-webapp --timeout=180s
+Waiting for deployment "web-webapp" rollout to finish: 0 of 1 updated replicas are available...
+deployment "web-webapp" successfully rolled out
+
+$ kubectl get deploy web-webapp -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas,READY:.status.readyReplicas,IMAGE:.spec.template.spec.containers[0].image
+NAME         REPLICAS   READY   IMAGE
+web-webapp   1          1       nginx:1.26-alpine
+
+$ kubectl get pods -l app.kubernetes.io/instance=web
+NAME                          READY   STATUS    RESTARTS   AGE
+web-webapp-85c759d8df-zkj9s   1/1     Running   0          12s
+
+$ curl -s http://localhost:30091/   (x4, NodePort mapped to my Mac by kind)
+<h1>Hello from webapp - v1</h1>
+<p>release=web revision=1 image=nginx:1.26-alpine replicas=1</p>
+<h1>Hello from webapp - v1</h1>
+<p>release=web revision=1 image=nginx:1.26-alpine replicas=1</p>
+<h1>Hello from webapp - v1</h1>
+<p>release=web revision=1 image=nginx:1.26-alpine replicas=1</p>
+<h1>Hello from webapp - v1</h1>
+<p>release=web revision=1 image=nginx:1.26-alpine replicas=1</p>
+
+$ helm history web
+REVISION	UPDATED                 	STATUS  	CHART       	APP VERSION	DESCRIPTION     
+1       	Wed Oct  7 23:16:52 2026	deployed	webapp-0.1.0	1.27-alpine	Install complete
+
+# ===== helm get =====
+$ helm get values web
+USER-SUPPLIED VALUES:
+null
+
+$ helm get values web --all
+COMPUTED VALUES:
+affinity: {}
+autoscaling:
+  enabled: false
+  maxReplicas: 100
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 80
+fullnameOverride: ""
+httpRoute:
+  annotations: {}
+  enabled: false
+  hostnames:
+  - chart-example.local
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /headers
+image:
+  pullPolicy: IfNotPresent
+  repository: nginx
+  tag: 1.26-alpine
+imagePullSecrets: []
+ingress:
+  annotations: {}
+  className: ""
+  enabled: false
+  hosts:
+  - host: chart-example.local
+    paths:
+    - path: /
+      pathType: ImplementationSpecific
+  tls: []
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+nameOverride: ""
+nodeSelector: {}
+page:
+  color: '#2b6cb0'
+  message: Hello from webapp - v1
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+replicaCount: 1
+resources:
+  limits:
+    cpu: 100m
+    memory: 64Mi
+  requests:
+    cpu: 10m
+    memory: 16Mi
+securityContext: {}
+service:
+  nodePort: 30091
+  port: 80
+  type: NodePort
+serviceAccount:
+  annotations: {}
+  automount: true
+  create: true
+  name: ""
+tolerations: []
+volumeMounts: []
+volumes: []
+
+$ helm get notes web
+NOTES:
+1. Get the application URL by running these commands:
+  export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services web-webapp)
+  export NODE_IP=$(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+$ helm get manifest web | grep -E '^kind:|^# Source:|replicas:|image:'
+# Source: webapp/templates/serviceaccount.yaml
+kind: ServiceAccount
+# Source: webapp/templates/configmap.yaml
+kind: ConfigMap
+# Source: webapp/templates/service.yaml
+kind: Service
+# Source: webapp/templates/deployment.yaml
+kind: Deployment
+  replicas: 1
+          image: "nginx:1.26-alpine"
+
+$ helm get all web | head -30
+NAME: web
+LAST DEPLOYED: Wed Oct  7 23:16:52 2026
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+CHART: webapp
+VERSION: 0.1.0
+APP_VERSION: 1.27-alpine
+DESCRIPTION: Install complete
+USER-SUPPLIED VALUES:
+null
+
+COMPUTED VALUES:
+affinity: {}
+autoscaling:
+  enabled: false
+  maxReplicas: 100
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 80
+fullnameOverride: ""
+httpRoute:
+  annotations: {}
+  enabled: false
+  hostnames:
+  - chart-example.local
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  rules:
+  - matches:
+
+$ helm get metadata web
+NAME: web
+CHART: webapp
+VERSION: 0.1.0
+APP_VERSION: 1.27-alpine
+ANNOTATIONS: 
+LABELS: modifiedAt=1791395213,name=web,owner=helm,status=deployed,version=1
+DEPENDENCIES: 
+NAMESPACE: default
+REVISION: 1
+STATUS: deployed
+DEPLOYED_AT: 2026-10-07T23:16:52+05:30
+APPLY_METHOD: server-side apply
+
+$ kubectl get configmap -l app.kubernetes.io/instance=web
+NAME                       DATA   AGE
+web-webapp-page-68b647ba   1      14s
+
+# ===== UPGRADE 1 (revision 2: values/v2.yaml - 2 replicas, nginx:1.27-alpine, message v2) =====
+$ helm upgrade web webapp -f values/v2.yaml
+Release "web" has been upgraded. Happy Helming!
+NAME: web
+LAST DEPLOYED: Wed Oct  7 23:17:06 2026
+NAMESPACE: default
+STATUS: deployed
+REVISION: 2
+DESCRIPTION: Upgrade complete
+NOTES:
+1. Get the application URL by running these commands:
+  export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services web-webapp)
+  export NODE_IP=$(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+$ kubectl rollout status deployment/web-webapp --timeout=180s
+Waiting for deployment "web-webapp" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+deployment "web-webapp" successfully rolled out
+
+$ kubectl get deploy web-webapp -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas,READY:.status.readyReplicas,IMAGE:.spec.template.spec.containers[0].image
+NAME         REPLICAS   READY   IMAGE
+web-webapp   2          2       nginx:1.27-alpine
+
+$ kubectl get pods -l app.kubernetes.io/instance=web
+NAME                          READY   STATUS    RESTARTS   AGE
+web-webapp-6d57d5bff7-chsmp   1/1     Running   0          16s
+web-webapp-6d57d5bff7-cxhdp   1/1     Running   0          14s
+
+$ curl -s http://localhost:30091/   (x4, NodePort mapped to my Mac by kind)
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+
+$ helm history web
+REVISION	UPDATED                 	STATUS    	CHART       	APP VERSION	DESCRIPTION     
+1       	Wed Oct  7 23:16:52 2026	superseded	webapp-0.1.0	1.27-alpine	Install complete
+2       	Wed Oct  7 23:17:06 2026	deployed  	webapp-0.1.0	1.27-alpine	Upgrade complete
+
+$ helm get values web
+USER-SUPPLIED VALUES:
+image:
+  tag: 1.27-alpine
+page:
+  color: '#2f855a'
+  message: Hello from webapp - v2
+replicaCount: 2
+
+# ===== UPGRADE 2 (revision 3: values/v3.yaml - 3 replicas, nginx:1.28-alpine, message v3) =====
+$ helm upgrade web webapp -f values/v3.yaml
+Release "web" has been upgraded. Happy Helming!
+NAME: web
+LAST DEPLOYED: Wed Oct  7 23:17:22 2026
+NAMESPACE: default
+STATUS: deployed
+REVISION: 3
+DESCRIPTION: Upgrade complete
+NOTES:
+1. Get the application URL by running these commands:
+  export NODE_PORT=$(kubectl get --namespace default -o jsonpath="{.spec.ports[0].nodePort}" services web-webapp)
+  export NODE_IP=$(kubectl get nodes --namespace default -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+$ kubectl rollout status deployment/web-webapp --timeout=180s
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+deployment "web-webapp" successfully rolled out
+
+$ kubectl get deploy web-webapp -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas,READY:.status.readyReplicas,IMAGE:.spec.template.spec.containers[0].image
+NAME         REPLICAS   READY   IMAGE
+web-webapp   3          3       nginx:1.28-alpine
+
+$ kubectl get pods -l app.kubernetes.io/instance=web
+NAME                          READY   STATUS    RESTARTS   AGE
+web-webapp-688b48d557-dk2m5   1/1     Running   0          14s
+web-webapp-688b48d557-htbbn   1/1     Running   0          19s
+web-webapp-688b48d557-lg5m4   1/1     Running   0          16s
+
+$ curl -s http://localhost:30091/   (x4, NodePort mapped to my Mac by kind)
+<h1>Hello from webapp - v3</h1>
+<p>release=web revision=3 image=nginx:1.28-alpine replicas=3</p>
+<h1>Hello from webapp - v3</h1>
+<p>release=web revision=3 image=nginx:1.28-alpine replicas=3</p>
+<h1>Hello from webapp - v3</h1>
+<p>release=web revision=3 image=nginx:1.28-alpine replicas=3</p>
+<h1>Hello from webapp - v3</h1>
+<p>release=web revision=3 image=nginx:1.28-alpine replicas=3</p>
+
+$ helm history web
+REVISION	UPDATED                 	STATUS    	CHART       	APP VERSION	DESCRIPTION     
+1       	Wed Oct  7 23:16:52 2026	superseded	webapp-0.1.0	1.27-alpine	Install complete
+2       	Wed Oct  7 23:17:06 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete
+3       	Wed Oct  7 23:17:22 2026	deployed  	webapp-0.1.0	1.27-alpine	Upgrade complete
+
+$ helm get values web
+USER-SUPPLIED VALUES:
+image:
+  tag: 1.28-alpine
+page:
+  color: '#c53030'
+  message: Hello from webapp - v3
+replicaCount: 3
+
+# ===== ROLLBACK to revision 2 =====
+$ helm rollback web 2
+Rollback was a success! Happy Helming!
+
+$ kubectl rollout status deployment/web-webapp --timeout=180s
+Waiting for deployment "web-webapp" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "web-webapp" rollout to finish: 1 old replicas are pending termination...
+deployment "web-webapp" successfully rolled out
+
+$ kubectl get deploy web-webapp -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas,READY:.status.readyReplicas,IMAGE:.spec.template.spec.containers[0].image
+NAME         REPLICAS   READY   IMAGE
+web-webapp   2          2       nginx:1.27-alpine
+
+$ kubectl get pods -l app.kubernetes.io/instance=web
+NAME                          READY   STATUS    RESTARTS   AGE
+web-webapp-6d57d5bff7-sbdg4   1/1     Running   0          17s
+web-webapp-6d57d5bff7-xq25z   1/1     Running   0          28s
+
+$ curl -s http://localhost:30091/   (x4, NodePort mapped to my Mac by kind)
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+<h1>Hello from webapp - v2</h1>
+<p>release=web revision=2 image=nginx:1.27-alpine replicas=2</p>
+
+$ helm history web
+REVISION	UPDATED                 	STATUS    	CHART       	APP VERSION	DESCRIPTION     
+1       	Wed Oct  7 23:16:52 2026	superseded	webapp-0.1.0	1.27-alpine	Install complete
+2       	Wed Oct  7 23:17:06 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete
+3       	Wed Oct  7 23:17:22 2026	superseded	webapp-0.1.0	1.27-alpine	Upgrade complete
+4       	Wed Oct  7 23:17:42 2026	deployed  	webapp-0.1.0	1.27-alpine	Rollback to 2   
+
+$ helm get values web
+USER-SUPPLIED VALUES:
+image:
+  tag: 1.27-alpine
+page:
+  color: '#2f855a'
+  message: Hello from webapp - v2
+replicaCount: 2
+
+$ helm get values web --revision 3
+USER-SUPPLIED VALUES:
+image:
+  tag: 1.28-alpine
+page:
+  color: '#c53030'
+  message: Hello from webapp - v3
+replicaCount: 3
+
+# Diff between what revision 4 and revision 2 deployed. (I expected the 'revision=' line in the page to differ.
+#  It doesn't: empty diff = rollback re-applies revision 2's stored manifest as-is, it does not re-render the templates.)
+$ diff <(helm get manifest web --revision 2) <(helm get manifest web --revision 4)
+
+$ helm list
+NAME	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART       	APP VERSION
+web 	default  	4       	2026-10-07 23:17:42.202143 +0530 IST	deployed	webapp-0.1.0	1.27-alpine
+
+$ kubectl get configmap -l app.kubernetes.io/instance=web
+NAME                       DATA   AGE
+web-webapp-page-c7995bee   1      28s
+
+$ kubectl get secrets -l owner=helm,name=web
+NAME                        TYPE                 DATA   AGE
+sh.helm.release.v1.web.v1   helm.sh/release.v1   1      78s
+sh.helm.release.v1.web.v2   helm.sh/release.v1   1      64s
+sh.helm.release.v1.web.v3   helm.sh/release.v1   1      48s
+sh.helm.release.v1.web.v4   helm.sh/release.v1   1      28s
+

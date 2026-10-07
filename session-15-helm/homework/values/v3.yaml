@@ -1,0 +1,7 @@
+# Upgrade 2 (revision 3): 3 replicas, newest image, another message
+replicaCount: 3
+image:
+  tag: "1.28-alpine"
+page:
+  message: "Hello from webapp - v3"
+  color: "#c53030"
