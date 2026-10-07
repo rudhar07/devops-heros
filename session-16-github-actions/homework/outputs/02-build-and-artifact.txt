@@ -1,0 +1,120 @@
+# Session 16 - 'build' job locally: build.sh (calculator-build artifact) and the image tarball (calculator-image artifact)
+# Recorded on 2026-10-07 22:05:16 IST on macOS 26.5.2 (arm64)
+
+# GITHUB_SHA is set by GitHub on the runner; here I set fake run variables so build-info.txt looks like the CI one.
+# $T is a scratch directory outside the repo.
+$ GITHUB_SHA=local-test GITHUB_WORKFLOW='local run' GITHUB_RUN_NUMBER=0 ./build.sh
+=================================
+Starting Application Build
+=================================
+
+Build files:
+build/app/__init__.py
+build/app/calculator.py
+build/app/web.py
+build/build-info.txt
+build/requirements.txt
+
+Application: Session 16 Calculator
+Version: 1.0.0
+Git commit: local-test
+Built by: local run (run 0)
+Python: Python 3.13.14
+Build date (UTC): 2026-10-07T16:35:17Z
+
+Build completed successfully.
+[exit code: 0]
+
+$ docker build --build-arg GIT_SHA=local-test -t session16-calculator:local-test . 2>&1 | grep -vE '^#[0-9]+ [0-9.]+ (Downloading|Collecting)'
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.46kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 142B done
+#3 DONE 0.0s
+
+#4 [1/6] FROM docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
+#4 resolve docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 3.49kB done
+#5 DONE 0.0s
+
+#6 [2/6] WORKDIR /app
+#6 CACHED
+
+#7 [3/6] COPY requirements.txt .
+#7 CACHED
+
+#8 [4/6] RUN pip install -r requirements.txt  && pip uninstall -y pip
+#8 2.507   Downloading flask-3.1.3-py3-none-any.whl.metadata (3.2 kB)
+#8 2.945   Downloading gunicorn-26.2.0-py3-none-any.whl.metadata (5.5 kB)
+#8 3.104   Downloading blinker-1.9.0-py3-none-any.whl.metadata (1.6 kB)
+#8 3.245   Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+#8 3.667   Downloading itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
+#8 3.798   Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+#8 4.115   Downloading markupsafe-3.0.4-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (2.7 kB)
+#8 4.247   Downloading werkzeug-3.1.9-py3-none-any.whl.metadata (4.1 kB)
+#8 5.336 Installing collected packages: markupsafe, itsdangerous, gunicorn, click, blinker, werkzeug, jinja2, Flask
+#8 5.913 
+#8 5.915 Successfully installed Flask-3.1.3 blinker-1.9.0 click-8.5.0 gunicorn-26.2.0 itsdangerous-2.2.0 jinja2-3.1.6 markupsafe-3.0.4 werkzeug-3.1.9
+#8 5.916 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#8 7.513 Found existing installation: pip 26.2.1
+#8 7.573 Uninstalling pip-26.2.1:
+#8 7.906   Successfully uninstalled pip-26.2.1
+#8 7.919 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#8 DONE 8.5s
+
+#9 [5/6] COPY app ./app
+#9 DONE 0.2s
+
+#10 [6/6] RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin appuser
+#10 DONE 0.4s
+
+#11 exporting to image
+#11 exporting layers
+#11 exporting layers 0.4s done
+#11 exporting manifest sha256:af917da4cda9f132e9bb2a43cd320cd269e4859c95666c09c66b649433a5448d done
+#11 exporting config sha256:6ebba6e2f1c899274f37c78eecf1195d47184eaf2ae33498086b55a557d65d5a done
+#11 exporting attestation manifest sha256:f252d30c85de1556ac3a595c9e3fdb64102913111777ec17c3833f198fa86a8d done
+#11 exporting manifest list sha256:08c66932292feb41a130894ca091c27bfdd0bfdb2532df1d3416971153a460bf done
+#11 naming to docker.io/library/session16-calculator:local-test done
+#11 unpacking to docker.io/library/session16-calculator:local-test 0.1s done
+#11 DONE 0.5s
+[exit code: 0]
+
+$ docker image ls session16-calculator
+IMAGE                             ID             DISK USAGE   CONTENT SIZE   EXTRA
+session16-calculator:local-test   08c66932292f        212MB         45.6MB        
+[exit code: 0]
+
+$ docker image inspect -f 'User={{.Config.User}} Arch={{.Architecture}} Cmd={{.Config.Cmd}}' session16-calculator:local-test
+User=10001 Arch=arm64 Cmd=[gunicorn --bind 0.0.0.0:8000 --workers 2 --no-control-socket --access-logfile - app.web:app]
+[exit code: 0]
+
+# Artifact hand-off between jobs: the build job saves the image, a later job loads it.
+$ docker save session16-calculator:local-test | gzip > $T/image.tar.gz && ls -lh $T/image.tar.gz | awk "{print \$5}"
+43M
+[exit code: 0]
+
+$ docker rmi session16-calculator:local-test
+Untagged: session16-calculator:local-test
+Deleted: sha256:08c66932292feb41a130894ca091c27bfdd0bfdb2532df1d3416971153a460bf
+[exit code: 0]
+
+$ docker load -i $T/image.tar.gz
+Loaded image: session16-calculator:local-test
+[exit code: 0]
+
+$ docker image ls session16-calculator
+IMAGE                             ID             DISK USAGE   CONTENT SIZE   EXTRA
+session16-calculator:local-test   08c66932292f        212MB         45.6MB        
+[exit code: 0]
+

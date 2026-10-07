@@ -1,0 +1,30 @@
+# Lint of the root workflows with actionlint (also runs shellcheck on every run: block). Run from the repo root.
+# Recorded on 2026-10-07 22:35:52 IST on macOS 26.5.2 (arm64)
+
+$ actionlint --version | head -1
+1.7.12
+[exit code: 0]
+
+$ ls .github/workflows/
+session16-cicd.yml
+session17-devsecops.yml
+[exit code: 0]
+
+$ actionlint -verbose .github/workflows/session16-cicd.yml .github/workflows/session17-devsecops.yml 2>&1 | grep -v pyflakes
+verbose: Linting 2 files
+verbose: Linting .github/workflows/session16-cicd.yml
+verbose: Using project at /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros
+verbose: Linting .github/workflows/session17-devsecops.yml
+verbose: Using project at /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros
+verbose: verbose: Found 0 parse errors in 0 ms for .github/workflows/session17-devsecops.yml
+Found 0 parse errors in 0 ms for .github/workflows/session16-cicd.yml
+verbose: Found total 0 errors in 298 ms for .github/workflows/session16-cicd.yml
+verbose: Found total 0 errors in 319 ms for .github/workflows/session17-devsecops.yml
+verbose: Found 0 errors in 2 files
+[exit code: 0]
+
+$ <scratch>/venv-3.13/bin/python -c "import yaml; [print(f, 'jobs:', list(yaml.safe_load(open(f))['jobs'])) for f in ['.github/workflows/session16-cicd.yml', '.github/workflows/session17-devsecops.yml']]"
+.github/workflows/session16-cicd.yml jobs: ['test', 'secrets-demo', 'build', 'smoke-test', 'publish', 'deploy']
+.github/workflows/session17-devsecops.yml jobs: ['build-test', 'sast', 'sca', 'secret-scan', 'docker-build', 'image-scan', 'security-gate', 'push-image', 'deploy']
+[exit code: 0]
+

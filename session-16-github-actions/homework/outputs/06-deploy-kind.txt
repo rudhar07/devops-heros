@@ -1,0 +1,53 @@
+# Session 16 - 'deploy' job locally on a throwaway kind cluster 'hw-d' (KUBECONFIG is a private file). Same sed/apply/rollout/curl as the workflow; the only difference is that the image comes from my local build instead of 'docker pull' from GHCR.
+# Recorded on 2026-10-07 22:20:01 IST on macOS 26.5.2 (arm64)
+
+$ kind version
+kind v0.33.0 go1.27.0 darwin/arm64
+[exit code: 0]
+
+$ kubectl get nodes -o wide
+NAME                 STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION             CONTAINER-RUNTIME
+hw-d-control-plane   Ready    control-plane   10m   v1.37.0   172.18.0.4    <none>        Debian GNU/Linux 13 (trixie)   6.12.76-linuxkit (arm64)   containerd://2.3.4
+[exit code: 0]
+
+$ IMAGE=ghcr.io/rudhar07/devops-heros/session16-calculator; docker tag session16-calculator:local-test "${IMAGE}:local-test" && kind load docker-image "${IMAGE}:local-test" --name hw-d
+Image: "ghcr.io/rudhar07/devops-heros/session16-calculator:local-test" with ID "sha256:08c66932292feb41a130894ca091c27bfdd0bfdb2532df1d3416971153a460bf" not yet present on node "hw-d-control-plane", loading...
+[exit code: 0]
+
+$ IMAGE=ghcr.io/rudhar07/devops-heros/session16-calculator; GITHUB_SHA=local-test; mkdir -p $T/k8s16 && sed "s|image: .*session16-calculator:__IMAGE_TAG__|image: ${IMAGE}:${GITHUB_SHA}|" k8s/deployment.yaml > $T/k8s16/deployment.yaml && cp k8s/service.yaml $T/k8s16/ && grep "image:" $T/k8s16/deployment.yaml && kubectl apply -f $T/k8s16/
+          image: ghcr.io/rudhar07/devops-heros/session16-calculator:local-test
+deployment.apps/calculator created
+service/calculator created
+[exit code: 0]
+
+$ kubectl rollout status deployment/calculator --timeout=120s
+Waiting for deployment "calculator" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "calculator" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "calculator" rollout to finish: 1 of 2 updated replicas are available...
+deployment "calculator" successfully rolled out
+[exit code: 0]
+
+$ kubectl get deploy,pods,svc -l app=calculator -o wide
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                                          SELECTOR
+deployment.apps/calculator   2/2     2            2           8s    calculator   ghcr.io/rudhar07/devops-heros/session16-calculator:local-test   app=calculator
+
+NAME                             READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/calculator-94dd7b5d9-8p4dz   1/1     Running   0          8s    10.244.0.15   hw-d-control-plane   <none>           <none>
+pod/calculator-94dd7b5d9-bk24t   1/1     Running   0          8s    10.244.0.16   hw-d-control-plane   <none>           <none>
+[exit code: 0]
+
+$ kubectl port-forward service/calculator 18083:80 >/tmp/hw-d-pf.log 2>&1 & PF=$!; for _ in $(seq 1 20); do curl -fsS http://localhost:18083/health 2>/dev/null && break; sleep 1; done; echo; curl -fsS http://localhost:18083/ | tee /tmp/hw-d-root.json; echo; jq -e ".commit == \"local-test\"" /tmp/hw-d-root.json; curl -fsS "http://localhost:18083/api/multiply?a=6&b=7"; echo; kill $PF
+{"status":"ok"}
+
+{"app":"session16-calculator","commit":"local-test","operations":["add","divide","multiply","subtract"],"version":"1.0.0"}
+
+true
+{"a":6.0,"b":7.0,"operation":"multiply","result":42.0}
+
+[exit code: 0]
+
+$ kubectl delete -f $T/k8s16/
+deployment.apps "calculator" deleted from default namespace
+service "calculator" deleted from default namespace
+[exit code: 0]
+

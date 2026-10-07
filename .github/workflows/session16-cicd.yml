@@ -1,0 +1,353 @@
+# Session 16 homework - complete CI/CD pipeline with GitHub Actions.
+# App, Dockerfile, k8s manifests and README: session-16-github-actions/homework/
+#
+#   CI: test (matrix 3.12/3.13/3.14) -> build (app artifact + image artifact) -> smoke-test
+#   CD: publish (push image to GHCR) -> deploy (kind cluster in the runner + rollout + curl)
+#   + secrets-demo (repository secret + GITHUB_TOKEN), runs in parallel
+name: "Session 16 - CI/CD Pipeline"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "session-16-github-actions/homework/**"
+      - ".github/workflows/session16-cicd.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "session-16-github-actions/homework/**"
+      - ".github/workflows/session16-cicd.yml"
+  workflow_dispatch:
+
+# Least privilege by default; only the publish/deploy jobs get more.
+permissions:
+  contents: read
+
+concurrency:
+  group: session16-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  IMAGE_BASENAME: session16-calculator
+  KIND_CLUSTER: s16-cicd
+
+defaults:
+  run:
+    shell: bash
+    working-directory: session-16-github-actions/homework
+
+jobs:
+  # ---------------------------------------------------------------- CI: test
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: session-16-github-actions/homework/requirements*.txt
+
+      - name: Show runner details
+        run: |
+          echo "Runner OS:   ${RUNNER_OS} (${RUNNER_ARCH})"
+          echo "Runner name: ${RUNNER_NAME}"
+          python --version
+          pwd
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run unit tests with coverage
+        run: |
+          mkdir -p reports
+          python -m pytest -v \
+            --junitxml=reports/junit.xml \
+            --cov=app --cov-report=term-missing \
+            --cov-report=xml:reports/coverage.xml \
+            --cov-report=html:reports/htmlcov \
+            --cov-fail-under=80
+
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: s16-test-report-py${{ matrix.python-version }}
+          path: session-16-github-actions/homework/reports/
+          retention-days: 7
+
+  # ------------------------------------------------------- secrets demo
+  secrets-demo:
+    name: Secrets demo (repo secret + GITHUB_TOKEN)
+    runs-on: ubuntu-latest
+    # Secrets cannot be used directly in step "if:" conditions, so the secret is
+    # mapped to a job-level env var and the steps test env.DEMO_API_KEY instead.
+    # If the student never creates the secret it is just an empty string and
+    # the "not configured" branch runs - the pipeline still passes.
+    env:
+      DEMO_API_KEY: ${{ secrets.DEMO_API_KEY }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Is DEMO_API_KEY configured?
+        run: |
+          if [ -n "${DEMO_API_KEY}" ]; then
+            echo "DEMO_API_KEY is configured (length ${#DEMO_API_KEY} characters)."
+          else
+            echo "::notice title=DEMO_API_KEY not set::Add it under Settings > Secrets and variables > Actions to see the masking demo."
+          fi
+
+      - name: Use the secret (output is masked)
+        if: env.DEMO_API_KEY != ''
+        run: |
+          # The value is a fake demo value. GitHub replaces any registered secret
+          # in the log with *** - this line is here only to show that.
+          echo "Secret value as GitHub prints it: ${DEMO_API_KEY}"
+
+          # Values derived from a secret are NOT masked automatically.
+          # ::add-mask:: registers them so they are hidden too.
+          derived="$(printf '%s' "${DEMO_API_KEY}" | sha256sum | cut -c1-16)"
+          echo "::add-mask::${derived}"
+          echo "Derived value after add-mask: ${derived}"
+
+      - name: Skip notice when the secret is missing
+        if: env.DEMO_API_KEY == ''
+        run: echo "DEMO_API_KEY is not set, skipping the masking demo (this is not a failure)."
+
+      - name: Use the automatic GITHUB_TOKEN
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GITHUB_TOKEN is created per run and expires when the job ends.
+          # With "contents: read" it can read this repository through the API.
+          gh api "repos/${GITHUB_REPOSITORY}" \
+            --jq '"Repository: \(.full_name)  visibility: \(.visibility)  default branch: \(.default_branch)"'
+
+  # ---------------------------------------------------------------- CI: build
+  build:
+    name: Build app + Docker image
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build application
+        run: ./build.sh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: calculator-build
+          path: session-16-github-actions/homework/build/
+          retention-days: 7
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            -t "${IMAGE_BASENAME}:${GITHUB_SHA}" .
+          docker image ls "${IMAGE_BASENAME}"
+
+      - name: Save image to a tarball
+        run: docker save "${IMAGE_BASENAME}:${GITHUB_SHA}" | gzip > "${RUNNER_TEMP}/image.tar.gz"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: calculator-image
+          path: ${{ runner.temp }}/image.tar.gz
+          retention-days: 3
+          compression-level: 0
+
+  # ------------------------------------------------- CI: test the built image
+  smoke-test:
+    name: Smoke-test the image
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Artifacts passed from the build job to this job
+      - name: Download build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: calculator-build
+          path: ${{ runner.temp }}/calculator-build
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: calculator-image
+          path: ${{ runner.temp }}
+
+      - name: Show build info from the build job
+        run: cat "${RUNNER_TEMP}/calculator-build/build-info.txt"
+
+      - name: Load image and run container
+        run: |
+          docker load -i "${RUNNER_TEMP}/image.tar.gz"
+          docker run -d --name calculator -p 8000:8000 "${IMAGE_BASENAME}:${GITHUB_SHA}"
+
+      - name: Smoke test with curl
+        run: |
+          for _ in $(seq 1 20); do
+            curl -fsS http://localhost:8000/health && break
+            sleep 1
+          done
+          echo
+          curl -fsS http://localhost:8000/ ; echo
+          curl -fsS 'http://localhost:8000/api/add?a=10&b=5' | tee /tmp/add.json; echo
+          jq -e '.result == 15' /tmp/add.json
+          echo "Container runs as: $(docker exec calculator id)"
+
+      - name: Container logs
+        if: always()
+        run: docker logs calculator || true
+
+  # ------------------------------------------- CD: publish the image to GHCR
+  publish:
+    name: Push image to GHCR
+    needs: [smoke-test]
+    # Only real changes on main are published - never pull requests.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Image name (GHCR needs lowercase)
+        id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/${IMAGE_BASENAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: calculator-image
+          path: ${{ runner.temp }}
+
+      - name: Log in to GHCR with GITHUB_TOKEN
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+        run: |
+          docker load -i "${RUNNER_TEMP}/image.tar.gz"
+          docker tag "${IMAGE_BASENAME}:${GITHUB_SHA}" "${IMAGE}:${GITHUB_SHA}"
+          docker tag "${IMAGE_BASENAME}:${GITHUB_SHA}" "${IMAGE}:latest"
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          docker push "${IMAGE}:latest"
+          {
+            echo "### Image pushed"
+            echo '```'
+            echo "${IMAGE}:${GITHUB_SHA}"
+            echo "${IMAGE}:latest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # -------------------------------------------- CD: deploy to Kubernetes (kind)
+  deploy:
+    name: Deploy to Kubernetes (kind)
+    needs: [publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.publish.outputs.image }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Create kind cluster in the runner
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ${{ env.KIND_CLUSTER }}
+          wait: 120s
+
+      - name: Log in to GHCR with GITHUB_TOKEN
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pull the exact image we pushed (works even while the package is private)
+      # and load it into the kind node.
+      - name: Pull image from GHCR and load it into kind
+        run: |
+          docker pull "${IMAGE}:${GITHUB_SHA}"
+          kind load docker-image "${IMAGE}:${GITHUB_SHA}" --name "${KIND_CLUSTER}"
+
+      - name: Deploy manifests
+        run: |
+          mkdir -p "${RUNNER_TEMP}/k8s"
+          sed "s|image: .*session16-calculator:__IMAGE_TAG__|image: ${IMAGE}:${GITHUB_SHA}|" \
+            k8s/deployment.yaml > "${RUNNER_TEMP}/k8s/deployment.yaml"
+          cp k8s/service.yaml "${RUNNER_TEMP}/k8s/"
+          grep "image:" "${RUNNER_TEMP}/k8s/deployment.yaml"
+          kubectl apply -f "${RUNNER_TEMP}/k8s/"
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/calculator --timeout=120s
+
+      - name: Smoke test the deployment
+        run: |
+          kubectl get deploy,pods,svc -o wide
+          kubectl port-forward service/calculator 8080:80 >/tmp/port-forward.log 2>&1 &
+          for _ in $(seq 1 20); do
+            curl -fsS http://localhost:8080/health && break
+            sleep 1
+          done
+          echo
+          deployed="$(curl -fsS http://localhost:8080/ | jq -r .commit)"
+          echo "Deployed commit: ${deployed}"
+          test "${deployed}" = "${GITHUB_SHA}"
+          curl -fsS 'http://localhost:8080/api/multiply?a=6&b=7'; echo
+
+      - name: Debug info on failure
+        if: failure()
+        run: |
+          kubectl describe deployment calculator || true
+          kubectl describe pods -l app=calculator || true
+          kubectl logs -l app=calculator --tail=50 || true

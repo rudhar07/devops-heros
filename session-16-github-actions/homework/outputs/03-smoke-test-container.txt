@@ -1,0 +1,51 @@
+# Session 16 - 'smoke-test' job locally: run the image and curl it (host port 8083)
+# Recorded on 2026-10-07 22:05:29 IST on macOS 26.5.2 (arm64)
+
+$ docker run -d --name hw-d-s16-calc -p 8083:8000 session16-calculator:local-test
+c34c468faf6ce4021a350e6c2d86297dfcd99434867c4d7a0d20bd611be91639
+[exit code: 0]
+
+$ for _ in $(seq 1 20); do curl -fsS http://localhost:8083/health 2>/dev/null && break; sleep 1; done; echo
+{"status":"ok"}
+
+[exit code: 0]
+
+$ curl -fsS http://localhost:8083/; echo
+{"app":"session16-calculator","commit":"local-test","operations":["add","divide","multiply","subtract"],"version":"1.0.0"}
+
+[exit code: 0]
+
+$ curl -fsS 'http://localhost:8083/api/add?a=10&b=5' | tee /tmp/hw-d-add.json; echo
+{"a":10.0,"b":5.0,"operation":"add","result":15.0}
+
+[exit code: 0]
+
+$ jq -e '.result == 15' /tmp/hw-d-add.json
+true
+[exit code: 0]
+
+$ curl -sS -w ' -> HTTP %{http_code}' 'http://localhost:8083/api/divide?a=1&b=0'; echo
+{"error":"Cannot divide by zero"}
+ -> HTTP 400
+[exit code: 0]
+
+$ echo "Container runs as: $(docker exec hw-d-s16-calc id)"
+Container runs as: uid=10001(appuser) gid=10001(appuser) groups=10001(appuser)
+[exit code: 0]
+
+$ docker logs hw-d-s16-calc
+[2026-10-07 16:35:30 +0000] [1] [INFO] Starting gunicorn 26.2.0
+[2026-10-07 16:35:30 +0000] [1] [INFO] Listening at: http://0.0.0.0:8000 (1)
+[2026-10-07 16:35:30 +0000] [1] [INFO] Using worker: sync
+[2026-10-07 16:35:30 +0000] [7] [INFO] Booting worker with pid: 7
+[2026-10-07 16:35:30 +0000] [8] [INFO] Booting worker with pid: 8
+192.168.65.1 - - [07/Oct/2026:16:35:30 +0000] "GET /health HTTP/1.1" 200 16 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:35:30 +0000] "GET / HTTP/1.1" 200 123 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:35:30 +0000] "GET /api/add?a=10&b=5 HTTP/1.1" 200 51 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:35:30 +0000] "GET /api/divide?a=1&b=0 HTTP/1.1" 400 34 "-" "curl/8.7.1"
+[exit code: 0]
+
+$ docker rm -f hw-d-s16-calc
+hw-d-s16-calc
+[exit code: 0]
+

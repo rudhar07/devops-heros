@@ -1,0 +1,9 @@
+[run]
+branch = true
+source = app
+
+[report]
+# The interactive "python app/calculator.py" loop from the instructor's
+# example is a manual CLI, not something unit tests should drive.
+exclude_also =
+    if __name__ == .__main__.:

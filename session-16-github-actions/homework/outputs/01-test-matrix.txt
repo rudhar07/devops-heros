@@ -1,0 +1,178 @@
+# Session 16 - CI 'test' job run locally for each Python version in the matrix (3.12, 3.13, 3.14), after adding .coveragerc
+# Recorded on 2026-10-07 22:00:37 IST on macOS 26.5.2 (arm64)
+
+# Each Python version has its own virtualenv outside the repo (scratchpad), like each matrix runner gets a fresh VM.
+# ---------------- matrix: python-version = 3.12 ----------------
+$ python --version
+Python 3.12.13
+[exit code: 0]
+
+$ uv pip install -r requirements-dev.txt   # same as 'pip install -r requirements-dev.txt' in the workflow
+Using Python 3.12.13 environment at: <scratch>/venv-3.12
+Checked 4 packages in 4ms
+[exit code: 0]
+
+$ mkdir -p reports && python -m pytest -v -p no:cacheprovider --junitxml=reports/junit.xml --cov=app --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-report=html:reports/htmlcov --cov-fail-under=80
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- <scratch>/venv-3.12/bin/python
+rootdir: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-16-github-actions/homework
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0
+collecting ... collected 15 items
+
+tests/test_calculator.py::test_add PASSED                                [  6%]
+tests/test_calculator.py::test_subtract PASSED                           [ 13%]
+tests/test_calculator.py::test_multiply PASSED                           [ 20%]
+tests/test_calculator.py::test_divide PASSED                             [ 26%]
+tests/test_calculator.py::test_divide_by_zero PASSED                     [ 33%]
+tests/test_web.py::test_health PASSED                                    [ 40%]
+tests/test_web.py::test_index_lists_operations PASSED                    [ 46%]
+tests/test_web.py::test_operations[add-10-5-15] PASSED                   [ 53%]
+tests/test_web.py::test_operations[subtract-10-5-5] PASSED               [ 60%]
+tests/test_web.py::test_operations[multiply-10-5-50] PASSED              [ 66%]
+tests/test_web.py::test_operations[divide-10-4-2.5] PASSED               [ 73%]
+tests/test_web.py::test_divide_by_zero_is_400 PASSED                     [ 80%]
+tests/test_web.py::test_missing_parameter_is_400 PASSED                  [ 86%]
+tests/test_web.py::test_non_number_is_400 PASSED                         [ 93%]
+tests/test_web.py::test_unknown_operation_is_404 PASSED                  [100%]
+
+- generated xml file: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-16-github-actions/homework/reports/junit.xml -
+================================ tests coverage ================================
+______________ coverage: platform darwin, python 3.12.13-final-0 _______________
+
+Name                Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------
+app/__init__.py         0      0      0      0   100%
+app/calculator.py      11      0      2      0   100%
+app/web.py             30      0      2      0   100%
+---------------------------------------------------------------
+TOTAL                  41      0      4      0   100%
+Coverage HTML written to dir reports/htmlcov
+Coverage XML written to file reports/coverage.xml
+Required test coverage of 80% reached. Total coverage: 100.00%
+============================== 15 passed in 0.28s ==============================
+[exit code: 0]
+
+$ ls reports
+coverage.xml
+htmlcov
+junit.xml
+[exit code: 0]
+
+# ---------------- matrix: python-version = 3.13 ----------------
+$ python --version
+Python 3.13.14
+[exit code: 0]
+
+$ uv pip install -r requirements-dev.txt   # same as 'pip install -r requirements-dev.txt' in the workflow
+Using Python 3.13.14 environment at: <scratch>/venv-3.13
+Checked 4 packages in 6ms
+[exit code: 0]
+
+$ mkdir -p reports && python -m pytest -v -p no:cacheprovider --junitxml=reports/junit.xml --cov=app --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-report=html:reports/htmlcov --cov-fail-under=80
+============================= test session starts ==============================
+platform darwin -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- <scratch>/venv-3.13/bin/python
+rootdir: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-16-github-actions/homework
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, platformdirs-4.12.3
+collecting ... collected 15 items
+
+tests/test_calculator.py::test_add PASSED                                [  6%]
+tests/test_calculator.py::test_subtract PASSED                           [ 13%]
+tests/test_calculator.py::test_multiply PASSED                           [ 20%]
+tests/test_calculator.py::test_divide PASSED                             [ 26%]
+tests/test_calculator.py::test_divide_by_zero PASSED                     [ 33%]
+tests/test_web.py::test_health PASSED                                    [ 40%]
+tests/test_web.py::test_index_lists_operations PASSED                    [ 46%]
+tests/test_web.py::test_operations[add-10-5-15] PASSED                   [ 53%]
+tests/test_web.py::test_operations[subtract-10-5-5] PASSED               [ 60%]
+tests/test_web.py::test_operations[multiply-10-5-50] PASSED              [ 66%]
+tests/test_web.py::test_operations[divide-10-4-2.5] PASSED               [ 73%]
+tests/test_web.py::test_divide_by_zero_is_400 PASSED                     [ 80%]
+tests/test_web.py::test_missing_parameter_is_400 PASSED                  [ 86%]
+tests/test_web.py::test_non_number_is_400 PASSED                         [ 93%]
+tests/test_web.py::test_unknown_operation_is_404 PASSED                  [100%]
+
+- generated xml file: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-16-github-actions/homework/reports/junit.xml -
+================================ tests coverage ================================
+______________ coverage: platform darwin, python 3.13.14-final-0 _______________
+
+Name                Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------
+app/__init__.py         0      0      0      0   100%
+app/calculator.py      11      0      2      0   100%
+app/web.py             30      0      2      0   100%
+---------------------------------------------------------------
+TOTAL                  41      0      4      0   100%
+Coverage HTML written to dir reports/htmlcov
+Coverage XML written to file reports/coverage.xml
+Required test coverage of 80% reached. Total coverage: 100.00%
+============================== 15 passed in 0.23s ==============================
+[exit code: 0]
+
+$ ls reports
+coverage.xml
+htmlcov
+junit.xml
+[exit code: 0]
+
+# ---------------- matrix: python-version = 3.14 ----------------
+$ python --version
+Python 3.14.6
+[exit code: 0]
+
+$ uv pip install -r requirements-dev.txt   # same as 'pip install -r requirements-dev.txt' in the workflow
+Using Python 3.14.6 environment at: <scratch>/venv-3.14
+Checked 4 packages in 4ms
+[exit code: 0]
+
+$ mkdir -p reports && python -m pytest -v -p no:cacheprovider --junitxml=reports/junit.xml --cov=app --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-report=html:reports/htmlcov --cov-fail-under=80
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- <scratch>/venv-3.14/bin/python
+rootdir: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-16-github-actions/homework
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0
+collecting ... collected 15 items
+
+tests/test_calculator.py::test_add PASSED                                [  6%]
+tests/test_calculator.py::test_subtract PASSED                           [ 13%]
+tests/test_calculator.py::test_multiply PASSED                           [ 20%]
+tests/test_calculator.py::test_divide PASSED                             [ 26%]
+tests/test_calculator.py::test_divide_by_zero PASSED                     [ 33%]
+tests/test_web.py::test_health PASSED                                    [ 40%]
+tests/test_web.py::test_index_lists_operations PASSED                    [ 46%]
+tests/test_web.py::test_operations[add-10-5-15] PASSED                   [ 53%]
+tests/test_web.py::test_operations[subtract-10-5-5] PASSED               [ 60%]
+tests/test_web.py::test_operations[multiply-10-5-50] PASSED              [ 66%]
+tests/test_web.py::test_operations[divide-10-4-2.5] PASSED               [ 73%]
+tests/test_web.py::test_divide_by_zero_is_400 PASSED                     [ 80%]
+tests/test_web.py::test_missing_parameter_is_400 PASSED                  [ 86%]
+tests/test_web.py::test_non_number_is_400 PASSED                         [ 93%]
+tests/test_web.py::test_unknown_operation_is_404 PASSED                  [100%]
+
+- generated xml file: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-16-github-actions/homework/reports/junit.xml -
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.6-final-0 _______________
+
+Name                Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------
+app/__init__.py         0      0      0      0   100%
+app/calculator.py      11      0      2      0   100%
+app/web.py             30      0      2      0   100%
+---------------------------------------------------------------
+TOTAL                  41      0      4      0   100%
+Coverage HTML written to dir reports/htmlcov
+Coverage XML written to file reports/coverage.xml
+Required test coverage of 80% reached. Total coverage: 100.00%
+============================== 15 passed in 0.22s ==============================
+[exit code: 0]
+
+$ ls reports
+coverage.xml
+htmlcov
+junit.xml
+[exit code: 0]
+
