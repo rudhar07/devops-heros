@@ -1,0 +1,70 @@
+# Session 17 - stage 'sast' locally: Bandit with pyproject.toml config
+# Recorded on 2026-10-07 22:06:13 IST on macOS 26.5.2 (arm64)
+
+$ uv pip install -r requirements-security.txt   # workflow: pip install -r requirements-security.txt
+Using Python 3.13.14 environment at: <scratch>/venv-3.13
+Checked 2 packages in 18ms
+[exit code: 0]
+
+$ bandit --version | head -1
+bandit 1.9.4
+[exit code: 0]
+
+$ bandit -c pyproject.toml -r app --exit-zero -f json -o reports/bandit.json && bandit -c pyproject.toml -r app --exit-zero -f sarif -o reports/bandit.sarif && ls -l reports/bandit.*  | awk '{print $5, $NF}'
+[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: None
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+[json]	INFO	JSON output written to file: reports/bandit.json
+[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: None
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+[main]	INFO	using config: pyproject.toml
+[main]	INFO	running on Python 3.13.14
+[sarif]	INFO	SARIF output written to file: reports/bandit.sarif
+1044 reports/bandit.json
+1701 reports/bandit.sarif
+[exit code: 0]
+
+$ jq '.metrics._totals | {loc, "SEVERITY.HIGH", "SEVERITY.MEDIUM", "SEVERITY.LOW"}' reports/bandit.json
+{
+  "loc": 203,
+  "SEVERITY.HIGH": 0,
+  "SEVERITY.MEDIUM": 0,
+  "SEVERITY.LOW": 0
+}
+[exit code: 0]
+
+# Gate (same command as the workflow):
+$ bandit -c pyproject.toml -r app --severity-level medium --confidence-level medium
+[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: None
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+[main]	INFO	using config: pyproject.toml
+[main]	INFO	running on Python 3.13.14
+Run started:2026-10-07 16:36:13.770746+00:00
+
+Test results:
+	No issues identified.
+
+Code scanned:
+	Total lines of code: 203
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 0
+		Medium: 0
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 0
+		High: 0
+Files skipped (0):
+[exit code: 0]
+

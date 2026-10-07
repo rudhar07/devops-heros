@@ -1,0 +1,3 @@
+# Runtime dependencies - pinned; pip-audit (SCA) checks exactly these versions
+Flask==3.1.3
+gunicorn==26.2.0

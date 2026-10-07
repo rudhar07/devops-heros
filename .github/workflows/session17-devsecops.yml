@@ -1,0 +1,436 @@
+# Session 17 homework - CI/CD + DevSecOps pipeline.
+# App, Dockerfile, k8s manifests, tool config and README: session-17-devsecops/homework/
+#
+# Code -> Build + Unit Test -> SAST (Bandit) | SCA (pip-audit) | Secret Scan (Gitleaks)
+#      -> Docker Build -> Image Scan (Trivy) -> Security Gate -> Push (GHCR) -> Deploy (kind)
+name: "Session 17 - DevSecOps Pipeline"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "session-17-devsecops/homework/**"
+      - ".github/workflows/session17-devsecops.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "session-17-devsecops/homework/**"
+      - ".github/workflows/session17-devsecops.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: session17-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  IMAGE_BASENAME: session17-devsecops
+  KIND_CLUSTER: s17-devsecops
+  # Scanner versions are pinned and their downloads are checked against the
+  # release checksums (see the install steps).
+  TRIVY_VERSION: "0.75.0"
+  GITLEAKS_VERSION: "8.30.1"
+
+defaults:
+  run:
+    shell: bash
+    working-directory: session-17-devsecops/homework
+
+jobs:
+  # ------------------------------------------------------ 1. build + unit tests
+  build-test:
+    name: Build + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: session-17-devsecops/homework/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Build (byte-compile the app)
+        run: python -m compileall -q app && echo "compileall OK"
+
+      - name: Unit tests with coverage
+        run: |
+          mkdir -p reports
+          python -m pytest -v \
+            --junitxml=reports/junit.xml \
+            --cov=app --cov-report=term-missing \
+            --cov-report=xml:reports/coverage.xml \
+            --cov-fail-under=90
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: s17-test-reports
+          path: session-17-devsecops/homework/reports/
+          retention-days: 7
+
+  # ------------------------------------------------------------- 2. SAST
+  sast:
+    name: SAST (Bandit)
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Bandit
+        run: pip install -r requirements-security.txt
+
+      - name: Bandit reports (all findings, never fails)
+        run: |
+          mkdir -p reports
+          bandit -c pyproject.toml -r app --exit-zero -f json  -o reports/bandit.json
+          bandit -c pyproject.toml -r app --exit-zero -f sarif -o reports/bandit.sarif
+
+      - name: Bandit gate (fail on MEDIUM+ severity, MEDIUM+ confidence)
+        run: bandit -c pyproject.toml -r app --severity-level medium --confidence-level medium
+
+      - name: Upload SAST reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: s17-sast-bandit
+          path: session-17-devsecops/homework/reports/
+          retention-days: 7
+
+  # -------------------------------------------------------------- 3. SCA
+  sca:
+    name: SCA (pip-audit)
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pip-audit
+        run: pip install -r requirements-security.txt
+
+      - name: pip-audit report (JSON)
+        run: |
+          mkdir -p reports
+          pip-audit -r requirements-dev.txt --desc -f json -o reports/pip-audit.json || true
+
+      - name: pip-audit gate (fail on any known vulnerability)
+        run: pip-audit -r requirements-dev.txt --strict --desc
+
+      - name: Upload SCA report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: s17-sca-pip-audit
+          path: session-17-devsecops/homework/reports/
+          retention-days: 7
+
+  # ------------------------------------------------------- 4. secret scanning
+  secret-scan:
+    name: Secret scan (Gitleaks)
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (full history)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks ${{ env.GITLEAKS_VERSION }} (checksum verified)
+        working-directory: ${{ runner.temp }}
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          file="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "${base}/${file}"
+          curl -sSfLO "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " ${file}\$" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${file}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan the homework files
+        run: |
+          mkdir -p "${RUNNER_TEMP}/reports"
+          gitleaks dir . --redact --no-banner -v \
+            --report-format sarif --report-path "${RUNNER_TEMP}/reports/gitleaks-dir.sarif"
+
+      - name: Scan git history of the homework folder and this workflow
+        working-directory: ${{ github.workspace }}
+        run: |
+          gitleaks git . --redact --no-banner -v \
+            --log-opts="--all -- session-17-devsecops/homework .github/workflows/session17-devsecops.yml" \
+            --report-format sarif --report-path "${RUNNER_TEMP}/reports/gitleaks-git.sarif"
+
+      - name: Upload secret-scan reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: s17-secret-scan-gitleaks
+          path: ${{ runner.temp }}/reports/
+          retention-days: 7
+
+  # ----------------------------------------------------------- 5. docker build
+  docker-build:
+    name: Docker build
+    needs: [sast, sca, secret-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            -t "${IMAGE_BASENAME}:${GITHUB_SHA}" .
+          docker image ls "${IMAGE_BASENAME}"
+          echo "Image user: $(docker image inspect -f '{{.Config.User}}' "${IMAGE_BASENAME}:${GITHUB_SHA}")"
+
+      - name: Save image for the next jobs
+        run: docker save "${IMAGE_BASENAME}:${GITHUB_SHA}" | gzip > "${RUNNER_TEMP}/image.tar.gz"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: s17-image
+          path: ${{ runner.temp }}/image.tar.gz
+          retention-days: 3
+          compression-level: 0
+
+  # ------------------------------------------------ 6. container image scan
+  image-scan:
+    name: Image scan (Trivy)
+    needs: docker-build
+    runs-on: ubuntu-latest
+    env:
+      TRIVY_NO_PROGRESS: "true"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: s17-image
+          path: ${{ runner.temp }}
+
+      - name: Load image
+        run: docker load -i "${RUNNER_TEMP}/image.tar.gz"
+
+      - name: Install Trivy ${{ env.TRIVY_VERSION }} (checksum verified)
+        working-directory: ${{ runner.temp }}
+        run: |
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          file="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfLO "${base}/${file}"
+          curl -sSfLO "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep "  ${file}\$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${file}" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Trivy reports (all severities, never fails)
+        run: |
+          mkdir -p reports
+          trivy image --scanners vuln --format json  -o reports/trivy-image.json  "${IMAGE_BASENAME}:${GITHUB_SHA}"
+          trivy image --scanners vuln --format sarif -o reports/trivy-image.sarif "${IMAGE_BASENAME}:${GITHUB_SHA}"
+          trivy image --scanners vuln --format table "${IMAGE_BASENAME}:${GITHUB_SHA}"
+
+      - name: Trivy gate (fail on fixable HIGH/CRITICAL)
+        run: |
+          trivy image --scanners vuln \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+            "${IMAGE_BASENAME}:${GITHUB_SHA}"
+
+      - name: Trivy misconfiguration gate (Dockerfile + k8s manifests)
+        run: |
+          trivy config --severity HIGH,CRITICAL --exit-code 1 .
+
+      - name: Upload image-scan reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: s17-image-scan-trivy
+          path: session-17-devsecops/homework/reports/
+          retention-days: 7
+
+  # ------------------------------------------------------- 7. security gate
+  security-gate:
+    name: Security gate
+    needs: [build-test, sast, sca, secret-scan, docker-build, image-scan]
+    # Run even when an earlier job failed, so the summary shows WHY we stop.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Evaluate all checks
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          {
+            echo "### Security gate"
+            echo "| Check | Result |"
+            echo "|---|---|"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"${NEEDS}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          failed="$(jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")' <<<"${NEEDS}")"
+          if [ -n "${failed}" ]; then
+            echo "GATE: FAIL - not successful: ${failed}. The image will NOT be pushed or deployed." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "GATE: PASS - all tests and security checks passed." | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------ 8. push image
+  push-image:
+    name: Push image to GHCR
+    needs: security-gate
+    # Publish only from main, never from pull requests.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Image name (GHCR needs lowercase)
+        id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/${IMAGE_BASENAME}" >> "$GITHUB_OUTPUT"
+
+      # The exact image that was scanned, not a rebuild
+      - name: Download scanned image
+        uses: actions/download-artifact@v8
+        with:
+          name: s17-image
+          path: ${{ runner.temp }}
+
+      - name: Log in to GHCR with GITHUB_TOKEN
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+        run: |
+          docker load -i "${RUNNER_TEMP}/image.tar.gz"
+          docker tag "${IMAGE_BASENAME}:${GITHUB_SHA}" "${IMAGE}:${GITHUB_SHA}"
+          docker tag "${IMAGE_BASENAME}:${GITHUB_SHA}" "${IMAGE}:latest"
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          docker push "${IMAGE}:latest"
+          digest="$(docker image inspect -f '{{index .RepoDigests 0}}' "${IMAGE}:${GITHUB_SHA}")"
+          {
+            echo "### Image pushed"
+            echo '```'
+            echo "${IMAGE}:${GITHUB_SHA}"
+            echo "${digest}"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------ 9. deploy to Kubernetes
+  deploy:
+    name: Deploy to Kubernetes (kind)
+    needs: push-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.push-image.outputs.image }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Create kind cluster in the runner
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ${{ env.KIND_CLUSTER }}
+          wait: 120s
+
+      - name: Log in to GHCR with GITHUB_TOKEN
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the pushed image and load it into kind
+        run: |
+          docker pull "${IMAGE}:${GITHUB_SHA}"
+          kind load docker-image "${IMAGE}:${GITHUB_SHA}" --name "${KIND_CLUSTER}"
+
+      - name: Apply manifests
+        run: |
+          mkdir -p "${RUNNER_TEMP}/k8s"
+          sed "s|image: .*session17-devsecops:__IMAGE_TAG__|image: ${IMAGE}:${GITHUB_SHA}|" \
+            k8s/deployment.yaml > "${RUNNER_TEMP}/k8s/deployment.yaml"
+          cp k8s/service.yaml "${RUNNER_TEMP}/k8s/"
+          grep "image:" "${RUNNER_TEMP}/k8s/deployment.yaml"
+          kubectl apply -f "${RUNNER_TEMP}/k8s/"
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/devsecops-app --timeout=120s
+
+      - name: Verify the deployment
+        run: |
+          kubectl get deploy,pods,svc -o wide
+          kubectl port-forward service/devsecops-app 8080:80 >/tmp/port-forward.log 2>&1 &
+          for _ in $(seq 1 20); do
+            curl -fsS http://localhost:8080/health && break
+            sleep 1
+          done
+          echo
+          curl -fsS http://localhost:8080/api/status | tee /tmp/status.json; echo
+          jq -e --arg sha "${GITHUB_SHA}" '.commit == $sha' /tmp/status.json
+          curl -fsSI http://localhost:8080/ | grep -i '^x-content-type-options'
+
+      - name: Debug info on failure
+        if: failure()
+        run: |
+          kubectl describe deployment devsecops-app || true
+          kubectl describe pods -l app=devsecops-app || true
+          kubectl logs -l app=devsecops-app --tail=50 || true

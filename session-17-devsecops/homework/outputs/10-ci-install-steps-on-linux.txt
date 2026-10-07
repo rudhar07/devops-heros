@@ -1,0 +1,23 @@
+# Session 17 - the workflow's 'Install gitleaks' and 'Install Trivy' steps (extracted from the YAML unchanged) run in an ubuntu:24.04 linux/amd64 container, like the ubuntu-latest runner. Only difference: the container runs as root, so a tiny 'sudo' shim is added.
+# Recorded on 2026-10-07 22:24:07 IST on macOS 26.5.2 (arm64)
+
+$ docker run --rm --platform linux/amd64 -e GITLEAKS_VERSION=8.30.1 -e TRIVY_VERSION=0.75.0 -v $T:/steps:ro ubuntu:24.04 bash -euo pipefail -c 'apt-get update -qq >/dev/null && apt-get install -y -qq curl ca-certificates >/dev/null 2>&1; printf "#!/bin/sh
+exec \"\$@\"
+" > /usr/local/bin/sudo && chmod +x /usr/local/bin/sudo; cd /tmp; echo "--- install-gitleaks.sh"; bash -euo pipefail /steps/install-gitleaks.sh; echo "--- install-trivy.sh"; bash -euo pipefail /steps/install-trivy.sh; uname -m'
+Unable to find image 'ubuntu:24.04' locally
+24.04: Pulling from library/ubuntu
+a60ef8ec184e: Pulling fs layer
+2ea90c0e4faa: Download complete
+a60ef8ec184e: Download complete
+a60ef8ec184e: Pull complete
+Digest: sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+Status: Downloaded newer image for ubuntu:24.04
+--- install-gitleaks.sh
+gitleaks_8.30.1_linux_x64.tar.gz: OK
+8.30.1
+--- install-trivy.sh
+trivy_0.75.0_Linux-64bit.tar.gz: OK
+Version: 0.75.0
+x86_64
+[exit code: 0]
+

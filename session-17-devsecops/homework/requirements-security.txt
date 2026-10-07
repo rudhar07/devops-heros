@@ -1,0 +1,3 @@
+# Security tools used by the pipeline (installed only in the scan jobs)
+bandit[sarif]==1.9.4
+pip-audit==2.10.1

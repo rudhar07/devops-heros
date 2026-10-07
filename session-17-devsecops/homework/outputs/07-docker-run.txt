@@ -1,0 +1,71 @@
+# Session 17 - run the scanned image like Kubernetes will (read-only root fs, /tmp tmpfs, all capabilities dropped, no-new-privileges) and curl it on host port 8083
+# Recorded on 2026-10-07 22:07:02 IST on macOS 26.5.2 (arm64)
+
+$ docker run -d --name hw-d-s17-app -p 8083:8080 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges session17-devsecops:local-test
+59f458493362b0d6c680f4edd5ac40f488877bbb1fc7c866b8379711d5fc9274
+[exit code: 0]
+
+$ for _ in $(seq 1 20); do curl -fsS http://localhost:8083/health 2>/dev/null && break; sleep 1; done; echo
+{"status":"healthy","timestamp":"2026-10-07T16:37:03.764144Z","uptime_seconds":0.57}
+
+[exit code: 0]
+
+$ curl -fsS http://localhost:8083/api/status; echo
+{"app":"DevSecOps Dashboard","commit":"local-test","platform":"Linux","python_version":"3.13.16","status":"running","timestamp":"2026-10-07T16:37:03.787120Z","total_requests":1,"uptime":"00h 00m 00s","version":"2.1.0"}
+
+[exit code: 0]
+
+$ curl -fsS -X POST -H 'Content-Type: application/json' -d '{"a":7,"b":2,"operation":"power"}' http://localhost:8083/api/calculate; echo
+{"a":7.0,"b":2.0,"expression":"7.0 ^ 2.0 = 49.0","operation":"power","result":49.0,"symbol":"^"}
+
+[exit code: 0]
+
+$ curl -sS -w ' -> HTTP %{http_code}' -X POST -H 'Content-Type: application/json' -d '{"a":10,"b":1000,"operation":"power"}' http://localhost:8083/api/calculate; echo
+{"error":"Result is too large"}
+ -> HTTP 400
+[exit code: 0]
+
+$ curl -fsS http://localhost:8083/ | grep -o '<title>.*</title>'
+<title>DevSecOps Dashboard | Session 17</title>
+[exit code: 0]
+
+$ curl -fsSI http://localhost:8083/health | grep -iE '^(HTTP|x-content-type-options|x-frame-options|referrer-policy)'
+HTTP/1.1 200 OK
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: no-referrer
+[exit code: 0]
+
+$ echo "Container runs as: $(docker exec hw-d-s17-app id)"
+Container runs as: uid=10001(appuser) gid=10001(appuser) groups=10001(appuser)
+[exit code: 0]
+
+$ docker exec hw-d-s17-app sh -c 'touch /app/hacked' ; echo 'write to /app blocked as expected'
+touch: cannot touch '/app/hacked': Read-only file system
+write to /app blocked as expected
+[exit code: 0]
+
+$ sleep 35; docker inspect -f 'Docker HEALTHCHECK status: {{.State.Health.Status}}' hw-d-s17-app
+Docker HEALTHCHECK status: healthy
+[exit code: 0]
+
+$ docker logs hw-d-s17-app 2>&1 | head -20
+[2026-10-07 16:37:03 +0000] [1] [INFO] Starting gunicorn 26.2.0
+[2026-10-07 16:37:03 +0000] [1] [INFO] Listening at: http://0.0.0.0:8080 (1)
+[2026-10-07 16:37:03 +0000] [1] [INFO] Using worker: sync
+[2026-10-07 16:37:03 +0000] [7] [INFO] Booting worker with pid: 7
+[2026-10-07 16:37:03 +0000] [8] [INFO] Booting worker with pid: 8
+192.168.65.1 - - [07/Oct/2026:16:37:03 +0000] "GET /health HTTP/1.1" 200 85 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:37:03 +0000] "GET /api/status HTTP/1.1" 200 219 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:37:03 +0000] "POST /api/calculate HTTP/1.1" 200 97 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:37:03 +0000] "POST /api/calculate HTTP/1.1" 400 32 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:37:03 +0000] "GET / HTTP/1.1" 200 6589 "-" "curl/8.7.1"
+192.168.65.1 - - [07/Oct/2026:16:37:03 +0000] "HEAD /health HTTP/1.1" 200 0 "-" "curl/8.7.1"
+127.0.0.1 - - [07/Oct/2026:16:37:07 +0000] "GET /health HTTP/1.1" 200 85 "-" "Python-urllib/3.13"
+127.0.0.1 - - [07/Oct/2026:16:37:38 +0000] "GET /health HTTP/1.1" 200 86 "-" "Python-urllib/3.13"
+[exit code: 0]
+
+$ docker rm -f hw-d-s17-app
+hw-d-s17-app
+[exit code: 0]
+

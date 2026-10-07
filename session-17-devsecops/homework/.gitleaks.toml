@@ -1,0 +1,13 @@
+# Gitleaks config for the session-17 homework (picked up automatically by
+# "gitleaks dir ." because it sits in the scanned folder).
+# Keep ALL default rules, and only skip the reports/ folder: it holds generated
+# scanner output (gitignored, never committed). Trivy's JSON report copies the
+# image history, including the Python base image's public GPG_KEY fingerprint,
+# which the generic-api-key rule reported as a false positive on my machine.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated scanner reports - gitignored, never committed"
+paths = ['''(^|/)reports/''']

@@ -1,0 +1,157 @@
+# Session 17 - stage 'image-scan' locally: Trivy reports + the two Trivy gates
+# Recorded on 2026-10-07 22:36:25 IST on macOS 26.5.2 (arm64)
+
+$ trivy --version | head -1
+Version: 0.75.0
+[exit code: 0]
+
+$ TRIVY_NO_PROGRESS=true trivy image --scanners vuln --format json -o reports/trivy-image.json session17-devsecops:local-test && TRIVY_NO_PROGRESS=true trivy image --scanners vuln --format sarif -o reports/trivy-image.sarif session17-devsecops:local-test && ls -l reports/trivy-image.* | awk '{print $5, $NF}'
+2026-10-07T22:36:25+05:30	INFO	[vuln] Vulnerability scanning is enabled
+2026-10-07T22:36:51+05:30	INFO	Detected OS	family="debian" version="13.7"
+2026-10-07T22:36:51+05:30	INFO	[debian] Detecting vulnerabilities...	os_version="13" pkg_num=87
+2026-10-07T22:36:51+05:30	INFO	Number of language-specific files	num=1
+2026-10-07T22:36:51+05:30	INFO	[python-pkg] Detecting vulnerabilities...
+2026-10-07T22:36:51+05:30	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.75/guide/scanner/vulnerability#severity-selection for details.
+2026-10-07T22:36:51+05:30	INFO	[vuln] Vulnerability scanning is enabled
+2026-10-07T22:36:54+05:30	INFO	Detected OS	family="debian" version="13.7"
+2026-10-07T22:36:54+05:30	INFO	[debian] Detecting vulnerabilities...	os_version="13" pkg_num=87
+2026-10-07T22:36:54+05:30	INFO	Number of language-specific files	num=1
+2026-10-07T22:36:54+05:30	INFO	[python-pkg] Detecting vulnerabilities...
+2026-10-07T22:36:54+05:30	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.75/guide/scanner/vulnerability#severity-selection for details.
+843696 reports/trivy-image.json
+334804 reports/trivy-image.sarif
+[exit code: 0]
+
+# All findings of any severity, from the JSON report (these are reported, not gated):
+$ jq -r '[.Results[] | .Vulnerabilities // [] | .[] | .Severity] | group_by(.) | map({(.[0]): length}) | add' reports/trivy-image.json
+{
+  "HIGH": 44,
+  "LOW": 61,
+  "MEDIUM": 58,
+  "UNKNOWN": 2
+}
+[exit code: 0]
+
+# Every HIGH/CRITICAL finding and its fix status (affected / fix_deferred = Debian has no fixed package yet):
+$ jq -r '.Results[] | .Vulnerabilities // [] | .[] | select(.Severity=="HIGH" or .Severity=="CRITICAL") | "\(.Severity) \(.PkgName) \(.InstalledVersion) \(.Status) \(.VulnerabilityID)"' reports/trivy-image.json
+HIGH bsdutils 1:2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH bsdutils 1:2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH bsdutils 1:2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH bsdutils 1:2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH libacl1 2.3.2-2+b1 affected CVE-2026-54369
+HIGH libblkid1 2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH libblkid1 2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH libblkid1 2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH libblkid1 2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH liblastlog2-2 2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH liblastlog2-2 2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH liblastlog2-2 2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH liblastlog2-2 2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH libmount1 2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH libmount1 2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH libmount1 2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH libmount1 2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH libncursesw6 6.5+20250216-2 affected CVE-2025-69720
+HIGH libsmartcols1 2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH libsmartcols1 2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH libsmartcols1 2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH libsmartcols1 2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH libsystemd0 257.13-1~deb13u1 affected CVE-2026-16742
+HIGH libtinfo6 6.5+20250216-2 affected CVE-2025-69720
+HIGH libudev1 257.13-1~deb13u1 affected CVE-2026-16742
+HIGH libuuid1 2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH libuuid1 2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH libuuid1 2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH libuuid1 2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH login 1:4.16.0-2+really2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH login 1:4.16.0-2+really2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH login 1:4.16.0-2+really2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH login 1:4.16.0-2+really2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH mount 2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH mount 2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH mount 2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH mount 2.41.5-0+deb13u1 affected CVE-2026-78410
+HIGH ncurses-base 6.5+20250216-2 affected CVE-2025-69720
+HIGH ncurses-bin 6.5+20250216-2 affected CVE-2025-69720
+HIGH perl-base 5.40.1-6+deb13u1 fix_deferred CVE-2026-9538
+HIGH util-linux 2.41.5-0+deb13u1 affected CVE-2026-76642
+HIGH util-linux 2.41.5-0+deb13u1 affected CVE-2026-78408
+HIGH util-linux 2.41.5-0+deb13u1 affected CVE-2026-78409
+HIGH util-linux 2.41.5-0+deb13u1 affected CVE-2026-78410
+[exit code: 0]
+
+$ jq -r '[.Results[] | .Vulnerabilities // [] | .[] | select(.Severity=="HIGH" or .Severity=="CRITICAL") | .Status] | group_by(.) | map({(.[0]): length}) | add' reports/trivy-image.json
+{
+  "affected": 43,
+  "fix_deferred": 1
+}
+[exit code: 0]
+
+# Gate 1 - fixable HIGH/CRITICAL vulnerabilities (same command as the workflow):
+$ TRIVY_NO_PROGRESS=true trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 session17-devsecops:local-test
+2026-10-07T22:36:54+05:30	INFO	[vuln] Vulnerability scanning is enabled
+2026-10-07T22:36:58+05:30	INFO	Detected OS	family="debian" version="13.7"
+2026-10-07T22:36:58+05:30	INFO	[debian] Detecting vulnerabilities...	os_version="13" pkg_num=87
+2026-10-07T22:36:58+05:30	INFO	Number of language-specific files	num=1
+2026-10-07T22:36:58+05:30	INFO	[python-pkg] Detecting vulnerabilities...
+2026-10-07T22:36:58+05:30	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.75/guide/scanner/vulnerability#severity-selection for details.
+
+Report Summary
+
+┌──────────────────────────────────────────────────────────────────────────────┬────────────┬─────────────────┐
+│                                    Target                                    │    Type    │ Vulnerabilities │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ session17-devsecops:local-test (debian 13.7)                                 │   debian   │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/blinker-1.9.0.dist-info/METADATA      │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/click-8.5.0.dist-info/METADATA        │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/flask-3.1.3.dist-info/METADATA        │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/gunicorn-26.2.0.dist-info/METADATA    │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/itsdangerous-2.2.0.dist-info/METADATA │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/jinja2-3.1.6.dist-info/METADATA       │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/markupsafe-3.0.4.dist-info/METADATA   │ python-pkg │        0        │
+├──────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┤
+│ usr/local/lib/python3.13/site-packages/werkzeug-3.1.9.dist-info/METADATA     │ python-pkg │        0        │
+└──────────────────────────────────────────────────────────────────────────────┴────────────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+[exit code: 0]
+
+# Gate 2 - misconfigurations in the Dockerfile and k8s manifests (same command as the workflow):
+$ TRIVY_NO_PROGRESS=true trivy config --severity HIGH,CRITICAL --exit-code 1 .
+2026-10-07T22:36:58+05:30	INFO	[misconfig] Misconfiguration scanning is enabled
+2026-10-07T22:36:58+05:30	INFO	[checks-client] Using existing checks from cache	path="/Users/rudhar/Library/Caches/trivy/policy/content"
+2026-10-07T22:36:58+05:30	INFO	Detected config files	num=3
+
+Report Summary
+
+┌─────────────────────┬────────────┬───────────────────┐
+│       Target        │    Type    │ Misconfigurations │
+├─────────────────────┼────────────┼───────────────────┤
+│ Dockerfile          │ dockerfile │         0         │
+├─────────────────────┼────────────┼───────────────────┤
+│ k8s/deployment.yaml │ kubernetes │         0         │
+├─────────────────────┼────────────┼───────────────────┤
+│ k8s/service.yaml    │ kubernetes │         0         │
+└─────────────────────┴────────────┴───────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+[exit code: 0]
+
+# For information: the same config scan without the severity filter (LOW/MEDIUM findings are below the gate):
+$ TRIVY_NO_PROGRESS=true trivy config . 2>/dev/null | grep -E '^(Failures|[A-Z]+-[0-9]+ )'
+Failures: 2 (UNKNOWN: 0, LOW: 1, MEDIUM: 1, HIGH: 0, CRITICAL: 0)
+KSV-0110 (LOW): deployment devsecops-app in default namespace should set metadata.namespace to a non-default namespace
+KSV-0125 (MEDIUM): Container app in deployment devsecops-app (namespace: default) uses an image from an untrusted registry.
+[exit code: 0]
+

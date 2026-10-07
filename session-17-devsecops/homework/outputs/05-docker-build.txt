@@ -1,0 +1,85 @@
+# Session 17 - stage 'docker-build' locally
+# Recorded on 2026-10-07 22:06:39 IST on macOS 26.5.2 (arm64)
+
+$ docker build --build-arg GIT_SHA=local-test -t session17-devsecops:local-test . 2>&1 | grep -vE '^#[0-9]+ [0-9.]+ (Downloading|Collecting)'
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.81kB 0.0s done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
+#2 DONE 0.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 132B done
+#3 DONE 0.0s
+
+#4 [1/6] FROM docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
+#4 resolve docker.io/library/python:3.13-slim-trixie@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 41.09kB 0.0s done
+#5 DONE 0.0s
+
+#6 [2/6] WORKDIR /app
+#6 CACHED
+
+#7 [3/6] COPY requirements.txt .
+#7 CACHED
+
+#8 [4/6] RUN pip install -r requirements.txt  && pip uninstall -y pip
+#8 1.996   Downloading flask-3.1.3-py3-none-any.whl.metadata (3.2 kB)
+#8 2.093   Downloading gunicorn-26.2.0-py3-none-any.whl.metadata (5.5 kB)
+#8 2.195   Downloading blinker-1.9.0-py3-none-any.whl.metadata (1.6 kB)
+#8 2.314   Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+#8 2.458   Downloading itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
+#8 2.627   Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+#8 2.891   Downloading markupsafe-3.0.4-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (2.7 kB)
+#8 2.969   Downloading werkzeug-3.1.9-py3-none-any.whl.metadata (4.1 kB)
+#8 3.586 Installing collected packages: markupsafe, itsdangerous, gunicorn, click, blinker, werkzeug, jinja2, Flask
+#8 3.953 
+#8 3.954 Successfully installed Flask-3.1.3 blinker-1.9.0 click-8.5.0 gunicorn-26.2.0 itsdangerous-2.2.0 jinja2-3.1.6 markupsafe-3.0.4 werkzeug-3.1.9
+#8 3.954 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#8 4.648 Found existing installation: pip 26.2.1
+#8 4.665 Uninstalling pip-26.2.1:
+#8 4.779   Successfully uninstalled pip-26.2.1
+#8 4.785 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#8 DONE 4.8s
+
+#9 [5/6] COPY app ./app
+#9 DONE 0.0s
+
+#10 [6/6] RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin appuser
+#10 DONE 0.2s
+
+#11 exporting to image
+#11 exporting layers
+#11 exporting layers 0.2s done
+#11 exporting manifest sha256:20d9cb1e43008ecd901aadebf6f9c1515ec10504d06eff1d5383ceeb50d79705 done
+#11 exporting config sha256:186367d34c8ee9dd776f3faed1a5686b982444028eba28d798b7162c4bfa4969 done
+#11 exporting attestation manifest sha256:84db69189ee4393217f8b97f8183bc832431cbf2343925798c7e6aad1d88bfa6 done
+#11 exporting manifest list sha256:c1d350854b8af8f01fd953839ce4d34d0d1fcff02457086b7eb2ca6423a839c6 done
+#11 naming to docker.io/library/session17-devsecops:local-test done
+#11 unpacking to docker.io/library/session17-devsecops:local-test 0.1s done
+#11 DONE 0.3s
+[exit code: 0]
+
+$ docker image ls session17-devsecops
+IMAGE                            ID             DISK USAGE   CONTENT SIZE   EXTRA
+session17-devsecops:local-test   c1d350854b8a        212MB         45.6MB        
+[exit code: 0]
+
+$ docker image inspect -f 'User={{.Config.User}} Arch={{.Architecture}} Healthcheck={{.Config.Healthcheck.Test}}' session17-devsecops:local-test
+User=10001 Arch=arm64 Healthcheck=[CMD python -c import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)]
+[exit code: 0]
+
+$ docker run --rm --entrypoint python session17-devsecops:local-test -c 'import importlib.util as u; print("pip present in image:", u.find_spec("pip") is not None)'
+pip present in image: False
+[exit code: 0]
+
+$ docker save session17-devsecops:local-test | gzip > $T/s17-image.tar.gz && ls -lh $T/s17-image.tar.gz | awk "{print \$5}"
+43M
+[exit code: 0]
+

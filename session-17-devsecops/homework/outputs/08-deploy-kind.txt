@@ -1,0 +1,84 @@
+# Session 17 - 'deploy' stage locally on a throwaway kind cluster 'hw-d'. Same sed/apply/rollout/curl as the workflow; the image is my local scanned build instead of a 'docker pull' from GHCR.
+# Recorded on 2026-10-07 22:18:43 IST on macOS 26.5.2 (arm64)
+
+$ kind version; kubectl version 2>/dev/null | head -2
+kind v0.33.0 go1.27.0 darwin/arm64
+Client Version: v1.36.1
+Kustomize Version: v5.8.1
+[exit code: 0]
+
+$ kubectl get nodes
+NAME                 STATUS   ROLES           AGE     VERSION
+hw-d-control-plane   Ready    control-plane   8m45s   v1.37.0
+[exit code: 0]
+
+$ IMAGE=ghcr.io/rudhar07/devops-heros/session17-devsecops; docker tag session17-devsecops:local-test "${IMAGE}:local-test" && kind load docker-image "${IMAGE}:local-test" --name hw-d
+Image: "ghcr.io/rudhar07/devops-heros/session17-devsecops:local-test" with ID "sha256:c1d350854b8af8f01fd953839ce4d34d0d1fcff02457086b7eb2ca6423a839c6" not yet present on node "hw-d-control-plane", loading...
+[exit code: 0]
+
+$ IMAGE=ghcr.io/rudhar07/devops-heros/session17-devsecops; GITHUB_SHA=local-test; mkdir -p $T/k8s17 && sed "s|image: .*session17-devsecops:__IMAGE_TAG__|image: ${IMAGE}:${GITHUB_SHA}|" k8s/deployment.yaml > $T/k8s17/deployment.yaml && cp k8s/service.yaml $T/k8s17/ && grep "image:" $T/k8s17/deployment.yaml && kubectl apply -f $T/k8s17/
+          image: ghcr.io/rudhar07/devops-heros/session17-devsecops:local-test
+deployment.apps/devsecops-app created
+service/devsecops-app created
+[exit code: 0]
+
+$ kubectl rollout status deployment/devsecops-app --timeout=120s
+Waiting for deployment spec update to be observed...
+Waiting for deployment "devsecops-app" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "devsecops-app" rollout to finish: 0 of 2 updated replicas are available...
+deployment "devsecops-app" successfully rolled out
+[exit code: 0]
+
+$ kubectl get deploy,pods,svc -l app=devsecops-app -o wide
+NAME                            READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                                         SELECTOR
+deployment.apps/devsecops-app   2/2     2            2           63s   app          ghcr.io/rudhar07/devops-heros/session17-devsecops:local-test   app=devsecops-app
+
+NAME                                 READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+pod/devsecops-app-579dfdfbcd-dw64t   1/1     Running   0          63s   10.244.0.14   hw-d-control-plane   <none>           <none>
+pod/devsecops-app-579dfdfbcd-vcpdg   1/1     Running   0          63s   10.244.0.13   hw-d-control-plane   <none>           <none>
+[exit code: 0]
+
+# Security settings that actually reached the pod:
+$ kubectl get pod -l app=devsecops-app -o jsonpath='{range .items[0]}{.spec.securityContext}{"
+"}{.spec.containers[0].securityContext}{"
+"}{.spec.containers[0].resources}{"
+"}automountServiceAccountToken={.spec.automountServiceAccountToken}{"
+"}{end}'
+{"runAsGroup":10001,"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}}
+{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}
+{"limits":{"cpu":"500m","memory":"192Mi"},"requests":{"cpu":"50m","memory":"96Mi"}}
+automountServiceAccountToken=false
+[exit code: 0]
+
+$ POD=$(kubectl get pod -l app=devsecops-app -o jsonpath="{.items[0].metadata.name}"); kubectl exec $POD -- id; kubectl exec $POD -- touch /app/x; kubectl exec $POD -- touch /tmp/ok && echo "/tmp is writable - it is the emptyDir volume"
+uid=10001(appuser) gid=10001(appuser) groups=10001(appuser)
+touch: cannot touch '/app/x': Read-only file system
+command terminated with exit code 1
+/tmp is writable - it is the emptyDir volume
+[exit code: 0]
+
+$ kubectl port-forward service/devsecops-app 18083:80 >/tmp/hw-d-pf.log 2>&1 & PF=$!; for _ in $(seq 1 20); do curl -fsS http://localhost:18083/health 2>/dev/null && break; sleep 1; done; echo; curl -fsS http://localhost:18083/api/status | tee /tmp/hw-d-status.json; echo; jq -e --arg sha local-test ".commit == \$sha" /tmp/hw-d-status.json; curl -fsSI http://localhost:18083/ | grep -i "^x-content-type-options"; kill $PF
+{"status":"healthy","timestamp":"2026-10-07T16:49:50.840405Z","uptime_seconds":5.97}
+
+{"app":"DevSecOps Dashboard","commit":"local-test","platform":"Linux","python_version":"3.13.16","status":"running","timestamp":"2026-10-07T16:49:50.851277Z","total_requests":3,"uptime":"00h 00m 05s","version":"2.1.0"}
+
+true
+X-Content-Type-Options: nosniff
+[exit code: 0]
+
+$ kubectl get pods -l app=devsecops-app; kubectl logs deploy/devsecops-app --tail=4
+NAME                             READY   STATUS    RESTARTS   AGE
+devsecops-app-579dfdfbcd-dw64t   1/1     Running   0          64s
+devsecops-app-579dfdfbcd-vcpdg   1/1     Running   0          64s
+Found 2 pods, using pod/devsecops-app-579dfdfbcd-dw64t
+10.244.0.1 - - [07/Oct/2026:16:49:49 +0000] "GET /health HTTP/1.1" 200 85 "-" "kube-probe/1.37"
+127.0.0.1 - - [07/Oct/2026:16:49:50 +0000] "GET /health HTTP/1.1" 200 85 "-" "curl/8.7.1"
+127.0.0.1 - - [07/Oct/2026:16:49:50 +0000] "GET /api/status HTTP/1.1" 200 219 "-" "curl/8.7.1"
+127.0.0.1 - - [07/Oct/2026:16:49:50 +0000] "HEAD / HTTP/1.1" 200 0 "-" "curl/8.7.1"
+[exit code: 0]
+
+$ kubectl delete -f $T/k8s17/
+deployment.apps "devsecops-app" deleted from default namespace
+service "devsecops-app" deleted from default namespace
+[exit code: 0]
+

@@ -1,0 +1,72 @@
+# Session 17 - stage 'build-test' locally (Python 3.13 venv outside the repo)
+# Recorded on 2026-10-07 22:06:12 IST on macOS 26.5.2 (arm64)
+
+$ python --version
+Python 3.13.14
+[exit code: 0]
+
+$ uv pip install -r requirements-dev.txt   # workflow: pip install -r requirements-dev.txt
+Using Python 3.13.14 environment at: <scratch>/venv-3.13
+Checked 4 packages in 30ms
+[exit code: 0]
+
+$ python -m compileall -q app && echo 'compileall OK'
+compileall OK
+[exit code: 0]
+
+$ mkdir -p reports && python -m pytest -v -p no:cacheprovider --junitxml=reports/junit.xml --cov=app --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=90
+============================= test session starts ==============================
+platform darwin -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- <scratch>/venv-3.13/bin/python
+rootdir: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-17-devsecops/homework
+configfile: pytest.ini
+testpaths: tests
+plugins: cov-7.1.0, platformdirs-4.12.3
+collecting ... collected 26 items
+
+tests/test_app.py::test_home PASSED                                      [  3%]
+tests/test_app.py::test_health PASSED                                    [  7%]
+tests/test_app.py::test_greet PASSED                                     [ 11%]
+tests/test_app.py::test_add_numbers PASSED                               [ 15%]
+tests/test_app.py::test_add_numbers_missing_fields PASSED                [ 19%]
+tests/test_app.py::test_calculator_multiply PASSED                       [ 23%]
+tests/test_app.py::test_calculator_divide_by_zero PASSED                 [ 26%]
+tests/test_app.py::test_status PASSED                                    [ 30%]
+tests/test_app.py::test_security_headers PASSED                          [ 34%]
+tests/test_app.py::test_calculator_operations[add-9] PASSED              [ 38%]
+tests/test_app.py::test_calculator_operations[subtract-5] PASSED         [ 42%]
+tests/test_app.py::test_calculator_operations[divide-3.5] PASSED         [ 46%]
+tests/test_app.py::test_calculator_operations[power-49] PASSED           [ 50%]
+tests/test_app.py::test_calculator_operations[modulo-1] PASSED           [ 53%]
+tests/test_app.py::test_calculator_modulo_by_zero PASSED                 [ 57%]
+tests/test_app.py::test_calculator_overflow_is_400_not_500 PASSED        [ 61%]
+tests/test_app.py::test_calculator_complex_result_is_400 PASSED          [ 65%]
+tests/test_app.py::test_calculator_unknown_operation PASSED              [ 69%]
+tests/test_app.py::test_calculator_bad_input PASSED                      [ 73%]
+tests/test_app.py::test_add_numbers_bad_input PASSED                     [ 76%]
+tests/test_app.py::test_pipeline_run_always_passes_with_zero_fail_chance PASSED [ 80%]
+tests/test_app.py::test_pipeline_run_fails_first_stage_with_fail_chance_one PASSED [ 84%]
+tests/test_app.py::test_pipeline_run_rejects_bad_fail_chance[abc] PASSED [ 88%]
+tests/test_app.py::test_pipeline_run_rejects_bad_fail_chance[2] PASSED   [ 92%]
+tests/test_app.py::test_pipeline_run_rejects_bad_fail_chance[-0.5] PASSED [ 96%]
+tests/test_app.py::test_unknown_route_is_json_404 PASSED                 [100%]
+
+- generated xml file: /Users/rudhar/Desktop/NIFTY/Devops/hw-1/devops-heros/session-17-devsecops/homework/reports/junit.xml -
+================================ tests coverage ================================
+______________ coverage: platform darwin, python 3.13.14-final-0 _______________
+
+Name              Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------
+app/__init__.py       0      0      0      0   100%
+app/app.py          124      2     22      1    98%   282, 287
+-------------------------------------------------------------
+TOTAL               124      2     22      1    98%
+Coverage XML written to file reports/coverage.xml
+Required test coverage of 90% reached. Total coverage: 97.95%
+============================== 26 passed in 0.26s ==============================
+[exit code: 0]
+
+$ ls reports
+coverage.xml
+junit.xml
+[exit code: 0]
+

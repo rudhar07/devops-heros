@@ -1,0 +1,12 @@
+# Only tool configuration lives here - this is not a packaged project.
+
+[tool.bandit]
+# SAST scope: application code only. Tests use assert on purpose (B101).
+exclude_dirs = ["tests", ".venv", "build", "reports"]
+# No skips: every Bandit check is active. The pipeline gate fails on
+# MEDIUM+ severity with MEDIUM+ confidence (see the workflow).
+skips = []
+
+[tool.coverage.run]
+branch = true
+source = ["app"]

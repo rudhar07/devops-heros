@@ -1,0 +1,201 @@
+# Session 17 - proving the security gates really block: each gate FAILS on a deliberately bad input, then PASSES on my real code. All bad inputs live in $V, a temp folder OUTSIDE the repo, and are deleted at the end.
+# Recorded on 2026-10-07 22:23:20 IST on macOS 26.5.2 (arm64)
+
+# =================== 1. SAST gate (Bandit) ===================
+# Bad input: the instructor's original demo app (debug=True, binds 0.0.0.0), copied to $V - the original file is not modified.
+$ mkdir -p $V/sast/app && cp ../demo/app/app.py $V/sast/app/ && cp pyproject.toml $V/sast/ && cd $V/sast && bandit -c pyproject.toml -r app --severity-level medium --confidence-level medium
+[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: None
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+[main]	INFO	using config: pyproject.toml
+[main]	INFO	running on Python 3.13.14
+Run started:2026-10-07 16:53:20.501342+00:00
+
+Test results:
+>> Issue: [B201:flask_debug_true] A Flask app appears to be run with debug=True, which exposes the Werkzeug debugger and allows the execution of arbitrary code.
+   Severity: High   Confidence: Medium
+   CWE: CWE-94 (https://cwe.mitre.org/data/definitions/94.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b201_flask_debug_true.html
+   Location: app/app.py:234:4
+233	if __name__ == "__main__":
+234	    app.run(host="0.0.0.0", port=5001, debug=True)
+
+--------------------------------------------------
+>> Issue: [B104:hardcoded_bind_all_interfaces] Possible binding to all interfaces.
+   Severity: Medium   Confidence: Medium
+   CWE: CWE-605 (https://cwe.mitre.org/data/definitions/605.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html
+   Location: app/app.py:234:17
+233	if __name__ == "__main__":
+234	    app.run(host="0.0.0.0", port=5001, debug=True)
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 168
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 5
+		Medium: 1
+		High: 1
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 2
+		High: 5
+Files skipped (0):
+[exit code: 1]
+
+# Same gate on my homework app:
+$ bandit -c pyproject.toml -r app --severity-level medium --confidence-level medium 2>&1 | sed -n '/Test results/,/High: 0/p' | head -12
+Test results:
+	No issues identified.
+
+Code scanned:
+	Total lines of code: 203
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 0
+[exit code: 0]
+
+# =================== 2. SCA gate (pip-audit) ===================
+# Bad input: an old pinned Flask/Werkzeug in a temp requirements file.
+$ mkdir -p $V/sca && printf "Flask==2.2.0
+Werkzeug==2.2.2
+" > $V/sca/requirements.txt && cat $V/sca/requirements.txt && pip-audit -r $V/sca/requirements.txt --strict
+Flask==2.2.0
+Werkzeug==2.2.2
+Found 23 known vulnerabilities in 2 packages
+Name     Version ID              Fix Versions
+-------- ------- --------------- ------------
+flask    2.2.0   PYSEC-2023-62   2.2.5,2.3.2
+flask    2.2.0   PYSEC-2023-62   2.2.5,2.3.2
+flask    2.2.0   PYSEC-2026-2151 3.1.3
+flask    2.2.0   PYSEC-2026-2151 3.1.3
+werkzeug 2.2.2   PYSEC-2023-57   2.2.3
+werkzeug 2.2.2   PYSEC-2023-58   2.2.3
+werkzeug 2.2.2   PYSEC-2023-58   2.2.3
+werkzeug 2.2.2   PYSEC-2023-57   2.2.3
+werkzeug 2.2.2   PYSEC-2023-221  2.3.8,3.0.1
+werkzeug 2.2.2   PYSEC-2023-221  2.3.8,3.0.1
+werkzeug 2.2.2   PYSEC-2026-2043 3.0.3
+werkzeug 2.2.2   PYSEC-2026-2045 3.0.6
+werkzeug 2.2.2   PYSEC-2026-1860 3.0.6
+werkzeug 2.2.2   PYSEC-2026-2046 3.1.4
+werkzeug 2.2.2   PYSEC-2026-2044 3.1.5
+werkzeug 2.2.2   PYSEC-2026-2320 3.1.6
+werkzeug 2.2.2   PYSEC-2026-2046 3.1.4
+werkzeug 2.2.2   PYSEC-2026-2045 3.0.6
+werkzeug 2.2.2   PYSEC-2026-2044 3.1.5
+werkzeug 2.2.2   PYSEC-2026-2043 3.0.3
+werkzeug 2.2.2   PYSEC-2026-2320 3.1.6
+werkzeug 2.2.2   PYSEC-2026-3417 3.0.6
+werkzeug 2.2.2   CVE-2026-102598 3.1.9
+[exit code: 1]
+
+# Same gate on my homework requirements:
+$ pip-audit -r requirements-dev.txt --strict
+No known vulnerabilities found
+[exit code: 0]
+
+# =================== 3. Secret-scan gate (Gitleaks) ===================
+# Bad input: a copy of the homework folder (including .gitleaks.toml) plus a file with a FAKE, randomly generated AWS key.
+# The value is never printed, and --redact hides it in the findings.
+$ mkdir -p $V/secret && cp -R app requirements.txt .gitleaks.toml $V/secret/ && python $T/make_fake_secret.py $V/secret/settings.py && gitleaks dir $V/secret --redact --no-banner -v
+wrote fake credentials to <scratch>/vuln-demo/secret/settings.py (value not shown)
+Finding:     AWS_SECRET_ACCESS_KEY = "REDACTED"
+Secret:      REDACTED
+RuleID:      generic-api-key
+Entropy:     4.921928
+File:        <scratch>/vuln-demo/secret/settings.py
+Line:        3
+Fingerprint: <scratch>/vuln-demo/secret/settings.py:generic-api-key:3
+
+Finding:     ...WS_ACCESS_KEY_ID = "REDACTED
+Secret:      REDACTED
+RuleID:      aws-access-token
+Entropy:     3.721928
+File:        <scratch>/vuln-demo/secret/settings.py
+Line:        2
+Fingerprint: <scratch>/vuln-demo/secret/settings.py:aws-access-token:2
+
+10:23PM INF scanned ~40802 bytes (40.80 KB) in 7.06ms
+10:23PM WRN leaks found: 2
+[exit code: 1]
+
+# Same gate on my homework folder:
+$ gitleaks dir . --redact --no-banner
+10:23PM INF scanned ~111255 bytes (111.25 KB) in 6.51ms
+10:23PM INF no leaks found
+[exit code: 0]
+
+# =================== 4. Image-scan gate (Trivy) ===================
+# Bad input: my Dockerfile with an old base image (python:3.10.0-slim from 2021) instead of the pinned current one.
+$ mkdir -p $V/image && cp -R app requirements.txt .dockerignore $V/image/ && sed "s|^FROM .*|FROM python:3.10.0-slim|" Dockerfile > $V/image/Dockerfile && grep "^FROM" $V/image/Dockerfile && docker build -q -t hw-d-vuln-demo:old-base $V/image
+FROM python:3.10.0-slim
+sha256:19f425292f1b9b30ba99154d034eb4f3bd5ac6293cff1b1a84daeda815e80411
+[exit code: 0]
+
+$ TRIVY_NO_PROGRESS=true trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 hw-d-vuln-demo:old-base > $V/trivy-old.txt 2>&1; rc=$?; grep -E "^(hw-d|Python|Total)|Detected OS" $V/trivy-old.txt; grep -E "CRITICAL" $V/trivy-old.txt | head -5; echo "(full table: $(wc -l < $V/trivy-old.txt) lines, only some lines copied here)"; exit $rc
+2026-10-07T22:23:34+05:30	INFO	Detected OS	family="debian" version="11.1"
+hw-d-vuln-demo:old-base (debian 11.1)
+Total: 129 (HIGH: 103, CRITICAL: 26)
+Python (python-pkg)
+Total: 4 (HIGH: 4, CRITICAL: 0)
+Total: 129 (HIGH: 103, CRITICAL: 26)
+│ dpkg               │ CVE-2022-1664  │ CRITICAL │ fixed  │ 1.20.9            │ 1.20.10                 │ Dpkg::Source::Archive in dpkg, the Debian package management │
+│ libc-bin           │ CVE-2021-33574 │ CRITICAL │        │ 2.31-13+deb11u2   │ 2.31-13+deb11u3         │ glibc: mq_notify does not handle separately allocated thread │
+│ libc6              │ CVE-2021-33574 │ CRITICAL │        │                   │ 2.31-13+deb11u3         │ glibc: mq_notify does not handle separately allocated thread │
+│ libexpat1          │ CVE-2022-22822 │ CRITICAL │        │ 2.2.10-2          │ 2.2.10-2+deb11u1        │ expat: Integer overflow in addBinding in xmlparse.c          │
+(full table:      520 lines, only some lines copied here)
+[exit code: 1]
+
+# Same gate on my real image:
+$ TRIVY_NO_PROGRESS=true trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 session17-devsecops:local-test > $V/trivy-real.txt 2>&1; rc=$?; grep -E 'Detected OS|debian  |Legend' $V/trivy-real.txt; exit $rc
+2026-10-07T22:23:34+05:30	INFO	Detected OS	family="debian" version="13.7"
+│ session17-devsecops:local-test (debian 13.7)                                 │   debian   │        0        │
+Legend:
+[exit code: 0]
+
+# =================== 5. The security-gate job itself ===================
+# gate.sh is a copy of the 'Evaluate all checks' step. NEEDS is what GitHub passes in as toJSON(needs).
+$ export GITHUB_STEP_SUMMARY=$V/summary.md; NEEDS='{"build-test":{"result":"success"},"sast":{"result":"success"},"sca":{"result":"failure"},"secret-scan":{"result":"success"},"docker-build":{"result":"skipped"},"image-scan":{"result":"skipped"}}' bash $T/gate.sh
+### Security gate
+| Check | Result |
+|---|---|
+| build-test | success |
+| sast | success |
+| sca | failure |
+| secret-scan | success |
+| docker-build | skipped |
+| image-scan | skipped |
+GATE: FAIL - not successful: sca, docker-build, image-scan. The image will NOT be pushed or deployed.
+[exit code: 1]
+
+$ export GITHUB_STEP_SUMMARY=$V/summary.md; NEEDS='{"build-test":{"result":"success"},"sast":{"result":"success"},"sca":{"result":"success"},"secret-scan":{"result":"success"},"docker-build":{"result":"success"},"image-scan":{"result":"success"}}' bash $T/gate.sh
+### Security gate
+| Check | Result |
+|---|---|
+| build-test | success |
+| sast | success |
+| sca | success |
+| secret-scan | success |
+| docker-build | success |
+| image-scan | success |
+GATE: PASS - all tests and security checks passed.
+[exit code: 0]
+
+# =================== cleanup ===================
+$ docker rmi hw-d-vuln-demo:old-base >/dev/null && rm -rf $V && echo "removed the vulnerable image and the temp folder"
+removed the vulnerable image and the temp folder
+[exit code: 0]
+
